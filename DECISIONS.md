@@ -1,0 +1,177 @@
+# Decisions
+
+Choices made while building, with alternatives and reasons. Newest at the bottom.
+
+## 1. Model source: git history of BirdNET-Analyzer at tag v1.5.1
+
+- **Decision:** take the official TF.js export of BirdNET V2.4 (acoustic + geo
+  model, labels, sample clip) from tag `v1.5.1` of `birdnet-team/BirdNET-Analyzer`.
+- **Alternatives:** Zenodo record 15050749 (current distribution), Google Drive
+  zip (docs/models.rst), converting the TFLite/SavedModel myself.
+- **Reason:** `github.com`/`api.github.com` were blocked by the session's network
+  policy but `git clone` over HTTPS worked. The checkpoints were deleted from
+  `main`, but v1.5.1 still contains the exact TF.js export the BirdNET team
+  published, with `model.json` metadata showing the converter versions. No
+  conversion step means no risk of a conversion bug. The files are committed
+  to the repo (~78 MiB, largest file 4 MiB) because GitHub Pages serves them
+  directly; Git LFS objects are not served by Pages.
+
+## 2. Spectrogram front end re-implemented, "real part" semantics
+
+- **Decision:** write `MelSpecLayerSimple` from scratch, computing the STFT in
+  plain JavaScript with our own FFT, and reduce the complex STFT with its
+  **real part** before the mel filterbank.
+- **Alternatives:** copy the BirdNET demo's `main.js` layer (uses
+  `tf.signal.stft` + `tf.cast`); use magnitude (`|X|`) instead of the real part.
+- **Reason:** the demo file is under CC BY-NC-SA, incompatible with the app's
+  MIT licence, so it was used as a reference only. `tf.cast(complex, 'float32')`
+  in TF.js keeps the real part, so "real" is what the published export does.
+  Empirical check in Node (CPU backend): on the bundled sample, real part gives
+  Lesser Redpoll 0.94 / Common Redpoll 0.80; magnitude gives Clay-colored
+  Sparrow 0.72 / Lesser Redpoll 0.58. On the official 2-minute example
+  soundscape, real part gives Black-capped Chickadee 0.81, House Finch 0.64,
+  Tufted Titmouse, Blue Jay, all in the file's known species list. The JS STFT
+  also removes any dependency on backend FFT kernels (the WASM backend has
+  none), so one code path works on WebGL, WASM and CPU.
+
+## 3. Backend order: WebGL, then WASM, then CPU, all inside a Web Worker
+
+- **Decision:** try WebGL first, fall back to WASM (SIMD when available) and
+  finally plain CPU; a Settings option overrides the order (applies after
+  reload). WebGPU is not included.
+- **Alternatives:** WASM first (predictable), WebGPU first (fastest on new
+  Safari/Chrome), main-thread inference.
+- **Reason:** WebGL has the broadest support and best speed/compatibility
+  ratio for this EfficientNet-style model. TF.js refuses to create an
+  `OffscreenCanvas` on Safari (`IS_SAFARI` check in `canvas_util.js`) and then
+  fails in a worker where there is no `document`, so the worker clears the
+  `IS_SAFARI` flag and disables `WEBGL_FENCE_API_ENABLED` (the reason TF.js
+  avoids it) before initialising. If that still fails on some iOS version the
+  WASM fallback kicks in. WebGPU support in TF.js is still experimental and
+  would add a fourth code path to test blind; it can be added later.
+
+## 4. Week-of-year formula
+
+- **Decision:** BirdNET "week" = `(month - 1) * 4 + min(4, ceil(day / 7.75))`,
+  i.e. four slots per month (days 1-7, 8-15, 16-23, 24-31); `-1` when the
+  seasonal filter is off.
+- **Alternatives:** ISO week number scaled to 48; `min(4, ceil(day / 7))`.
+- **Reason:** BirdNET-Analyzer documents weeks as "values in [1, 48] (4 weeks
+  per month)" and the `birdnet` PyPI package validates 1..48, but neither
+  publishes a date-to-week function. 7.75 (= 31/4) splits months evenly.
+  I do not have a verified source for the exact split BirdNET's GUI uses.
+
+## 5. Location filter is a hard filter with a default threshold of 0.03
+
+- **Decision:** species whose geo-model score is below the threshold (default
+  0.03, BirdNET-Analyzer's `sf_thresh`) are dropped from results when a
+  location is known; the strongest dropped bird is still shown greyed out and
+  labelled so the filter's effect is visible.
+- **Alternative:** multiply acoustic confidence by the geo score (soft prior).
+- **Reason:** matches BirdNET-Analyzer's species-list behaviour, which users
+  of BirdNET expect; the greyed-out row keeps the behaviour honest.
+
+## 6. Windowing: 3 s windows, default 1.5 s overlap, drop when busy
+
+- **Decision:** default overlap 1.5 s (a new window every 1.5 s); windows that
+  arrive while inference is running are skipped and counted, not queued.
+- **Alternatives:** BirdNET-Analyzer's default of no overlap; queueing.
+- **Reason:** overlap halves the chance a call straddles a boundary. Queueing
+  would build unbounded latency on slow phones; skipping keeps results live and
+  the skipped count is visible in the stats.
+
+## 7. Short tails of recordings are zero-padded
+
+- **Decision:** when analysing a file, a final segment shorter than 3 s but at
+  least 1 s long is zero-padded; shorter tails are ignored.
+- **Alternative:** BirdNET-Analyzer pads with noise.
+- **Reason:** deterministic and simple; the model normalises each window, so
+  padding with silence is benign.
+
+## 8. Service worker: precache the shell, runtime-cache the model
+
+- **Decision:** Workbox precaches the app shell (JS, CSS, HTML, icons, the
+  AudioWorklet module, the three WASM binaries, `labels.json`). Model topology
+  and weight shards are cached on first use with a cache-first runtime route.
+  No route exists for map tiles, so they are never cached.
+- **Alternative:** precache the model shards too.
+- **Reason:** precaching would download the 78 MiB twice on first run (once by
+  the app, once by the service worker install) and would hold up "offline
+  ready". With runtime caching the first load populates the cache and the
+  progress bar reflects the single real download. Labels are precached so the
+  species browser works offline before any model download.
+- **Follow-up found by the offline e2e test:** the very first page load is not
+  controlled by the service worker (it has only just been installed), so model
+  fetches on that load bypass the runtime route and the model would have been
+  downloaded again on the second visit. The worker therefore reads and writes
+  the same Cache API bucket (`birdnet-models-v2.4`) itself, cache-first, and
+  the service worker is set to `clientsClaim`. The e2e test now verifies that
+  after one online visit the app reloads offline with the model served from
+  cache.
+
+## 9. Storage: IndexedDB via `idb`, settings in localStorage
+
+- **Decision:** recordings (WAV blobs), detections and the Wikipedia cache live
+  in IndexedDB (`idb` wrapper); settings in localStorage.
+- **Reason:** blobs need IndexedDB; settings are tiny and synchronous reads keep
+  the UI simple. `navigator.storage.persist()` is requested from Settings and the
+  result shown. **iOS caveat:** Safari may still delete a site's storage after
+  seven days without use (ITP) or under storage pressure, even when
+  `persist()` returned true; the app says so in Settings and Help, and offers
+  WAV/CSV/GeoJSON export.
+
+## 10. Species colours: OKLCH hue from a hash of the scientific name
+
+- **Decision:** hue = FNV-1a hash of the scientific name spread with the golden
+  angle; fixed lightness 0.64 and chroma 0.15 in OKLCH, converted to sRGB in
+  code (so canvas and CSS agree). The name is always shown next to the colour.
+- **Alternative:** curated palette of ~20 colours with session-local assignment.
+- **Reason:** stable across sessions and devices with no state; mid lightness
+  reads on both light and dark backgrounds (unit test checks relative
+  luminance for every hue). With 6,522 species two can share a hue, which the
+  always-visible name resolves.
+
+## 11. "Why this ID" occlusion grid
+
+- **Decision:** mask time-frequency regions of the 3 s window in an STFT domain
+  (1024/256, mel-spaced frequency bands), resynthesise audio and re-run the
+  model; default grid 6 x 4 (25 model passes), with 8 x 6 and 12 x 8 options.
+- **Alternative:** gradient-based saliency (not available through the Layers
+  API without a custom training graph); occluding the model's internal mel
+  spectrogram (the model takes raw audio, so that would require surgery on the
+  graph).
+- **Reason:** occlusion is model-agnostic and honest. 25 passes take roughly
+  10-20 s on a phone GPU, which is acceptable with a progress bar and cancel;
+  finer grids are opt-in. Tradeoff: coarse cells cannot localise a short note.
+
+## 12. No UI framework
+
+- **Decision:** vanilla TypeScript with a tiny `el()` helper and hash routing.
+- **Reason:** five screens and a handful of components; a framework would add
+  bundle size and build complexity for little gain. Canvas drawing is imperative
+  anyway.
+
+## 13. Imported files are decoded by the browser, then stored as 48 kHz WAV
+
+- **Decision:** use `OfflineAudioContext.decodeAudioData` (handles mp3/m4a/wav
+  and resamples with a proper filter) and fall back to the in-house WAV decoder;
+  store the result as 16-bit WAV so re-analysis and export are uniform.
+- **Reason:** robust format support without bundling decoders.
+
+## 14. Playwright runs on Chromium only
+
+- **Decision:** the e2e test and README screenshots use the Chromium binary
+  pre-installed on the VM (Playwright 1.56.1) with the iPhone 13 viewport.
+- **Reason:** WebKit binaries are not installed and cannot be downloaded here;
+  real iOS behaviour (microphone, wake lock, home-screen mode) must be checked
+  on a device. The pinned `@playwright/test` version matches the VM's browsers.
+
+## 15. Things that could not be verified from this VM
+
+- Microphone capture, AudioWorklet timing, wake lock and standalone-mode
+  permission prompts on a real iPhone.
+- WebGL-in-worker on iOS Safari (see decision 3); the WASM fallback is tested
+  in Chromium only.
+- Wikipedia responses beyond the headers (the VM's egress was rate-limited),
+  so disambiguation/not-found handling is implemented from the documented API
+  shapes and the headers observed, not from a live run.
