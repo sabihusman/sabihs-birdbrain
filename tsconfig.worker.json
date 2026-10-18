@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"]
+  },
+  "include": ["src/**/*.worker.ts", "src/model/**/*.ts", "src/audio/**/*.ts", "src/shared/**/*.ts"],
+  "exclude": ["src/audio/engine.ts", "src/audio/recorder.ts", "src/model/worker-client.ts"]
+}

@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest';
+import { csvEscape, detectionsToCsv, DETECTION_CSV_COLUMNS } from '../src/export/csv';
+import { detectionsToGeoJson } from '../src/export/geojson';
+import type { DetectionRecord } from '../src/storage/types';
+
+const dets: DetectionRecord[] = [
+  {
+    id: 'a',
+    time: Date.UTC(2026, 4, 1, 6, 30, 0),
+    label: "Astur cooperii_Cooper's Hawk",
+    scientific: 'Astur cooperii',
+    common: "Cooper's Hawk",
+    confidence: 0.87654,
+    lat: 42.44,
+    lon: -76.5,
+    accuracy: 12.4,
+    recordingId: 'rec1',
+    offsetSec: 3,
+    source: 'live',
+    sessionId: 's1',
+  },
+  {
+    id: 'b',
+    time: Date.UTC(2026, 4, 1, 6, 31, 0),
+    label: 'Weird, "quoted"_Name, with comma',
+    scientific: 'Weird, "quoted"',
+    common: 'Name, with comma',
+    confidence: 0.5,
+    lat: null,
+    lon: null,
+    accuracy: null,
+    recordingId: null,
+    offsetSec: null,
+    source: 'import',
+    sessionId: 's1',
+  },
+];
+
+describe('CSV export', () => {
+  it('escapes commas and quotes', () => {
+    expect(csvEscape('plain')).toBe('plain');
+    expect(csvEscape('a,b')).toBe('"a,b"');
+    expect(csvEscape('say "hi"')).toBe('"say ""hi"""');
+    expect(csvEscape(null)).toBe('');
+  });
+
+  it('writes a header and one row per detection', () => {
+    const csv = detectionsToCsv(dets);
+    const lines = csv.trimEnd().split('\r\n');
+    expect(lines[0]).toBe(DETECTION_CSV_COLUMNS.join(','));
+    expect(lines.length).toBe(3);
+    expect(lines[1]).toBe("a,2026-05-01T06:30:00.000Z,Astur cooperii,Cooper's Hawk,0.8765,42.44,-76.5,12,rec1,3,live");
+    expect(lines[2]).toBe('b,2026-05-01T06:31:00.000Z,"Weird, ""quoted""","Name, with comma",0.5000,,,,,,import');
+  });
+});
+
+describe('GeoJSON export', () => {
+  it('emits Point features as [lon, lat] and skips detections without a position', () => {
+    const fc = detectionsToGeoJson(dets);
+    expect(fc.type).toBe('FeatureCollection');
+    expect(fc.features.length).toBe(1);
+    expect(fc.features[0].geometry).toEqual({ type: 'Point', coordinates: [-76.5, 42.44] });
+    expect(fc.features[0].properties).toMatchObject({ scientific_name: 'Astur cooperii', confidence: 0.8765, recording_id: 'rec1' });
+    expect(() => JSON.stringify(fc)).not.toThrow();
+  });
+});
