@@ -585,7 +585,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** a live TextExtracts response for a bird page (fixture
   only); how well Gemini follows the citation format.
 
-## 36. Admin is told about new sign-ups, at most once per 10 minutes
+## 38. Admin is told about new sign-ups, at most once per 10 minutes
 
 - **Decision:** when a pending account verifies its e-mail code for the
   first time, the API mails `ADMIN_EMAIL` "New Birdbrain sign-up:
