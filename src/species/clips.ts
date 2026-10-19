@@ -1,7 +1,7 @@
 import { encodeWav } from '../audio/wav';
 import { SAMPLE_RATE, WINDOW_SECONDS } from '../model/constants';
 import { getClip, putClip } from '../storage/db';
-import type { ClipRecord, DetectionSource } from '../storage/types';
+import type { ClipRecord, ClipWindow, DetectionSource } from '../storage/types';
 
 /** Longest clip kept per species, seconds. */
 export const CLIP_MAX_SECONDS = 10;
@@ -17,6 +17,8 @@ export interface ClipCandidate {
   accuracy: number | null;
   source: DetectionSource;
   recordingId: string | null;
+  /** The 3 s windows that identified the species, relative to the clip start (see windowsInClip). */
+  windows: ClipWindow[];
 }
 
 /**
@@ -77,6 +79,56 @@ export function clipFocus(windows: Array<{ offsetSec: number; confidence: number
   return { start: best.offsetSec, end: best.offsetSec + WINDOW_SECONDS };
 }
 
+/** A detection window on the same timeline as the clip range (session or recording seconds). */
+export interface TimedWindow {
+  startSec: number;
+  confidence: number;
+}
+
+/**
+ * The windows that fall inside a clip, as offsets from the clip start. A
+ * window that overlaps the clip only partly (cut at an edge) is kept with its
+ * true offset, so its outline can be clamped when drawn; a window entirely
+ * outside is dropped. Sorted by offset, one entry per start (highest
+ * confidence wins when two detections share a window).
+ */
+export function windowsInClip(windows: readonly TimedWindow[], range: Span, windowSec = WINDOW_SECONDS): ClipWindow[] {
+  const byStart = new Map<number, ClipWindow>();
+  for (const w of windows) {
+    const end = w.startSec + windowSec;
+    if (end <= range.start || w.startSec >= range.end) continue;
+    const offsetSec = roundMs(w.startSec - range.start);
+    const prev = byStart.get(offsetSec);
+    if (!prev || w.confidence > prev.confidence) byStart.set(offsetSec, { offsetSec, confidence: w.confidence });
+  }
+  return Array.from(byStart.values()).sort((a, b) => a.offsetSec - b.offsetSec);
+}
+
+/** Round a window offset to whole milliseconds (removes float noise from sample arithmetic). */
+function roundMs(sec: number): number {
+  return Math.round(sec * 1000) / 1000;
+}
+
+/**
+ * The identifying windows of a stored clip, or null when the clip predates
+ * DB version 4 and did not record them ("unknown windows").
+ */
+export function clipWindows(clip: Pick<ClipRecord, 'windows'>): ClipWindow[] | null {
+  return Array.isArray(clip.windows) ? clip.windows : null;
+}
+
+/**
+ * The 3 s window "Why this ID" should run on: the most confident identifying
+ * window, or for a clip with unknown windows the centre of the clip (live
+ * clips were always centred on their detection window, DECISIONS.md #28).
+ */
+export function whyWindowFor(clip: Pick<ClipRecord, 'windows' | 'durationSec' | 'confidence'>, windowSec = WINDOW_SECONDS): { offsetSec: number; confidence: number; known: boolean } {
+  const windows = clipWindows(clip);
+  const best = windows ? bestByConfidence(windows) : undefined;
+  if (best) return { offsetSec: Math.max(0, Math.min(best.offsetSec, Math.max(0, clip.durationSec - windowSec))), confidence: best.confidence, known: true };
+  return { offsetSec: Math.max(0, (clip.durationSec - windowSec) / 2), confidence: clip.confidence, known: false };
+}
+
 /** Cut `range` (seconds, relative to `audio` start) out of a 48 kHz buffer. */
 export function sliceClip(audio: Float32Array, range: Span, sampleRate = SAMPLE_RATE): Float32Array {
   const start = Math.max(0, Math.round(range.start * sampleRate));
@@ -107,6 +159,7 @@ export async function saveClipIfBetter(candidate: ClipCandidate, audio: Float32A
     accuracy: candidate.accuracy,
     source: candidate.source,
     recordingId: candidate.recordingId,
+    windows: candidate.windows.slice().sort((a, b) => a.offsetSec - b.offsetSec),
   };
   await putClip(clip);
   return clip;

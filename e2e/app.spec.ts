@@ -106,6 +106,22 @@ test('imports a recording, analyses it and explains an identification', async ({
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('species-id-card-gate')).toContainText('Sign in to unlock the species ID card.');
 
+  // Species tab: the spotted species carries a tick; "Spotted by me" narrows the list to it; the tick says "Sign in to unlock" (DECISIONS.md #41).
+  await page.goto('./#/species');
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
+  const redpollRow = page.getByTestId('spotted-row').filter({ hasText: 'Lesser Redpoll' });
+  await expect(redpollRow).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('');
+  const spottedFilter = page.getByTestId('spotted-filter');
+  await spottedFilter.click();
+  await expect(spottedFilter).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('local-count')).toContainText(/\d+ species spotted by you/);
+  await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
+  await expect(page.getByTestId('species-list').locator('.chip')).toHaveCount(await page.getByTestId('spotted-tick').count());
+  await redpollRow.getByTestId('spotted-tick').click();
+  await expect(redpollRow).toContainText('Sign in to unlock the species ID card.');
+  await expect(page).toHaveURL(/#\/species$/);
+
   // The recording shows up in the list with its species summary, and on the species page.
   await page.goto('./#/recordings');
   await expect(page.getByTestId('recordings-list')).toContainText('birdnet-sample');
@@ -129,18 +145,57 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
   await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
 
-  await page.goto('./#/species/Acanthis%20cabaret');
+  // The tick on the Species tab opens this species' ID card for a member (DECISIONS.md #41).
+  await page.goto('./#/species');
+  await page.getByTestId('spotted-filter').click();
+  await page.getByTestId('spotted-row').filter({ hasText: 'Lesser Redpoll' }).getByTestId('spotted-tick').click();
+  await page.waitForURL(/#\/species\/Acanthis%20cabaret$/);
   const card = page.getByTestId('species-id-card');
   await expect(card).toBeVisible();
+  await expect(card).toBeFocused();
   await expect(card.getByTestId('clip-play')).toBeVisible({ timeout: 30_000 });
   await expect(card.getByTestId('clip-meta')).toContainText(/\d+% confidence · imported file/);
   await expect(card).toContainText('none with a position yet');
 
-  await card.click();
+  // ID clip: spectrogram drawn from the stored audio, the identifying window listed with its confidence, the wording, and tap-to-run "Why this ID".
+  await expect(card.getByTestId('clip-spectrogram')).toBeVisible();
+  await expect(card.getByTestId('clip-windows')).toContainText(/Identified in 1 window of 3 s: 0:00–0:03 \(\d+%\)/);
+  await expect(card.getByTestId('clip-meaning')).toContainText('BirdNET marks when a species is heard, not which of the overlapping sounds it is.');
+  await expect(card.getByTestId('clip-why-result')).toHaveCount(0); // nothing ran on its own
+  // Tapping the spectrogram seeks; it must not open the history (the card is a link).
+  await card.locator('.viz canvas.overlay').click({ position: { x: 40, y: 40 } });
+  await expect(page).toHaveURL(/#\/species\/Acanthis%20cabaret$/);
+  await card.getByTestId('clip-why-run').click();
+  await expect(card.getByTestId('clip-why-result')).toContainText(/Lesser Redpoll: baseline \d+% on this window/, { timeout: 240_000 });
+
+  // Tap the card's own text (the spectrogram at the card's centre seeks instead; the header row sits under the sticky app header after the tick's scroll).
+  await card.getByText('none with a position yet').click();
   await page.waitForURL(/#\/species\/Acanthis%20cabaret\/history/);
   await expect(page.getByTestId('history-summary')).toContainText(/1 sighting \(1 analysed window\), 0 with a position/);
   await expect(page.getByTestId('history-list')).toContainText('No position recorded');
   await expect(page.getByTestId('history-map')).toBeHidden();
+
+  // Account card for a member: display name with the email under it, the friends panel with the exact consent text, sharing off by default, delete with an inline confirmation (DECISIONS.md #43).
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('account-name')).toHaveText('member');
+  await expect(page.getByTestId('account-email')).toHaveText('member@example.com');
+  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
+  await expect(page.getByTestId('share-species')).not.toBeChecked();
+  await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
+  await expect(page.getByTestId('invite-send')).toBeVisible();
+  await page.getByTestId('delete-account').click();
+  await expect(page.getByTestId('delete-account-confirm')).toBeVisible();
+  await page.getByRole('button', { name: 'Keep my account' }).click();
+  await expect(page.getByTestId('delete-account-confirm')).toBeHidden();
+  // The species page shows the "Spotted by" card with the member's own row (friends unreachable: only "You").
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await expect(page.getByTestId('spotted-by-me')).toContainText(/You · /);
+  await expect(page.getByTestId('spotted-by-friend')).toHaveCount(0);
+  await expect(page.getByTestId('friends-filter')).toBeHidden(); // not on the species page
+  await page.goto('./#/species');
+  await expect(page.getByTestId('friends-filter')).toBeVisible();
+  await page.goto('./#/species/Acanthis%20cabaret/history');
+  await expect(page.getByTestId('history-summary')).toBeVisible();
 
   // Sign-out hides the features but keeps the data.
   await page.evaluate(() => {
@@ -149,6 +204,8 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   });
   await page.reload();
   await expect(page.getByTestId('history-gate')).toContainText('Sign in to unlock Sighting history.');
+  await page.goto('./#/species');
+  await expect(page.getByTestId('friends-filter')).toBeHidden();
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('wiki')).toBeVisible();
   await expect(page.getByText('Your sightings')).toBeVisible();

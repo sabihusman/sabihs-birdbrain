@@ -11,12 +11,21 @@ export function helpView(_ctx: ViewContext): View {
       el('h2', null, 'How it works'),
       el('p', null, 'Your phone records sound, resamples it to 48 kHz mono and cuts it into overlapping 3-second windows. Each window goes through BirdNET V2.4, a neural network from the Cornell Lab of Ornithology and Chemnitz University of Technology, running entirely in your browser with TensorFlow.js. A second, tiny model uses your location and the week of the year to drop species that are not expected there.'),
       el('p', null, 'Nothing is uploaded. Audio, recordings and detections stay in this browser’s storage.'),
+      el('p', null, 'On the Species tab a tick marks every species you have a sighting of, and the “Spotted by me” chip lists only those. Tapping a tick opens the species ID card for members; everyone else sees “Sign in to unlock”. The ticks are worked out from the sightings on this device and never leave it.'),
     ),
     el(
       'section',
       { class: 'card' },
       el('h2', null, 'What it cannot do'),
       el('ul', null, el('li', null, el('strong', null, 'Overlapping calls. '), 'BirdNET marks when each species is present in a window. It does not separate overlapping calls, count individuals or tell you which bird made which sound.'), el('li', null, el('strong', null, 'Background listening. '), 'iOS pauses web audio when the screen locks or the app goes to the background. Keep the app open and the screen on.'), el('li', null, el('strong', null, 'Accuracy. '), 'Confidence is not probability of being right. Rare species, mimics, poor microphones, wind and distance all cause mistakes. Treat results as suggestions to verify, not records.'), el('li', null, el('strong', null, 'Storage. '), 'iOS may clear website data that has not been used for a while, even when persistent storage was granted. Export recordings you care about.')),
+    ),
+    el(
+      'section',
+      { class: 'card' },
+      el('h2', null, 'Friends (members)'),
+      el('p', null, 'In Settings › Account you can set a display name, invite a friend by email and accept or decline invites. The answer to an invite is always “Invite sent”, so it never reveals whether an address has an account; an email goes out only to an approved member who is not already your friend. Invites expire after 30 days; you can send up to 10 a day.'),
+      el('p', null, 'Sharing is off until you turn on “Share my species list with friends”. When it is on, the app uploads, for each species, only the scientific name and the date you last spotted it (the calendar day, no time): no places, no recordings, no counts, no history. The list is replaced after each new sighting. Friends see “Spotted by Alex, Sam” on the Species tab, the “Spotted by friends” chip, and a “Spotted by” list on each species page with one row per person and that one date.'),
+      el('p', null, 'Turning sharing off removes the list from the server immediately, and so does “Delete account”, which also deletes your sign-in, friends and invites. Recordings and detections stay on this device until you delete them in Settings › Data.'),
     ),
     el(
       'section',

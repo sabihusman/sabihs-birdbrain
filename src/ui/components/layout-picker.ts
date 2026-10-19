@@ -3,7 +3,7 @@ import { el } from '../dom';
 
 /**
  * Settings → Listen layout: three preview tiles in one row (Consolidated, Bottom dock, Focus),
- * each a small phone wireframe plus the layout name. Replaces the dropdown (DECISIONS.md #44).
+ * each a small phone wireframe plus the layout name. Replaces the dropdown (DECISIONS.md #45).
  *
  * The group is a radiogroup of radio buttons: the selected tile has aria-checked="true" and
  * tabindex 0, the others tabindex -1 (roving tabindex); Left/Right and Up/Down move the

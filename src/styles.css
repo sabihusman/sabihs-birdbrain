@@ -141,6 +141,19 @@ main.view { flex: 1; padding: var(--space-3) calc(var(--space-3) + var(--sar)) c
 .conf-text { font-size: var(--text-sm); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); }
 .chip-sub { font-size: 0.78rem; color: var(--muted); }
 .chip-list { display: flex; flex-direction: column; gap: 6px; }
+/* Species tab: a spotted species gets a tick beside its chip (DECISIONS.md #41). The chip keeps its width; the tick is a 48 px target. */
+.spotted-row { display: flex; flex-direction: column; gap: 4px; }
+.spotted-row > .row { gap: 6px; align-items: stretch; flex-wrap: nowrap; }
+.spotted-row .chip { flex: 1; min-width: 0; }
+.tick-btn { flex: none; width: 48px; min-height: 48px; border-radius: var(--radius-control); border: 1px solid var(--line); background: var(--surface-2); color: var(--accent); font-size: var(--text-lg); font-weight: var(--weight-bold); display: flex; align-items: center; justify-content: center; }
+.spotted-row .locked-note { margin: 0 0 4px; padding-left: 10px; }
+/* Filter chip: a pressable pill, 44 px tall, filled with the accent while on. */
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 16px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.filter-chip .tick { color: var(--accent); }
+.filter-chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.filter-chip[aria-pressed="true"] .tick { color: inherit; }
+.filter-chip-count { font-variant-numeric: tabular-nums; opacity: 0.85; }
+.filter-chip-count:not(:empty)::before { content: '·'; margin-right: 6px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 0.8rem; margin-top: 4px; }
 .legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .viz { position: relative; width: 100%; border-radius: var(--radius-control); overflow: hidden; background: var(--viz-bg); }
@@ -193,6 +206,13 @@ canvas.timeline { width: 100%; height: 120px; display: block; }
 .id-card { cursor: pointer; border: 1px solid var(--accent); }
 .id-card:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .clip-player { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 10px; background: var(--surface-2); }
+/* ID card clip: player, clip spectrogram with the identifying windows outlined, tap-to-run "Why this ID" (DECISIONS.md #42). */
+.clip-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.clip-card .viz { cursor: pointer; }
+.clip-card .viz canvas.overlay { pointer-events: auto; }
+.clip-card canvas.clip-spectrogram { height: 150px; }
+.clip-card .clip-windows { margin: 0; font-variant-numeric: tabular-nums; }
+.clip-card .clip-meaning { margin: 0; padding: var(--space-2) 12px; border-left: 4px solid var(--muted); background: var(--surface-2); border-radius: 0 10px 10px 0; }
 .locked-note { margin: 0; }
 .wiki-thumb { width: 100%; max-height: 260px; object-fit: cover; border-radius: var(--radius-control); background: var(--sage); }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.92rem; }
@@ -281,3 +301,12 @@ textarea { color: inherit; }
 
 .update-banner { width: 100%; min-height: 44px; border: none; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); padding: 10px 14px; margin: 8px 0; text-align: left; }
 .update-banner:disabled { opacity: 0.7; }
+
+/* Account card: friends and sharing (DECISIONS.md #44) */
+.rule { border: 0; border-top: 1px solid var(--line); margin: var(--space-2) 0; }
+.friend-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 10px; border-radius: var(--radius-control); background: var(--surface-2); min-height: 48px; }
+.friend-name { min-width: 0; overflow-wrap: anywhere; }
+.friends-panel input[type=email], .friends-panel input[type=text], .field input[type=text], .field input[type=email] { min-height: 44px; padding: 8px 10px; border-radius: var(--radius-control); border: 1px solid var(--border); background: var(--surface); width: 100%; }
+.spotted-by-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 48px; padding: 8px 12px; border-radius: var(--radius-control); background: var(--surface-2); color: var(--text); font: inherit; text-align: left; }
+.spotted-by-row.me { border: 1px solid var(--accent); width: 100%; }
+.field input[type=password] { min-height: 44px; padding: 8px 10px; border-radius: var(--radius-control); border: 1px solid var(--border); background: var(--surface); width: 100%; }

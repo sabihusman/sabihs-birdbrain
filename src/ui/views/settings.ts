@@ -35,7 +35,7 @@ export function settingsView(ctx: ViewContext): View {
     for (const f of syncs) f();
   });
 
-  // Listen layout: preview tiles (DECISIONS.md #44). A tap switches immediately; the store change is mirrored back.
+  // Listen layout: preview tiles (DECISIONS.md #45). A tap switches immediately; the store change is mirrored back.
   const picker = layoutPicker(s.listenLayout, (listenLayout) => settings.update({ listenLayout }));
   syncs.push(() => picker.sync(settings.get().listenLayout));
 
@@ -109,7 +109,7 @@ export function settingsView(ctx: ViewContext): View {
   });
 
   const modelStatus = controller.inference.getStatus();
-  const account = accountSection(ctx.api);
+  const account = accountSection(ctx);
 
   // Microphone
   const micHeadline = el('div', { 'data-testid': 'voice-processing' }, '');
@@ -163,7 +163,13 @@ export function settingsView(ctx: ViewContext): View {
       slider('Species range threshold', 'geoThreshold', 0.01, 0.2, 0.01, (v) => v.toFixed(2)),
       locationStatus,
     ),
-    el('section', { class: 'card' }, el('h2', null, 'Recording'), toggle('Auto-save a clip for each detection', 'autoSaveClips', 'Saves the 3-second window (one per species every 30 s).'), slider('Auto-save when confidence is at least', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below the confidence threshold: raising the threshold raises this too.')),
+    el(
+      'section',
+      { class: 'card' },
+      el('h2', null, 'Recording'),
+      toggle('Auto-save 3-second detection windows as recordings', 'autoSaveClips', 'Each detection\u2019s 3 s analysis window is saved to Recordings (one per species every 30 s). Separate from the 10-second species ID clip that members keep per species.'),
+      slider('Auto-save a window when confidence is at least', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below the confidence threshold: raising the threshold raises this too.'),
+    ),
     el(
       'section',
       { class: 'card' },

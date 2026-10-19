@@ -1,4 +1,4 @@
-import { GoogleGenAI, HarmBlockThreshold, HarmCategory, type GenerateContentParameters } from '@google/genai';
+import { FinishReason, GoogleGenAI, HarmBlockThreshold, HarmCategory, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { z } from 'zod';
 import type { UsageStore } from './db.js';
 import type { SpeciesLabels } from './labels.js';
@@ -135,21 +135,53 @@ export function toPlainText(s: string): string {
     .slice(0, MAX_ANSWER_CHARS);
 }
 
-/** The part of the Gemini SDK the server uses; tests inject a fake that records calls. */
-export interface GenAiClient {
-  models: { generateContent(params: GenerateContentParameters): Promise<{ text: string | undefined }> };
+/** Output budget for 2–4 short paragraphs (the instruction asks for at most 120 words plus citations). */
+export const ANSWER_MAX_OUTPUT_TOKENS = 700;
+/** The one retry after the model hit the limit. */
+export const ANSWER_RETRY_OUTPUT_TOKENS = 1400;
+/**
+ * Thinking level so reasoning cannot eat the answer allowance. Gemini 3 models take
+ * `thinkingConfig.thinkingLevel` (gemini-3.8-flash: low, medium, high; default medium);
+ * `thinkingBudget` is the legacy field and the two cannot be combined (ai.google.dev, "Thinking").
+ */
+export const ANSWER_THINKING_LEVEL = ThinkingLevel.LOW;
+export const CUT_SHORT_SUFFIX = '(answer cut short)';
+
+/** The parts of a Gemini response the server reads (GenerateContentResponse in @google/genai). */
+export interface GenAiResponse {
+  text: string | undefined;
+  candidates?: Array<{ finishReason?: string }>;
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number };
 }
 
-export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey })): AnswerModel {
+/** The part of the Gemini SDK the server uses; tests inject a fake that records calls. */
+export interface GenAiClient {
+  models: { generateContent(params: GenerateContentParameters): Promise<GenAiResponse> };
+}
+
+/**
+ * A reply that stopped at the output limit ends mid-sentence. Keep the complete
+ * sentences and say so, instead of returning a half sentence.
+ */
+export function finishCutAnswer(text: string): string {
+  const t = text.trim();
+  if (!t) return '';
+  const m = /^[\s\S]*[.!?](?:\s*\[[^\]]*\])*(?=\s)/.exec(t + ' ');
+  const kept = m ? m[0].trim() : t;
+  return `${kept} ${CUT_SHORT_SUFFIX}`;
+}
+
+export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line)): AnswerModel {
   const ai = client;
-  return async ({ systemInstruction, prompt }) => {
-    const res = await ai.models.generateContent({
+  const generate = (systemInstruction: string, prompt: string, maxOutputTokens: number) =>
+    ai.models.generateContent({
       model,
       contents: prompt,
       config: {
         systemInstruction,
         temperature: 0.2,
-        maxOutputTokens: 400,
+        maxOutputTokens,
+        thinkingConfig: { thinkingLevel: ANSWER_THINKING_LEVEL },
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
           { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -158,6 +190,21 @@ export function createGeminiModel(apiKey: string, model: string, client: GenAiCl
         ],
       },
     });
+  const describe = (res: GenAiResponse, attempt: number, limit: number) => {
+    const u = res.usageMetadata ?? {};
+    const finish = res.candidates?.[0]?.finishReason ?? 'unknown';
+    // Finish reason and token counts only; never the question or the answer.
+    return `[ask] attempt=${attempt} limit=${limit} finish=${finish} prompt_tokens=${u.promptTokenCount ?? '-'} answer_tokens=${u.candidatesTokenCount ?? '-'} thinking_tokens=${u.thoughtsTokenCount ?? '-'} total_tokens=${u.totalTokenCount ?? '-'}`;
+  };
+  const hitLimit = (res: GenAiResponse) => res.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS;
+  return async ({ systemInstruction, prompt }) => {
+    let res = await generate(systemInstruction, prompt, ANSWER_MAX_OUTPUT_TOKENS);
+    log(describe(res, 1, ANSWER_MAX_OUTPUT_TOKENS));
+    if (hitLimit(res)) {
+      res = await generate(systemInstruction, prompt, ANSWER_RETRY_OUTPUT_TOKENS);
+      log(describe(res, 2, ANSWER_RETRY_OUTPUT_TOKENS));
+      if (hitLimit(res)) return finishCutAnswer(res.text ?? '');
+    }
     return res.text ?? '';
   };
 }

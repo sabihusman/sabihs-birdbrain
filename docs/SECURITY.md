@@ -140,6 +140,27 @@ What the suite exercises, and what it found:
 | A12 | Admin routes as pending member, approved member, anonymous; admin on own account; unknown action; path traversal | Passes: 403 / 400; role decides, not approval status. |
 | A13 | Address enumeration via signup or login | Passes: identical bodies for existing and new addresses, identical 401 for wrong password and unknown user. |
 
+## Friends: species-only sharing (2026-10-19, DECISIONS.md #44)
+
+New surface: display names, friend invites by email, and a per-member list
+of (scientific name, last-seen day) pairs that accepted friends can read.
+Threats considered and the control for each:
+
+| Threat | Control |
+| --- | --- |
+| Address enumeration through invites | `POST /v1/friends/invite` answers `{"ok":true,"message":"Invite sent"}` for an existing, missing, own, pending, friend or already-invited address alike; the per-user daily cap (10, `invite_usage`) counts every attempt so the budget reveals nothing; there is no outgoing-invites list (verified: byte-identical answers in `adversarial-friends.test.ts`). |
+| Mail as a relay or a leak | The invite mail goes only to an approved member who is not already a friend and has no open invite; it names the inviter by display name and carries no address; display names refuse control and format characters, so no header injection; the subject is fixed. |
+| Reading someone else's list | `GET /v1/friends/species` returns only accepted friends (`friendship` join filtered on `status = 'approved'`); a stranger, a pending or declined invitee, a removed friend, a disabled friend, a pending member (403) and a signed-out caller (401) get nothing (verified). The answer holds only `id`, `displayName` and `(sci, lastSeen)` pairs. |
+| Writing someone else's list | `POST /v1/me/species` takes no user id (strict schema), writes under the session's user only, validates every name against the label list and every day as a calendar day, caps at 2,000 entries and 256 KB (the only route above the 16 KB limit). |
+| Acting on someone else's invite | Accept/decline require the invite to be addressed to the session's user, pending and unexpired; foreign, unknown and expired ids answer 404 alike. Remove is idempotent (200 for any id), so friendship cannot be probed. |
+| Over-sharing by design | Nothing beyond the scientific name and one day per species ever leaves the device; sharing is off by default behind a consent text; turning it off clears the server copy at once; `POST /v1/me/delete` removes the list, friendships, invites, counters, challenges, sessions, the credential row and the user in one transaction (verified: 401 afterwards, address free to sign up again). The admin account cannot be deleted from the app. |
+| Consent leaking across accounts on a shared phone | The consent flag is keyed to the user id in `localStorage`; the friends cache is keyed to the user id in `sessionStorage` and removed on sign-out. |
+
+**Gaps:** no notification to the invitee when a friend removes them (by
+design: it would reveal the action); the `since` timestamp of a friendship
+is visible to both sides; no absolute cap on the number of friends (the
+invite cap bounds growth to 10 per day).
+
 ## Not verified in this phase
 
 - Behaviour behind the real Nginx configuration (rate limits, HSTS, proxy
