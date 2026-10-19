@@ -1149,7 +1149,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
   /v1/admin/ask-costs` (admin only) returns the last 30 days and the
   configured model; the Admin page shows them as a table with totals
   (`src/ui/views/admin.ts`, `adminAskCosts()` in `src/api/client.ts`).
-- **Eval (`scripts/eval-models.ts`, pieces in `server/src/eval-models.ts`):**
+- **Eval (`server/scripts/eval-models.ts`, pieces in `server/src/eval-models.ts`):**
   20 fixed questions over 5 species (blackbird, great tit, robin, blue jay,
   house finch; one off-topic control), the real `answerQuestion` pipeline
   with the article fetched once per species so both models see the same

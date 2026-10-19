@@ -11,10 +11,10 @@
  * Questions and answers are printed to stdout on purpose: this is an
  * evaluation, not the server log.
  */
-import { createGeminiModel } from '../server/src/ask';
-import { EVAL_BUDGET_USD, EVAL_MODELS, EVAL_QUESTIONS, formatPlan, formatResults, planRun, runEval, UsageCollector } from '../server/src/eval-models';
-import { loadLabels } from '../server/src/labels';
-import { fetchWikipediaArticle } from '../server/src/wiki-article';
+import { createGeminiModel } from '../src/ask';
+import { EVAL_BUDGET_USD, EVAL_MODELS, EVAL_QUESTIONS, formatPlan, formatResults, planRun, runEval, UsageCollector } from '../src/eval-models';
+import { loadLabels } from '../src/labels';
+import { fetchWikipediaArticle } from '../src/wiki-article';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
