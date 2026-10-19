@@ -5,6 +5,7 @@ import { loadConfig, type Config } from '../src/config.js';
 import { openDatabase } from '../src/db.js';
 import { parseLabels } from '../src/labels.js';
 import { FakeMailer, type Mailer } from '../src/mailer.js';
+import type { ProviderUsageStore } from '../src/provider-usage.js';
 import type { WikiFetcher } from '../src/wiki.js';
 
 export const ORIGIN = 'https://birdbrain-test.vercel.app';
@@ -32,7 +33,7 @@ export interface TestApp {
   modelCalls: Array<{ systemInstruction: string; prompt: string }>;
 }
 
-export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerModel | null; env?: Partial<NodeJS.ProcessEnv>; limits?: Parameters<typeof createApp>[0]['limits']; mailer?: Mailer; now?: () => number } = {}): Promise<TestApp> {
+export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerModel | null; env?: Partial<NodeJS.ProcessEnv>; limits?: Parameters<typeof createApp>[0]['limits']; mailer?: Mailer; now?: () => number; providerUsage?: ProviderUsageStore } = {}): Promise<TestApp> {
   const config = testConfig(opts.env);
   const db = openDatabase(':memory:');
   await migrateAuth(db, config);
@@ -48,7 +49,7 @@ export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerMod
           return 'A plain answer from the source text.';
         }));
   const wiki: WikiFetcher = opts.wiki ?? (async (sci) => ({ title: sci, extract: `${sci} is a bird. It eats seeds.`, url: `https://en.wikipedia.org/wiki/${sci.replace(' ', '_')}` }));
-  const app = createApp({ config, db, auth, mailer: opts.mailer ?? mailer, labels: LABELS, wiki, model, limits: opts.limits, now: opts.now });
+  const app = createApp({ config, db, auth, mailer: opts.mailer ?? mailer, labels: LABELS, wiki, model, limits: opts.limits, now: opts.now, providerUsage: opts.providerUsage });
   return { app, mailer, config, modelCalls };
 }
 

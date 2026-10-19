@@ -8,6 +8,7 @@ import { answerQuestion, type AnswerModel, type CapConfig } from './ask.js';
 import { publicUser, toAppUser, type AppUser, type Auth, type UserStatus } from './auth.js';
 import { deleteUserCompletely, deletionMail } from './account-deletion.js';
 import type { Config } from './config.js';
+import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
 import { createAnswerCache, type AnswerCache } from './answer-cache.js';
 import type { AnswerBody } from './ask.js';
 import { COST_SUMMARY_DAYS, createAskCostStore, type AskCostStore } from './ask-cost.js';
@@ -41,6 +42,8 @@ export interface AppDeps {
   model: AnswerModel | null;
   /** Daily ask cost totals; main.ts shares one store with createGeminiModel. Created here when absent. */
   costs?: AskCostStore;
+  /** Per-provider daily totals (DECISIONS.md #49); main.ts shares one store with the provider chain. Created here when absent. */
+  providerUsage?: ProviderUsageStore;
   /** Answer cache; created here when absent. */
   answers?: AnswerCache<AnswerBody>;
   /** Override limits in tests. */
@@ -83,6 +86,7 @@ export function createApp(deps: AppDeps) {
   const challenges = new LoginChallenges(db, config.BETTER_AUTH_SECRET, config.LOGIN_CODE_TTL_SECONDS);
   const usage = createUsageStore(db);
   const costs = deps.costs ?? createAskCostStore(db);
+  const providerUsage = deps.providerUsage ?? createProviderUsageStore(db);
   const answers = deps.answers ?? createAnswerCache<AnswerBody>(db);
   const friends = new FriendsStore(db);
   const invitesPerDay = deps.limits?.invitesPerDay ?? INVITES_PER_DAY;
@@ -394,7 +398,14 @@ export function createApp(deps: AppDeps) {
   /** Per-day token and cost totals for /v1/ask (DECISIONS.md #48): numbers only, no questions. */
   app.get('/v1/admin/ask-costs', async (c) => {
     if (!(await requireAdmin(c))) return json(c, 403, { error: 'forbidden' });
-    return json(c, 200, { model: config.GEMINI_MODEL, days: costs.summary(COST_SUMMARY_DAYS) });
+    return json(c, 200, {
+      model: config.GEMINI_MODEL,
+      days: costs.summary(COST_SUMMARY_DAYS),
+      // Which provider answered (DECISIONS.md #49): one row per provider over the same window, with the configured model names.
+      providerOrder: config.providerOrder,
+      models: { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL },
+      providers: providerUsage.totals(PROVIDER_SUMMARY_DAYS),
+    });
   });
 
   const transitions: Record<string, UserStatus> = { approve: 'approved', reject: 'rejected', disable: 'disabled' };

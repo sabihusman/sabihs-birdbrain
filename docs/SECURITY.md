@@ -178,6 +178,25 @@ What the suite exercises, and what it found:
 | A12 | Admin routes as pending member, approved member, anonymous; admin on own account; unknown action; path traversal | Passes: 403 / 400; role decides, not approval status. |
 | A13 | Address enumeration via signup or login | Passes: identical bodies for existing and new addresses, identical 401 for wrong password and unknown user. |
 
+## Two AI providers (2026-10-19, DECISIONS.md #49)
+
+`/v1/ask` now tries Ollama Cloud (`POST https://ollama.com/api/chat`, bearer
+key) before Gemini. Both get the identical prompt: `SYSTEM_INSTRUCTION` as
+the system message, the fenced source plus the question as the user message;
+`neutralizeFence`, control stripping, `leaksSystemPrompt`, `toPlainText` and
+the 2,000-character cap run in `answerQuestion` after whichever provider
+answered, so the defences are provider-independent.
+`server/test/adversarial-ollama.test.ts` runs the #8 LLM probes through the
+Ollama provider with the same fixtures. A provider failure (429, full queue,
+5xx, network, timeout, bad key, empty or cut-off reply) falls back to the
+next provider; when all fail the member sees the generic `model_unavailable`.
+Logs carry the provider name, model, finish state, token counts, duration and
+the day's running totals; never the question, the answer or a key. The
+Ollama key lives only in `/opt/birdbrain/.env`. Supply chain: no new
+dependency (plain `fetch`). Unbounded consumption: the Ollama call is capped
+at `num_predict` 1,400 tokens and 8 s; the daily caps are unchanged and count
+a request once whichever provider answers it.
+
 ## Friends: species-only sharing (2026-10-19, DECISIONS.md #44)
 
 New surface: display names, friend invites by email, and a per-member list

@@ -188,8 +188,10 @@ What does leave the phone, and why:
   Explorer conservation ranks (global and for your state/province; cached
   30 days) and, when the server has an eBird key, the recent eBird sightings
   in your state/province and near the rounded point (last 30 days; locality
-  name, date and count only; cached one hour), then asks Google's Gemini
-  model to answer from that text alone, labelling each fact with its source
+  name, date and count only; cached one hour), then asks an AI model to
+  answer from that text alone (Ollama Cloud first, Google's Gemini when
+  Ollama is unavailable or over its limit; both receive exactly the same
+  data and nothing about you beyond what is listed here), labelling each fact with its source
   and saying "sources differ" when they disagree. The model never calls
   these services. The answer comes back as plain text with the cited
   sections and the sources used as links. When the article cannot be

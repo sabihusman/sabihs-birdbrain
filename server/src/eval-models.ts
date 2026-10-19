@@ -8,9 +8,11 @@ import { ANSWER_MAX_OUTPUT_TOKENS, answerQuestion, SYSTEM_INSTRUCTION, type Answ
 import type { AskCostStore } from './ask-cost.js';
 import { CONTEXT_TOKEN_BUDGET, estimateTokens } from './context-select.js';
 import type { UsageStore } from './db.js';
+import { flagAnswer, formatFlags, type AdversarialCase, type EvalFlag, type RawReply } from './eval-adversarial.js';
 import type { SpeciesLabels } from './labels.js';
 import { costMicros, FLASH_LITE_MODEL, formatUsd, priceFor, type TokenUsage } from './pricing.js';
-import type { ArticleFetcher } from './wiki-article.js';
+import { ProviderError } from './providers/ollama.js';
+import type { ArticleFetcher, WikiArticle } from './wiki-article.js';
 
 export const EVAL_MODELS: ReadonlyArray<string> = ['gemini-3.8-flash', FLASH_LITE_MODEL];
 export const EVAL_BUDGET_USD = 0.1;
@@ -103,6 +105,8 @@ export interface EvalAnswer {
   usage: TokenUsage;
   costMicros: number | null;
   calls: number;
+  /** Misbehaviours seen in the raw reply (eval-adversarial.ts); empty when the answer is clean. */
+  flags: EvalFlag[];
 }
 
 export interface EvalRow {
@@ -142,16 +146,26 @@ export const unlimitedUsage: UsageStore = { get: () => 0, record: () => undefine
 export interface EvalDeps {
   labels: SpeciesLabels;
   article: ArticleFetcher;
-  /** One answer model per evaluated model id, each reporting into its collector. */
+  /** One answer model per evaluated model id (Gemini id or "ollama:<model>"), each reporting into its collector. */
   models: Array<{ model: string; answer: AnswerModel; collector: UsageCollector }>;
+}
+
+/** An adversarial case's injected text as one more article section, worded so the selector picks it. */
+function withInjectedSection(article: WikiArticle, injected: string): WikiArticle {
+  return { ...article, sections: [...article.sections, { heading: 'Diet and feeding notes', url: `${article.url}#Diet`, text: injected }] };
 }
 
 function describeOutcome(out: AskOutcome): string {
   return out.status === 200 ? out.body.answer : `(error ${out.status}: ${out.body.error})`;
 }
 
-/** Run every question through the real pipeline against each model; the article is fetched once per species. */
-export async function runEval(deps: EvalDeps, questions: ReadonlyArray<EvalQuestion> = EVAL_QUESTIONS): Promise<EvalRow[]> {
+/**
+ * Run every question (bird questions and adversarial cases alike) through the
+ * real pipeline against each model; the article is fetched once per species.
+ * The raw reply of each call is captured before the server's output rules so
+ * the flags describe the model's behaviour, not the sanitised result.
+ */
+export async function runEval(deps: EvalDeps, questions: ReadonlyArray<EvalQuestion | AdversarialCase> = EVAL_QUESTIONS): Promise<EvalRow[]> {
   const articles = new Map<string, ReturnType<ArticleFetcher>>();
   const article: ArticleFetcher = (sci, common, now) => {
     let p = articles.get(sci);
@@ -164,13 +178,28 @@ export async function runEval(deps: EvalDeps, questions: ReadonlyArray<EvalQuest
   const wiki = async () => null;
   const rows: EvalRow[] = [];
   for (const q of questions) {
+    const adv = 'kind' in q ? q : undefined;
+    const fetcher: ArticleFetcher = adv?.injectArticle ? async (sci, common, now) => {
+      const a = await article(sci, common, now);
+      return a ? withInjectedSection(a, adv.injectArticle!) : a;
+    } : article;
     const answers: EvalAnswer[] = [];
     for (const m of deps.models) {
       m.collector.reset();
-      const out = await answerQuestion({ labels: deps.labels, wiki, article, model: m.answer, usage: unlimitedUsage, caps: { perUserDaily: 1e9, globalDaily: 1e9 }, maxQuestionChars: 500 }, { id: 'eval', status: 'approved' }, q);
-      answers.push({ model: m.model, answer: describeOutcome(out), usage: { ...m.collector.usage }, costMicros: m.collector.costMicros, calls: m.collector.calls });
+      const raw: RawReply = {};
+      const probe: AnswerModel = async (input) => {
+        try {
+          raw.text = await m.answer(input);
+          return raw.text;
+        } catch (err) {
+          raw.error = err instanceof ProviderError ? err.kind : 'error';
+          throw err;
+        }
+      };
+      const out = await answerQuestion({ labels: deps.labels, wiki, article: fetcher, model: probe, usage: unlimitedUsage, caps: { perUserDaily: 1e9, globalDaily: 1e9 }, maxQuestionChars: 500 }, { id: 'eval', status: 'approved' }, { species: q.species, question: q.question });
+      answers.push({ model: m.model, answer: describeOutcome(out), usage: { ...m.collector.usage }, costMicros: m.collector.costMicros, calls: m.collector.calls, flags: flagAnswer(raw, out, adv?.marker) });
     }
-    rows.push({ question: q, answers });
+    rows.push({ question: { species: q.species, question: q.question }, answers });
   }
   return rows;
 }
@@ -192,7 +221,7 @@ export function formatResults(rows: ReadonlyArray<EvalRow>, models: ReadonlyArra
         cells.push('(no answer)', '-');
         continue;
       }
-      cells.push(cell(a.answer), `${a.usage.promptTokens}/${a.usage.answerTokens}/${a.usage.thinkingTokens} · ${formatUsd(a.costMicros)}`);
+      cells.push(formatFlags(a.flags) + cell(a.answer), `${a.usage.promptTokens}/${a.usage.answerTokens}/${a.usage.thinkingTokens} · ${formatUsd(a.costMicros)}`);
       const t = totals.get(m)!;
       t.calls += a.calls;
       t.usage.promptTokens += a.usage.promptTokens;
@@ -203,7 +232,10 @@ export function formatResults(rows: ReadonlyArray<EvalRow>, models: ReadonlyArra
     }
     lines.push(`| ${cells.join(' | ')} |`);
   }
-  lines.push('', '| Model | Calls | Prompt tokens | Answer tokens | Thinking tokens | Cached tokens | Cost (USD) |', '|---|---:|---:|---:|---:|---:|---:|');
-  for (const [m, t] of totals) lines.push(`| ${m} | ${t.calls} | ${t.usage.promptTokens} | ${t.usage.answerTokens} | ${t.usage.thinkingTokens} | ${t.usage.cachedTokens} | ${formatUsd(t.costMicros)} |`);
+  lines.push('', '| Model | Calls | Prompt tokens | Answer tokens | Thinking tokens | Cached tokens | Cost (USD) | Flagged answers |', '|---|---:|---:|---:|---:|---:|---:|---:|');
+  for (const [m, t] of totals) {
+    const flagged = rows.reduce((n, r) => n + (r.answers.find((a) => a.model === m)?.flags.length ? 1 : 0), 0);
+    lines.push(`| ${m} | ${t.calls} | ${t.usage.promptTokens} | ${t.usage.answerTokens} | ${t.usage.thinkingTokens} | ${t.usage.cachedTokens} | ${formatUsd(t.costMicros)} | ${flagged} |`);
+  }
   return lines.join('\n');
 }
