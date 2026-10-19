@@ -1,6 +1,5 @@
 import { searchSpecies, type Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
-import { getSpeciesSummary, type WikiResult } from '../../species/wiki';
 import { listSightingsForSpecies, getRecording } from '../../storage/db';
 import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
@@ -8,6 +7,7 @@ import { speciesChip } from '../components/species-chip';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor, speciesHref } from '../router';
 import { createMiniMap } from './map';
+import { aboutBird } from '../components/about-bird';
 import { askBox } from '../components/ask-box';
 import { locationBlock } from '../components/location-block';
 import { speciesIdCard } from '../components/species-id-card';
@@ -157,8 +157,9 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
       return;
     }
     const color = speciesColor(sp.scientific);
-    const wikiBox = el('div', { 'data-testid': 'wiki' }, el('p', { class: 'muted' }, 'Loading Wikipedia summary…'));
-    const ask = askBox(ctx.api, sp);
+    const about = aboutBird(sp);
+    disposers.push(about.dispose);
+    const ask = askBox(ctx.api, sp, () => controller.location.get().location);
     disposers.push(ask.dispose);
     const idCard = speciesIdCard(ctx, sp);
     disposers.push(idCard.dispose);
@@ -169,11 +170,10 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
       el('section', { class: 'card' }, el('div', { class: 'row' }, el('span', { class: 'swatch', style: `background:${color.css};width:22px;height:22px`, 'aria-hidden': 'true' }), el('div', null, el('h2', { style: 'margin:0' }, sp.common), el('div', { class: 'muted', style: 'font-style:italic' }, sp.scientific))), el('p', { class: 'small muted' }, 'Colour used for this species everywhere in the app.')),
       ...(spottedBy ? [spottedBy.el] : []),
       idCard.el,
-      el('section', { class: 'card' }, wikiBox),
+      about.el,
       ask.el,
       el('section', { class: 'card' }, el('h2', null, 'Your sightings'), myBox),
     );
-    void renderWiki(sp, wikiBox);
     void renderMine(sp, myBox);
     if (focusIdCardOnOpen) {
       focusIdCardOnOpen = false;
@@ -182,48 +182,6 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
         card?.scrollIntoView({ block: 'start' });
         card?.focus({ preventScroll: true });
       });
-    }
-  };
-
-  const renderWiki = async (sp: Species, box: HTMLElement, force = false) => {
-    let result: WikiResult;
-    try {
-      result = await getSpeciesSummary(sp, { force });
-    } catch (e) {
-      result = { status: 'error', message: (e as Error).message };
-    }
-    const retry = el('button', { class: 'btn small' }, 'Retry');
-    retry.addEventListener('click', () => void renderWiki(sp, box, true));
-    switch (result.status) {
-      case 'ok': {
-        const img = result.thumbnail
-          ? el('img', { class: 'wiki-thumb', src: result.thumbnail.source, alt: `${result.title} (Wikipedia image)`, loading: 'lazy' })
-          : null;
-        const attribution = result.image
-          ? el('p', { class: 'small muted' }, 'Image: ', result.image.artist ? `${result.image.artist}, ` : '', result.image.license ? (result.image.licenseUrl ? el('a', { href: result.image.licenseUrl, target: '_blank', rel: 'noopener' }, result.image.license) : result.image.license) : 'see licence on Commons', ' · ', el('a', { href: result.image.filePageUrl, target: '_blank', rel: 'noopener' }, 'image file page'))
-          : null;
-        box.replaceChildren(el('div', null,
-          el('h2', null, result.displayTitle || result.title),
-          result.description ? el('p', { class: 'muted' }, result.description) : null,
-          img,
-          attribution,
-          el('p', null, result.extract),
-          el('p', { class: 'small' }, el('a', { href: result.pageUrl, target: '_blank', rel: 'noopener' }, 'Read the full Wikipedia article'), ' · looked up by ', result.lookedUpBy, ' name · text CC BY-SA 4.0 · cached ', new Date(result.fetchedAt).toLocaleDateString()),
-        ));
-        break;
-      }
-      case 'disambiguation':
-        box.replaceChildren(el('p', null, 'Wikipedia has several pages with this name.'), el('p', null, el('a', { href: result.pageUrl, target: '_blank', rel: 'noopener' }, 'Open the disambiguation page'), ' · ', el('a', { href: result.searchUrl, target: '_blank', rel: 'noopener' }, 'Search Wikipedia')));
-        break;
-      case 'not-found':
-        box.replaceChildren(el('p', null, 'No Wikipedia summary found for this species under either name.'), el('p', null, el('a', { href: result.searchUrl, target: '_blank', rel: 'noopener' }, 'Search Wikipedia')));
-        break;
-      case 'offline':
-        box.replaceChildren(el('p', null, 'You are offline and this species has not been viewed before, so there is no cached summary.'), retry);
-        break;
-      case 'error':
-        box.replaceChildren(el('p', null, `Wikipedia request failed: ${result.message}`), retry);
-        break;
     }
   };
 

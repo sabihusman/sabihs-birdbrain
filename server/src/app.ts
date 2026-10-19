@@ -8,6 +8,7 @@ import { answerQuestion, type AnswerModel, type CapConfig } from './ask.js';
 import { publicUser, toAppUser, type AppUser, type Auth, type UserStatus } from './auth.js';
 import type { Config } from './config.js';
 import { createAnswerCache, type AnswerCache } from './answer-cache.js';
+import type { AnswerBody } from './ask.js';
 import { COST_SUMMARY_DAYS, createAskCostStore, type AskCostStore } from './ask-cost.js';
 import { createUsageStore } from './db.js';
 import { FriendsStore, INVITES_PER_DAY, INVITE_TTL_DAYS, MAX_SHARED_SPECIES, isCalendarDay } from './friends.js';
@@ -20,6 +21,8 @@ import { SignupNotifier } from './signup-notify.js';
 import { Users } from './users.js';
 import type { WikiFetcher } from './wiki.js';
 import type { ArticleFetcher } from './wiki-article.js';
+import type { EbirdSource } from './ebird.js';
+import type { NatureServeFetcher } from './natureserve.js';
 
 export interface AppDeps {
   config: Config;
@@ -30,11 +33,15 @@ export interface AppDeps {
   wiki: WikiFetcher;
   /** Full-article context (cached); the summary is the fallback. */
   article?: ArticleFetcher;
+  /** NatureServe status (cached); optional. */
+  natureserve?: NatureServeFetcher;
+  /** eBird sightings (cached); null when EBIRD_API_KEY is not set. */
+  ebird?: EbirdSource | null;
   model: AnswerModel | null;
   /** Daily ask cost totals; main.ts shares one store with createGeminiModel. Created here when absent. */
   costs?: AskCostStore;
   /** Answer cache; created here when absent. */
-  answers?: AnswerCache;
+  answers?: AnswerCache<AnswerBody>;
   /** Override limits in tests. */
   limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number; signupNotifyWindowMs?: number; invitesPerDay?: number };
   /** Clock for the sign-up notifier (tests). */
@@ -74,7 +81,7 @@ export function createApp(deps: AppDeps) {
   const challenges = new LoginChallenges(db, config.BETTER_AUTH_SECRET, config.LOGIN_CODE_TTL_SECONDS);
   const usage = createUsageStore(db);
   const costs = deps.costs ?? createAskCostStore(db);
-  const answers = deps.answers ?? createAnswerCache(db);
+  const answers = deps.answers ?? createAnswerCache<AnswerBody>(db);
   const friends = new FriendsStore(db);
   const invitesPerDay = deps.limits?.invitesPerDay ?? INVITES_PER_DAY;
   const caps: CapConfig = { perUserDaily: config.ASK_DAILY_PER_USER, globalDaily: config.ASK_DAILY_GLOBAL };
@@ -413,7 +420,7 @@ export function createApp(deps: AppDeps) {
       raw = null;
     }
     if (raw === null) return json(c, 400, { error: 'invalid_request' });
-    const out = await answerQuestion({ labels, wiki: deps.wiki, article: deps.article, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS, answers, costs, log: (line) => console.info(line) }, s.user, raw);
+    const out = await answerQuestion({ labels, wiki: deps.wiki, article: deps.article, natureserve: deps.natureserve, ebird: deps.ebird ?? null, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS, answers, costs, log: (line) => console.info(line) }, s.user, raw);
     return json(c, out.status, out.body);
   });
 

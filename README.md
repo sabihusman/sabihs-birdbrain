@@ -96,10 +96,17 @@ The name is always shown next to the colour.
   the official geo model; manual coordinates or off when location is denied.
   The strongest filtered-out species is shown greyed so the filter is visible.
 - **Recordings:** record WAV straight from the AudioWorklet stream (no
-  MediaRecorder), import audio files, play back, re-analyse with full
-  visualisation and seek-by-tap, export WAV, delete, optional auto-save of
-  each 3 s detection window as a recording ("Auto-save 3-second detection
-  windows as recordings", not to be confused with the species ID clip below).
+  MediaRecorder), import audio files, play back, re-analyse, export WAV,
+  delete, optional auto-save of each 3 s detection window as a recording
+  ("Auto-save 3-second detection windows as recordings", not to be confused
+  with the species ID clip below). Opening a recording shows its **sighting
+  card**: the bird's common and scientific names as the title, a map preview
+  with one dot (tap to explore) above the coordinates, Copy and Google Maps
+  buttons, the Plus Code under "More location details", the spectrogram with
+  seek-by-tap, "Confidence 96% · your minimum 60%" and the matched 3 s windows
+  as text, per-species detections, "Why this ID", an "About this bird" box
+  (Wikipedia summary plus collapsed Description, Song and calls, Habitat and
+  Diet sections, cached for offline) and, for members, "Ask about this bird".
 - **Location sharing:** every located detection shows coordinates and a
   10-character Plus Code with copy buttons and an "Open in Google Maps" link.
 - **Sightings:** consecutive detections of a species are merged into one
@@ -108,8 +115,9 @@ The name is always shown next to the colour.
   the species pages, the clips and the CSV/GeoJSON exports all work in
   sightings; the per-window detections stay stored underneath.
 - **Species ID card and sighting history (members):** on each species page, a
-  card with the most recent sighting (Plus Code, coordinates, mini map, Google
-  Maps link) and the species' saved ID clip: up to 10 s of raw audio around
+  card with the most recent sighting (map preview, coordinates, Google Maps
+  link, Plus Code under "More location details", the same block as the
+  sighting card) and the species' saved ID clip: up to 10 s of raw audio around
   the detection, with a spectrogram drawn from the clip, the 3 s window(s)
   that triggered the ID outlined and labelled with their confidence, a
   playback cursor, tap-to-seek and a tap-to-run "Why this ID" occlusion heat
@@ -120,8 +128,9 @@ The name is always shown next to the colour.
   confident detection. Free users see a short "Sign in to unlock" note
   instead.
 - **Accounts (optional):** email + password + emailed code; approved members
-  can ask AI questions about a species, answered only from its Wikipedia
-  summary; Sabih approves members on an admin page.
+  can ask AI questions about a species (on the species page and on each
+  sighting card), answered only from its Wikipedia article with section
+  citations; Sabih approves members on an admin page.
 - **Species:** offline browser of the BirdNET classes, listing by default the
   species the location model expects near you in some week of the year
   ("312 local species · 6,511 total", with a "Show all species" toggle and a
@@ -167,14 +176,26 @@ What does leave the phone, and why:
   code on every sign-in and keeps a short-lived session token (the API only
   accepts requests from `https://sabihs-birdbrain.vercel.app`). New accounts
   wait for Sabih's approval.
-- If you are an approved member and use "Ask about this bird": only the
-  species' scientific name and your question (up to 500 characters) are sent.
-  The server fetches the relevant sections of the Wikipedia article
-  (description, voice, range, behaviour, diet, status; capped, cached for
-  seven days on the server) and asks Google's Gemini model to answer from
-  that text alone; the answer comes back as plain text with the sections it
-  cites as links. When the article cannot be fetched, the summary is used. Questions are not logged. There are daily limits per person and
-  overall.
+- If you are an approved member and use "Ask about this bird": the species'
+  scientific name, your question (up to 500 characters) and your
+  state/province code are sent. The code is decided on the device from your
+  location (`US-IA`, `US-IL`, `US-WA`, `CA-AB`, `CA-ON`, or `none` elsewhere
+  or when location is off). For questions about sightings near you ("near
+  me", "in my area"…) your position rounded to one decimal (about 10 km) is
+  added; your exact location never is. The server fetches the relevant
+  sections of the Wikipedia article (description, voice, range, behaviour,
+  diet, status; capped, cached for seven days), the species' NatureServe
+  Explorer conservation ranks (global and for your state/province; cached
+  30 days) and, when the server has an eBird key, the recent eBird sightings
+  in your state/province and near the rounded point (last 30 days; locality
+  name, date and count only; cached one hour), then asks Google's Gemini
+  model to answer from that text alone, labelling each fact with its source
+  and saying "sources differ" when they disagree. The model never calls
+  these services. The answer comes back as plain text with the cited
+  sections and the sources used as links. When the article cannot be
+  fetched, the summary is used; when NatureServe or eBird are unavailable,
+  the answer says which sources it used. Questions are not logged. There are
+  daily limits per person and overall.
 
 - If you are an approved member and use **Friends** (Settings › Account):
   your display name is stored on the server and shown to friends instead of

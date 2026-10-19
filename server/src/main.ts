@@ -5,7 +5,9 @@ import { createGeminiModel } from './ask.js';
 import { createAuth, migrateAuth } from './auth.js';
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
+import { createEbirdApi, createEbirdSource } from './ebird.js';
 import { loadLabels } from './labels.js';
+import { createNatureServeCache, fetchNatureServeStatus } from './natureserve.js';
 import { createConsoleMailer, createSmtpMailer, withSendTimeout } from './mailer.js';
 import { fetchWikipediaSummary } from './wiki.js';
 import { createArticleCache, fetchWikipediaArticle } from './wiki-article.js';
@@ -21,7 +23,11 @@ async function main() {
   const model = config.GEMINI_API_KEY ? createGeminiModel(config.GEMINI_API_KEY, config.GEMINI_MODEL, undefined, undefined, costs) : null;
   if (!model) console.warn('[startup] GEMINI_API_KEY not set: /v1/ask will answer 502');
   const article = createArticleCache(db).wrap(fetchWikipediaArticle);
-  const app = createApp({ config, db, auth, mailer, labels, wiki: fetchWikipediaSummary, article, model, costs });
+  const natureserve = createNatureServeCache(db).wrap(fetchNatureServeStatus);
+  // The key itself is never logged; only whether the source is on.
+  const ebird = config.EBIRD_API_KEY ? createEbirdSource(db, createEbirdApi(config.EBIRD_API_KEY)) : null;
+  if (!ebird) console.warn('[startup] EBIRD_API_KEY not set: /v1/ask answers without eBird sightings');
+  const app = createApp({ config, db, auth, mailer, labels, wiki: fetchWikipediaSummary, article, natureserve, ebird, model, costs });
 
   const server = serve({ fetch: app.fetch, hostname: config.HOST, port: config.PORT }, (info) => {
     console.log(`[startup] birdbrain-api listening on ${info.address}:${info.port} (${labels.byScientific.size} species, mail=${config.MAIL_TRANSPORT})`);

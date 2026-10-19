@@ -44,7 +44,16 @@ Key modules:
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.
 - `src/species/colors.ts` — deterministic OKLCH species colours;
-  `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache.
+  `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache;
+  `src/species/wiki-sections.ts` — Description / Song / Habitat / Diet
+  excerpts from the full article via TextExtracts (same request as the
+  server, plus `origin=*`), cached in the same `wiki` store.
+- Sighting card (`src/ui/views/recordings.ts`, `recordingDetailView`): title
+  = top species, `src/ui/components/map-preview.ts` (non-interactive Leaflet
+  preview, "Tap to explore") above `location-block.ts` (Plus Code folded under
+  "More location details"), confidence as text (`src/ui/confidence-text.ts`),
+  `about-bird.ts` (summary + sections, also used by the species page) and
+  `ask-box.ts` for members. See DECISIONS.md #46.
 - `src/export/` — CSV / GeoJSON.
 - Member-only, on-device: `src/app/access.ts` (gating from the cached
   session), `src/species/clips.ts` (one raw clip per species, replace-if-higher,
@@ -60,13 +69,16 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 
 - `src/app.ts` routes; `src/auth.ts` Better Auth options (bearer plugin,
   `status`/`role` user fields, admin via `ADMIN_EMAIL`); `src/login-codes.ts`
-  the email second factor; `src/ask.ts` the Gemini pipeline and caps, with
-  `src/context-select.ts` (sections relevant to the question, ~1,500 tokens),
-  `src/answer-cache.ts` (same species + question → 7-day reuse),
-  `src/pricing.ts` (list prices and thinking level per model, verified
-  dates in the comment) and `src/ask-cost.ts` (per-day token/cost totals,
-  `GET /v1/admin/ask-costs`); `src/users.ts` admin SQL; `src/backup.ts`
-  `VACUUM INTO` backups. See DECISIONS.md #48.
+  the email second factor; `src/ask.ts` the Gemini pipeline and caps;
+  `src/wiki-article.ts`, `src/natureserve.ts`, `src/ebird.ts` the three
+  fetched, cached sources (`EBIRD_API_KEY` optional; DECISIONS #47);
+  `src/context-select.ts` (Wikipedia sections relevant to the question, the
+  whole fenced source ~1,500 tokens), `src/answer-cache.ts` (same species +
+  region + position + question → 7-day reuse), `src/pricing.ts` (list prices
+  and thinking level per model, verified dates in the comment) and
+  `src/ask-cost.ts` (per-day token/cost totals, `GET /v1/admin/ask-costs`;
+  DECISIONS #48); `src/users.ts` admin SQL; `src/backup.ts` `VACUUM INTO`
+  backups.
 - Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or
   Better Auth logs a schema mismatch.
 - Tests: `cd server && npm test` (Vitest, in-memory SQLite, `FakeMailer`).

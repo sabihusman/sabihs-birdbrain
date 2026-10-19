@@ -925,10 +925,159 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone or with VoiceOver; checked in Chromium with
   Playwright and in both theme screenshots (`docs/screenshots/settings-*.png`).
 
-## 48. `/v1/ask` cost: token logging, lean context, minimal thinking, answer cache, model eval
+## 46. Sighting card: title, map preview, confidence text, About this bird, Ask box
 
-(Numbered 48 on branch `claude/ask-cost`; #46 and #47 are taken by other
-open branches, so this may be renumbered at merge.)
+- **What the user saw:** the recording detail opened from Recordings carried
+  the recording's stored name as its title: `Auto clip: <bird>` for
+  auto-saved clips (`controller.persistDetections`), `Recording <date>` for
+  mic recordings, the file name for imports. There was no "Audio clip" string
+  in the code; the auto-clip name is what was being read as one.
+- **Title:** the top detection's common name with the scientific name in
+  italics beneath (`recording-title`, `recording-sci`); "Recording" when
+  nothing is detected. The recording's own name, date, length and size move
+  to the meta line. The title comes from the stored summary at once and from
+  the per-window results after each analysis.
+- **Location:** a 160 px `mapPreview` (`src/ui/components/map-preview.ts`,
+  `createPreviewMap` in `src/ui/views/map.ts`) above the coordinates with one
+  `L.circleMarker` dot in the species colour (accent until a species is
+  known). Every Leaflet handler is off and there is no zoom control until the
+  "Tap to explore" cover button is tapped; Leaflet 1.9 has no `tap` option any
+  more (the handler was removed in 1.8), so touch is covered by `dragging`
+  and `touchZoom`. The OSM attribution stays. Offline, a muted placeholder
+  stands in and the map is built on the `online` event. `locationBlock` keeps
+  coordinates + Copy + "Open in Google Maps" and folds the Plus Code into a
+  `<details>` "More location details" with the line "Google's short code for
+  this spot; works in Google Maps." The species ID card uses the same two
+  pieces in the same order, so the two cards match; `createMiniMap` remains
+  for the free user's multi-sighting map on the species page.
+- **Confidence:** the per-species timeline canvas under the spectrogram is
+  gone from this card (`TimelineView` still serves "How it works" on
+  Listen). In its place: "Confidence 96% · your minimum 60%" (threshold from
+  settings) and, when the top species matched several 3 s windows, one line
+  per window in time order, "0:02–0:05 · 96%" (`src/ui/confidence-text.ts`,
+  unit-tested). The per-species chips with "▶ best at" stay in Detections.
+- **About this bird:** `src/ui/components/about-bird.ts` renders the summary
+  (text, thumbnail with Commons attribution, article link; the same markup
+  the species page had) plus collapsed Description, Song and calls, Habitat
+  and Diet sections from the full article. `src/species/wiki-sections.ts`
+  mirrors the server's TextExtracts request (#37) with `origin=*` added for
+  the browser:
+  `api.php?action=query&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&titles=…&format=json&formatversion=2&origin=*`
+  (parameters checked against `action=help&modules=query+extracts` on
+  mediawiki.org, 2026-10-19). Headings are split at every level, so
+  "Vocalisations" is found under "Description"; the first heading matching
+  each kind wins (description/identification/appearance; vocalisation/voice/
+  song/call/sound; distribution and habitat/habitat/distribution/range; diet/
+  feeding/food/foraging); each is cut to 600 characters at a sentence end
+  with a link to the section. Cached in the existing IndexedDB `wiki` store
+  under `wiki-sections:en:<scientific>`, so no DB version bump (another open
+  PR bumps it for clips). The species page now uses the same component.
+- **Ask:** `askBox` (previously mounted only on the species page,
+  `src/ui/views/species.ts`) is mounted on the card for the top species.
+  Its own gating stays: approved members get the form; signed-out and
+  pending users see a "Sign in to ask" line (`ask-locked`). Answers come from
+  the full article with section citations (#37); the box itself is
+  unchanged.
+- **Tests:** unit tests for the section parser, picker, truncation and the
+  cached fetcher (`tests/wiki-sections.test.ts`, hand-written fixture in
+  `tests/fixtures/`, as en.wikipedia.org rate-limits this environment) and
+  the confidence text; the import e2e test now sets a manual position and
+  checks the title, confidence line, map preview, folded Plus Code, About and
+  "Sign in to ask"; the member test checks the Ask form on the card.
+  Screenshots: `scripts/sighting-card-screenshots.ts` →
+  `docs/screenshots/sighting-card-{dark,light}-{signed-in,signed-out}.png`.
+  - **Not verified:** a live TextExtracts response in the browser (429 here;
+  the fixture follows the documented format and the server's parser) and the
+  map cover on a real touch screen.
+
+## 47. `/v1/ask` sources: NatureServe Explorer and eBird beside Wikipedia
+
+- **Decision:** the answer is built from up to three fetched sources, each
+  with one role stated in the system instruction: Wikipedia for the biology,
+  NatureServe Explorer for the conservation status (global rank and the
+  S-rank for the asker's state/province), eBird for recent sightings in that
+  state/province and, for nearby questions, within 50 km of a rounded point.
+  The server fetches everything; Gemini has no tools. Every fact must carry
+  its source as a citation (`[Wikipedia – Diet]`, `[NatureServe Explorer –
+  Conservation status]`, `[eBird – Recent sightings]`, `[eBird – Recent
+  sightings nearby]`); when sources disagree the model is told to give both
+  and say "sources differ"; it must not invent counts, dates, places or
+  ranks and must say when eBird lists no reports.
+- **What the app sends (decided on the device, `src/geo/region.ts`):** the
+  species, the question, `region` (one of `US-IA`, `US-IL`, `US-WA`,
+  `CA-AB`, `CA-ON`, or `none`) and, only when the question reads as a nearby
+  one (near, nearby, around here, close by, in my area, local, this county…)
+  and location is on, `near: {lat, lon}` rounded with `Math.round(x*10)/10`
+  (about 10 km). The region comes from bounding boxes documented in that
+  file (five codes; Ontario in three boxes so Minnesota, Wisconsin and most
+  of Michigan stay out; the Iowa/Illinois overlap split by a five-point
+  polyline along the Mississippi; everything else `none`). `askSchema`
+  stays `.strict()`: the enum is fixed, coordinates are range-checked and
+  must have at most one decimal. The note under the Ask box shows the code
+  and whether the rounded position will be added before anything is sent.
+- **NatureServe (no key), `server/src/natureserve.ts`:** `POST
+  https://explorer.natureserve.org/api/data/speciesSearch` with
+  `{criteriaType:"species", textCriteria:[{paramType:"textSearch",
+  searchToken:<scientific>, matchAgainst:"scientificName",
+  operator:"equals"}], pagingOptions:{page:0, recordsPerPage:5}}`. Verified
+  against https://explorer.natureserve.org/api-docs/ ("Species Search",
+  "Text Criteria", "Species Result") on 2026-10-19: each result carries
+  `scientificName`, `primaryCommonName`, `roundedGRank`, `nsxUrl` (relative)
+  and `nations[].subnations[]` with `subnationCode` and `roundedSRank`, so
+  the taxon endpoints (`GET /api/data/taxon/{uid}`, which return the same
+  ranks as `elementNationals[].elementSubnationals[].roundedSRank` with
+  `subnation.subnationCode`) are not needed. The fixture
+  `server/test/fixtures/natureserve-robin.json` is a live recording of that
+  call for *Turdus migratorius* (trimmed). Cache: SQLite `natureserve_cache`,
+  one row per species (the record holds every S-rank, so the region is
+  picked out at prompt time), 30 days, misses cached too. Ranks are expanded
+  in the prompt ("S5B (secure, breeding population)"); range ranks such as
+  G3G4 are left as they are.
+- **eBird (`EBIRD_API_KEY`, optional), `server/src/ebird.ts`:** base
+  `https://api.ebird.org/v2`, header `X-eBirdApiToken`. Verified against the
+  eBird API 2.0 Postman documentation
+  (https://documenter.getpostman.com/view/664302/S1ENwy59, read through its
+  collection JSON on 2026-10-19): `GET /ref/taxonomy/ebird?fmt=json&cat=species`
+  (rows `{sciName, comName, speciesCode, category, …}`; its `species`
+  filter takes codes, not names, so the whole taxonomy is downloaded once
+  and cached 30 days as one `ebird_cache` row, and scientific name → code
+  is looked up in it); `GET /data/obs/{regionCode}/recent/{speciesCode}?back=30`
+  (regionCode is the subnational1 code, i.e. the app's `US-IA` style codes);
+  `GET /data/obs/geo/recent/{speciesCode}?lat=&lng=&back=30&dist=50`.
+  Observation rows are reduced to locality name, date and count: private
+  localities become "a private location", coordinates embedded in locality
+  names (eBird auto-names them that way) are stripped, and observer names,
+  checklist ids and coordinates never enter the prompt; at most 15 rows,
+  newest first. Cache: `ebird_cache`, one hour per species+region and per
+  species+rounded point. Without the key the source is skipped and startup
+  logs only that it is not set. Fixtures: `ebird-taxonomy.json` (first row
+  recorded live, the taxonomy endpoint needs no key), `ebird-obs-region.json`
+  (doc-derived: the documentation's "Example 1" response, dates moved; no
+  key was available to record live) and `sources-injected.json`
+  (adversarial).
+- **Pipeline:** `fetchExtraSources` runs both lookups concurrently with the
+  Wikipedia fetch, 8-second timeouts, every failure non-fatal; the response
+  adds `sources: [{name, url}]` (what was used) and `region`, and keeps
+  `source`, `citations` (now with the full label and a `source` field) and
+  `context` for older clients. The client shows "Sources: Wikipedia ·
+  NatureServe Explorer · eBird" as links under the answer.
+- **Injection defences kept:** every fetched field goes through `cleanField`
+  (control characters and square brackets removed, 120 characters) and then
+  `neutralizeFence` inside the single `<source>` fence; the NatureServe link
+  is rebuilt from a validated relative path. `adversarial-sources.test.ts`
+  proves an injected instruction in a locality/common name reaches the model
+  only as data and that the leak check still rejects a compliant answer.
+  See docs/SECURITY.md.
+- **Alternatives:** letting the model call the APIs (rejected: tools widen
+  the blast radius of an injection and the spec forbids it); sending the raw
+  position (rejected: the region code and a 0.1° point are enough for both
+  APIs); NatureServe `nation`/`subnation` location criteria instead of
+  caching the whole record (one extra call per region for no gain).
+- **Not verified:** live eBird observation responses (no key here); how well
+  Gemini keeps to the role rules and the "sources differ" wording; the
+  bounding boxes on a device near a border.
+
+## 48. `/v1/ask` cost: token logging, lean context, minimal thinking, answer cache, model eval
 
 - **Problem:** every question sent the whole selected article (up to 12,000
   characters, ~1,800 prompt tokens in the live logs) at thinking level LOW
@@ -967,21 +1116,27 @@ open branches, so this may be renumbered at merge.)
   Flash-Lite), and this prompt is ~1,800 tokens at most, so a cache discount is
   not expected in practice; the ordering costs nothing and the smaller prompt
   saves more than a cache would.
-- **Context (`server/src/context-select.ts`):** sections are scored by
-  keyword overlap between the question and the heading + text (lower-case,
+- **Context (`server/src/context-select.ts`):** the Wikipedia sections are
+  scored by keyword overlap between the question and the heading + text (lower-case,
   stop words removed, a light suffix strip so "eat" meets "eats" and "breed"
   meets "breeding"; a heading match counts three times). The lead always
   scores at least 1, so it is the fallback when nothing matches. Sections are
   added in score order until ~1,500 tokens (chars / 4; the last one cut at a
   word boundary with "[…]", dropped if fewer than 60 tokens fit) and sent in
-  article order. Citations still resolve against every article section
-  (same anchors). The fence neutralisation, control stripping and leak
-  markers are unchanged.
+  article order. The ~1,500 tokens are the whole fenced source: the
+  NatureServe and eBird blocks (#47) are short and always sent whole, and
+  `wikiTokenBudget()` gives Wikipedia what they leave, never below 400
+  tokens. Citations still resolve against every section (same anchors and
+  labels). The fence neutralisation, control stripping and leak markers are
+  unchanged; the prompt order stays static instruction → source → question.
 - **Answer cache (`server/src/answer-cache.ts`):** SQLite `answer_cache`
-  keyed by SHA-256 of species + normalised question (lower-case, trimmed,
-  punctuation and symbols removed, whitespace collapsed, 200 characters), so
-  the table never stores a question. Region- and member-independent: the
-  context is the same article for everyone. Seven-day TTL from `created_at`;
+  keyed by SHA-256 of species + region code ("none" when absent) + the
+  position rounded to 0.1° ("-" when absent) + normalised question
+  (lower-case, trimmed, punctuation and symbols removed, whitespace
+  collapsed, 200 characters), so the table never stores a question. The
+  same question from another state or another place is another answer
+  because the eBird sections differ (#47); the member is not in the key.
+  Seven-day TTL from `created_at`;
   only successful answers are stored; expired rows are pruned on each write.
   A hit returns the same body plus `cached: true`, is served before the
   daily caps are checked and does not count against them.

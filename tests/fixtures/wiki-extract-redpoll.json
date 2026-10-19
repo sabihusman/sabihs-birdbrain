@@ -1,0 +1,14 @@
+{
+  "_comment": "Hand-written stand-in for a TextExtracts response (action=query&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&format=json&formatversion=2&origin=*). Not a copy of the live article: en.wikipedia.org rate-limited this environment (HTTP 429) when the fixture was made, so the section layout follows a typical bird article's headings while the sentences are invented. The Description section is deliberately long so the 600-character cut is exercised, and Vocalisations is a sub-heading under Description as on many bird pages.",
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "pageid": 1,
+        "ns": 0,
+        "title": "Lesser redpoll",
+        "extract": "The lesser redpoll (Acanthis cabaret) is a small passerine bird in the finch family. It is a common breeding bird of northern and western Europe.\n\n== Taxonomy ==\nThe lesser redpoll was formally described in 1776. It was long treated as a subspecies of the common redpoll.\n\n== Description ==\nThe lesser redpoll is the smallest of the redpolls, about 11.5 cm long. The upperparts are warm brown with dark streaks, and there is a small red patch on the forehead. The breast is buff with fine streaks and the bill is short and yellowish. Adult males show a pink flush on the breast in spring. Females lack the pink and are a little duller overall. Juveniles are heavily streaked and have no red on the forehead until their first autumn. The tail is notched and the wings show two pale bars. In flight the bird looks compact and bounds along in the manner of a siskin. Birds from the northern edge of the range average slightly larger and paler than those from the south-west, but the difference is slight. The call is the easiest way to tell it from the common redpoll in the field, as the plumage differences are subtle.\n\n=== Vocalisations ===\nThe flight call is a dry, metallic chattering, often written as \"chett-chett-chett\". The song is a mixture of the chattering call and a buzzing trill, given in a circling display flight. A plaintive, rising \"tsooee\" is used as a contact note.\n\n== Distribution and habitat ==\nIt breeds in Britain, Ireland, the Alps and parts of the Low Countries, and has spread east in recent decades. Favoured habitats are young conifer plantations, birch scrub, alder carr and heathland edges.\n\n== Behaviour and ecology ==\n\n=== Breeding ===\nThe nest is a small cup placed in a bush or low tree. Four to six eggs are laid and incubated by the female.\n\n=== Diet ===\nIt feeds mainly on tiny seeds, especially of birch and alder, taken acrobatically from the catkins. In summer it also takes small insects for its young. Flocks visit garden feeders for nyjer seed in winter.\n\n== Status ==\nThe population has fallen in Britain since the 1970s.\n\n== References ==\nSome reference.\n\n== External links ==\nSome link."
+      }
+    ]
+  }
+}

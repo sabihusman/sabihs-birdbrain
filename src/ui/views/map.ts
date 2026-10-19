@@ -14,11 +14,50 @@ import { cssToken } from '../../theme/theme';
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-function baseMap(container: HTMLElement): L.Map {
-  const map = L.map(container, { zoomControl: true, attributionControl: true });
+function baseMap(container: HTMLElement, options: L.MapOptions = {}): L.Map {
+  const map = L.map(container, { zoomControl: true, attributionControl: true, ...options });
   // One tile layer, served live from OSM; never cached or prefetched by the service worker.
   L.tileLayer(OSM_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, crossOrigin: true }).addTo(map);
   return map;
+}
+
+export interface PreviewMap {
+  /** Turn on dragging, zooming and the zoom control ("Tap to explore"). */
+  enable(): void;
+  /** Recolour the dot (the sighting card learns its species after analysis). */
+  setColor(css: string): void;
+  dispose(): void;
+}
+
+/**
+ * Small non-interactive map with one dot at a spot (sighting card, species ID
+ * card). Every handler is off and there is no zoom control until `enable()`;
+ * the OSM attribution stays. Leaflet 1.9 has no `tap` option any more (the
+ * tap handler was removed in 1.8), so touch is covered by `dragging` and
+ * `touchZoom`.
+ */
+export function createPreviewMap(container: HTMLElement, lat: number, lon: number, colorCss: string, zoom = 14): PreviewMap {
+  const map = baseMap(container, { zoomControl: false, dragging: false, scrollWheelZoom: false, touchZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false });
+  map.setView([lat, lon], zoom);
+  const dot = L.circleMarker([lat, lon], { radius: 9, color: '#fff', weight: 2, fillColor: colorCss, fillOpacity: 0.95, interactive: false }).addTo(map);
+  let enabled = false;
+  return {
+    enable() {
+      if (enabled) return;
+      enabled = true;
+      map.dragging.enable();
+      map.scrollWheelZoom.enable();
+      map.touchZoom.enable();
+      map.doubleClickZoom.enable();
+      map.boxZoom.enable();
+      map.keyboard.enable();
+      L.control.zoom({ position: 'topright' }).addTo(map);
+    },
+    setColor(css) {
+      dot.setStyle({ fillColor: css });
+    },
+    dispose: () => map.remove(),
+  };
 }
 
 /** "1 May 2026, 06:30 – 06:30:45 · peak 88 % · 4 windows" */

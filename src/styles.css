@@ -305,6 +305,28 @@ textarea { color: inherit; }
 
 .update-banner { width: 100%; min-height: 44px; border: none; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); padding: 10px 14px; margin: 8px 0; text-align: left; }
 .update-banner:disabled { opacity: 0.7; }
+/* Sighting card (recording detail) and the species ID card: map preview above the coordinates,
+   Plus Code folded under "More location details", confidence as text, article sections folded. */
+.sci-name { font-style: italic; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+.map-preview { position: relative; height: 160px; min-height: 160px; border-radius: var(--radius-control); overflow: hidden; background: var(--sage); }
+.map-preview-map { position: absolute; inset: 0; }
+/* Above the map panes (Leaflet ≤ 700) and below its controls (1000), so the attribution link stays usable. */
+.map-preview-cover { position: absolute; inset: 0; z-index: 800; display: flex; align-items: flex-start; justify-content: center; padding: 10px 0 0; background: transparent; border: 0; color: var(--text); cursor: pointer; }
+.map-preview-cover > span { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 14px; border-radius: var(--radius-pill); background: var(--card); border: 1px solid var(--line); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.map-preview-cover:focus-visible { outline-offset: -3px; }
+.map-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: var(--space-3); color: var(--muted); font-size: var(--text-sm); }
+.location-more > summary { font-size: var(--text-sm); color: var(--muted); min-height: 36px; }
+.location-block.compact .location-more > summary { min-height: 28px; }
+.confidence-text { margin-top: 8px; }
+.windows-list { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wiki-sections { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.wiki-sections > .btn { align-self: flex-start; }
+.section-fold { border: 1px solid var(--line); border-radius: var(--radius-control); padding: 0 12px; }
+.section-fold > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 44px; font-weight: var(--weight-semibold); }
+.section-fold > summary::-webkit-details-marker { display: none; }
+.section-fold > summary::after { content: "›"; font-size: var(--text-lg); color: var(--muted); transform: rotate(90deg); transition: transform var(--motion); }
+.section-fold[open] > summary::after { transform: rotate(-90deg); }
+.section-fold > p { margin: 0 0 10px; }
 
 /* Account card: friends and sharing (DECISIONS.md #44) */
 .rule { border: 0; border-top: 1px solid var(--line); margin: var(--space-2) 0; }

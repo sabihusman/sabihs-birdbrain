@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ThinkingLevel } from '@google/genai';
-import { answerQuestion, createGeminiModel, SYSTEM_INSTRUCTION } from '../src/ask.js';
+import { answerQuestion, createGeminiModel, SYSTEM_INSTRUCTION, wikiTokenBudget, WIKI_TOKEN_FLOOR, type AnswerBody } from '../src/ask.js';
 import { CACHE_HIT_LOG_LINE, createAskCostStore } from '../src/ask-cost.js';
 import { ANSWER_CACHE_TTL_MS, answerCacheKey, createAnswerCache, normalizeQuestion } from '../src/answer-cache.js';
 import { CONTEXT_TOKEN_BUDGET, estimateTokens, keywords, scoreSection, selectRelevantSections, stem } from '../src/context-select.js';
@@ -100,26 +100,34 @@ describe('answer cache', () => {
     expect(answerCacheKey('Turdus merula', 'What does it eat?')).toBe(answerCacheKey('turdus merula ', 'what does it eat'));
     expect(answerCacheKey('Turdus merula', 'What does it eat?')).not.toBe(answerCacheKey('Parus major', 'What does it eat?'));
     expect(answerCacheKey('Turdus merula', 'What does it eat?')).not.toContain('eat');
+    expect(answerCacheKey('Turdus merula', 'What does it eat?')).toBe(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'none' }));
+    expect(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'US-NY' })).not.toBe(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'US-CA' }));
   });
 
   it('returns a stored answer for 7 days and nothing after, with a fake clock', () => {
     const cache = createAnswerCache(openDatabase(':memory:'));
     const t0 = new Date('2026-10-19T12:00:00Z');
     const body = { answer: 'Seeds. [Diet]', source: { title: 'T', url: 'u' }, citations: [{ section: 'Diet', url: 'u#Diet' }], context: 'article' as const };
-    expect(cache.get('Turdus merula', 'What does it eat?', t0)).toBeNull();
-    cache.put('Turdus merula', 'What does it eat?', body, t0);
-    expect(cache.get('Turdus merula', 'what does it eat', new Date(t0.getTime() + ANSWER_CACHE_TTL_MS - 1))).toEqual(body);
-    expect(cache.get('Turdus merula', 'what does it eat', new Date(t0.getTime() + ANSWER_CACHE_TTL_MS))).toBeNull();
+    const scope = { region: 'US-NY', near: { lat: 40.7, lon: -74 } };
+    expect(cache.get('Turdus merula', 'What does it eat?', scope, t0)).toBeNull();
+    cache.put('Turdus merula', 'What does it eat?', scope, body, t0);
+    expect(cache.get('Turdus merula', 'what does it eat', scope, new Date(t0.getTime() + ANSWER_CACHE_TTL_MS - 1))).toEqual(body);
+    // another region or another place is another answer; the same place written differently is the same
+    expect(cache.get('Turdus merula', 'what does it eat', { ...scope, region: 'US-NJ' }, t0)).toBeNull();
+    expect(cache.get('Turdus merula', 'what does it eat', { region: 'US-NY' }, t0)).toBeNull();
+    expect(cache.get('Turdus merula', 'what does it eat', { ...scope, near: { lat: 40.7, lon: -74.0 } }, t0)).toEqual(body);
+    expect(cache.get('Turdus merula', 'what does it eat', { ...scope, near: { lat: 40.8, lon: -74 } }, t0)).toBeNull();
+    expect(cache.get('Turdus merula', 'what does it eat', scope, new Date(t0.getTime() + ANSWER_CACHE_TTL_MS))).toBeNull();
     // a later put prunes expired rows
-    cache.put('Parus major', 'How big?', body, new Date(t0.getTime() + ANSWER_CACHE_TTL_MS + 1));
-    expect(cache.get('Turdus merula', 'what does it eat', t0)).toBeNull();
+    cache.put('Parus major', 'How big?', {}, body, new Date(t0.getTime() + ANSWER_CACHE_TTL_MS + 1));
+    expect(cache.get('Turdus merula', 'what does it eat', scope, t0)).toBeNull();
   });
 
   it('answerQuestion serves a repeat question from the cache without a model call, without counting the caps, and caches only successes', async () => {
     const db = openDatabase(':memory:');
     const usage = createUsageStore(db);
     const costs = createAskCostStore(db);
-    const answers = createAnswerCache(db);
+    const answers = createAnswerCache<AnswerBody>(db);
     const lines: string[] = [];
     let calls = 0;
     let reply = 'It eats seeds and worms. [Behaviour and ecology]';
@@ -143,6 +151,13 @@ describe('answer cache', () => {
     const fresh = await answerQuestion(deps, { id: 'u2', status: 'approved' }, { species: 'Turdus merula', question: 'Where does it nest?' }, now);
     expect(fresh.body).not.toHaveProperty('cached');
     expect(calls).toBe(2);
+    // the same question from another region is not the same answer (eBird sections differ)
+    const regional = await answerQuestion(deps, { id: 'u2', status: 'approved' }, { species: 'Turdus merula', question: 'What does it eat?', region: 'US-IA' }, now);
+    expect(regional.status).toBe(200);
+    expect(regional.body).not.toHaveProperty('cached');
+    expect(regional.body).toHaveProperty('region', 'US-IA');
+    expect(calls).toBe(3);
+    expect((await answerQuestion(deps, { id: 'u6', status: 'approved' }, { species: 'Turdus merula', question: 'What does it eat?', region: 'US-NY' }, now)).body).toHaveProperty('cached', true);
     // a failed answer is not cached
     reply = '';
     const bad = await answerQuestion(deps, { id: 'u3', status: 'approved' }, { species: 'Parus major', question: 'How big?' }, now);
@@ -216,10 +231,26 @@ describe('context selection', () => {
     const deps = { labels: LABELS, wiki: async () => null, article: async () => article(), model: async (i: { prompt: string }) => (prompts.push(i.prompt), 'It breeds in spring. [Behaviour and ecology]'), usage: createUsageStore(openDatabase(':memory:')), caps: { perUserDaily: 5, globalDaily: 5 }, maxQuestionChars: 500 };
     const out = await answerQuestion(deps, { id: 'u', status: 'approved' }, { species: 'Turdus merula', question: 'When does it breed?' });
     expect(out.status).toBe(200);
-    expect(prompts[0]).toContain('[Section: Behaviour and ecology]');
-    expect(prompts[0]).not.toContain('[Section: Taxonomy and systematics]');
+    expect(prompts[0]).toContain('[Section: Wikipedia – Behaviour and ecology]');
+    expect(prompts[0]).not.toContain('[Section: Wikipedia – Taxonomy and systematics]');
     expect(prompts[0].indexOf('<source>')).toBeLessThan(prompts[0].indexOf('QUESTION:'));
-    if (out.status === 200) expect(out.body.citations.map((c) => c.section)).toEqual(['Behaviour and ecology']);
+    if (out.status === 200) expect(out.body.citations.map((c) => c.section)).toEqual(['Wikipedia – Behaviour and ecology']);
+  });
+
+  it('the other sources are always sent whole and reduce the Wikipedia share of the budget, never below the floor', async () => {
+    expect(wikiTokenBudget([])).toBe(CONTEXT_TOKEN_BUDGET);
+    const block = { source: 'eBird' as const, heading: 'Recent sightings', text: 'x'.repeat(800) };
+    expect(wikiTokenBudget([block])).toBe(CONTEXT_TOKEN_BUDGET - 200 - estimateTokens('eBird – Recent sightings') - 4);
+    expect(wikiTokenBudget([{ ...block, text: 'x'.repeat(8000) }])).toBe(WIKI_TOKEN_FLOOR);
+    const prompts: string[] = [];
+    const natureserve = async () => ({ url: 'https://explorer.natureserve.org/x', scientific: 'Turdus merula', common: 'Common blackbird', globalRank: 'G5', globalStatus: 'Secure', roundedGlobalRank: 'G5', lastReviewed: '2020-01-01', subnational: [] });
+    const deps = { labels: LABELS, wiki: async () => null, article: async () => article(), natureserve: natureserve as unknown as NonNullable<Parameters<typeof answerQuestion>[0]['natureserve']>, model: async (i: { prompt: string }) => (prompts.push(i.prompt), 'Secure. [NatureServe Explorer – Conservation status]'), usage: createUsageStore(openDatabase(':memory:')), caps: { perUserDaily: 5, globalDaily: 5 }, maxQuestionChars: 500 };
+    const out = await answerQuestion(deps, { id: 'u', status: 'approved' }, { species: 'Turdus merula', question: 'Is it endangered?' });
+    expect(out.status).toBe(200);
+    expect(prompts[0]).toContain('[Section: NatureServe Explorer – Conservation status]');
+    expect(prompts[0]).toContain('[Section: Wikipedia – Lead]');
+    expect(prompts[0]).not.toContain('[Section: Wikipedia – Taxonomy and systematics]');
+    if (out.status === 200) expect(out.body.sources.map((s) => s.name)).toEqual(['Wikipedia', 'NatureServe Explorer']);
   });
 });
 

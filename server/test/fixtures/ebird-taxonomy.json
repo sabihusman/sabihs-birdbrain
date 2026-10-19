@@ -1,0 +1,43 @@
+{
+  "_fixture": "First row recorded live on 2026-10-19 from GET https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&species=amerob (no key needed); second row doc-derived in the same shape.",
+  "rows": [
+    {
+      "sciName": "Turdus migratorius",
+      "comName": "American Robin",
+      "speciesCode": "amerob",
+      "category": "species",
+      "taxonOrder": 28633.0,
+      "bandingCodes": [
+        "AMRO"
+      ],
+      "comNameCodes": [
+        "ALRO"
+      ],
+      "sciNameCodes": [
+        "TUMI"
+      ],
+      "order": "Passeriformes",
+      "familyCode": "turdid1",
+      "familyComName": "Thrushes and Allies",
+      "familySciName": "Turdidae"
+    },
+    {
+      "sciName": "Turdus merula",
+      "comName": "Eurasian Blackbird",
+      "speciesCode": "eurbla",
+      "category": "species",
+      "taxonOrder": 28597.0,
+      "bandingCodes": [],
+      "comNameCodes": [
+        "EUBL"
+      ],
+      "sciNameCodes": [
+        "TUME"
+      ],
+      "order": "Passeriformes",
+      "familyCode": "turdid1",
+      "familyComName": "Thrushes and Allies",
+      "familySciName": "Turdidae"
+    }
+  ]
+}
