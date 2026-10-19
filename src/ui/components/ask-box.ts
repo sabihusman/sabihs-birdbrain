@@ -12,7 +12,7 @@ export function askBox(api: ApiClient, species: Species): { el: HTMLElement; dis
     root.replaceChildren(el('h2', null, 'Ask about this bird'));
     const user = api.user;
     if (!user) {
-      root.append(el('p', { class: 'small muted' }, 'Members can ask an AI questions about a species, answered only from its Wikipedia summary. ', el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.')));
+      root.append(el('p', { class: 'small muted' }, 'Members can ask an AI questions about a species, answered only from its Wikipedia article. ', el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.')));
       return;
     }
     if (user.status !== 'approved') {
@@ -26,7 +26,7 @@ export function askBox(api: ApiClient, species: Species): { el: HTMLElement; dis
     });
     const ask = el('button', { class: 'btn primary', type: 'submit' }, 'Ask');
     const answer = el('div', { class: 'stack', 'data-testid': 'ask-answer' });
-    const form = el('form', { class: 'stack' }, input, el('div', { class: 'row between' }, counter, ask), answer, el('p', { class: 'small muted' }, 'Answers are AI-generated from the Wikipedia summary only and can be wrong. Check the source link. Only the species name and your question are sent to the server.'));
+    const form = el('form', { class: 'stack' }, input, el('div', { class: 'row between' }, counter, ask), answer, el('p', { class: 'small muted' }, 'Answers are AI-generated from the Wikipedia article only (its description, voice, range, behaviour, diet and status sections) and can be wrong. Check the cited sections. Only the species name and your question are sent to the server.'));
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const q = input.value.trim();
@@ -37,7 +37,11 @@ export function askBox(api: ApiClient, species: Species): { el: HTMLElement; dis
         const res = await api.ask(species.scientific, q);
         const p = el('p', null);
         p.textContent = res.answer; // plain text only
-        answer.replaceChildren(p, el('p', { class: 'small' }, 'Source: ', el('a', { href: res.source.url, target: '_blank', rel: 'noopener noreferrer' }, res.source.title || 'Wikipedia')));
+        const cites = res.citations ?? [];
+        const citeLine = cites.length
+          ? el('p', { class: 'small', 'data-testid': 'ask-citations' }, 'Sections cited: ', ...cites.flatMap((c, i) => [i ? ' · ' : '', el('a', { href: c.url, target: '_blank', rel: 'noopener noreferrer' }, c.section)]))
+          : null;
+        answer.replaceChildren(p, ...(citeLine ? [citeLine] : []), el('p', { class: 'small' }, 'Source: ', el('a', { href: res.source.url, target: '_blank', rel: 'noopener noreferrer' }, res.source.title || 'Wikipedia'), res.context === 'summary' ? ' (summary only; the full article was unavailable)' : ''));
       } catch (err) {
         answer.replaceChildren(el('p', { class: 'notice error' }, describeApiError(err)));
       } finally {

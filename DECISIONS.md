@@ -517,3 +517,32 @@ Sabih's approval and a baseline check of the other sites after every reload.
   browser (the fallback covers a refused batch); the 25 km radius is a
   guess at "same area" for a bird list.
 
+## 35. AI context: relevant Wikipedia article sections, cached, cited
+
+- **Endpoint:** the MediaWiki Action API, TextExtracts module:
+  `api.php?action=query&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&titles=…&format=json&formatversion=2`.
+  Without `exchars`, `exsentences` or `exintro` it returns the whole page as
+  plain text with `== Heading ==` markers; `exlimit` only limits multi-page
+  requests. Verified against the Extension:TextExtracts documentation on
+  mediawiki.org on 2026-10-19 (en.wikipedia.org itself rate-limited this
+  environment, so the test fixture is hand-written in that format).
+- **Selection:** the lead plus sections whose heading starts with
+  description, identification, vocalisation/voice/song/call,
+  distribution/range/habitat, behaviour/ecology/breeding/nesting,
+  diet/feeding/food, status/conservation/threats/population, taxonomy.
+  References, external links, culture and similar are dropped. Sub-headings
+  stay inside their parent as "Name:" lines. Caps: 2,500 characters per
+  section, 12,000 in total.
+- **Cache:** SQLite table `wiki_article_cache`, keyed by scientific name,
+  seven days; the summary endpoint remains the fallback (`context:
+  "summary"` in the response) when the article is unavailable.
+- **Citations:** the prompt labels each section `[Section: Name]`; the
+  instruction asks for `[Name]` after each sentence; the server returns
+  `citations: [{section, url}]` with the section anchor links it built, and
+  the client shows "Sections cited: …". Unknown names are left as text.
+- **Defences kept:** fence neutralisation and control stripping on every
+  section and on the question, marker-based system-prompt leak rejection,
+  plain-text output, caps and rate limits (DECISIONS #8 findings A1–A13).
+- **Not verified:** a live TextExtracts response for a bird page (fixture
+  only); how well Gemini follows the citation format.
+
