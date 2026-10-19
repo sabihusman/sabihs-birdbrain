@@ -220,7 +220,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('share-species')).not.toBeChecked();
   await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
   await expect(page.getByTestId('invite-send')).toBeVisible();
-  await expect(page.getByTestId('what-we-store')).toContainText('The server keeps no backups of this data at the moment, so nothing lingers.');
+  await expect(page.getByTestId('what-we-store')).toContainText('Copies in the nightly server backup are removed within 14 days.');
   // Delete section: the button stays disabled until the password and the word are typed; a wrong word does nothing.
   await expect(page.getByTestId('delete-account')).toBeDisabled();
   await page.getByTestId('delete-password').fill('correct horse battery staple');
