@@ -603,7 +603,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Failure:** a mailer error is logged and never surfaces to the
   signing-up user; approval is still possible from the admin page.
 
-## 37. Theme system per docs/DESIGN_GUIDE.md (dark by default)
+## 39. Theme system per docs/DESIGN_GUIDE.md (dark by default)
 
 - **Decision:** two themes from the guide, "Forest Night" (dark, the default
   whatever the phone prefers) and "Field Guide, cream" (light), as CSS tokens
