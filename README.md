@@ -118,8 +118,10 @@ The name is always shown next to the colour.
 - **Map:** OpenStreetMap with markers in species colours, clustering, species
   and date filters, tap a marker to open the species page. Attribution shown;
   tiles are never cached or prefetched.
-- **Settings:** threshold, overlap, location source and manual coordinates,
-  seasonal filter, species-range threshold, auto-save, compute backend,
+- **Settings:** threshold (default 60 %; lower catches faint birds but adds
+  false IDs), overlap, location source and manual coordinates,
+  seasonal filter, species-range threshold, auto-save (its own confidence bar,
+  never below the threshold), compute backend,
   occlusion resolution, storage used vs available, `navigator.storage.persist()`
   result, CSV and GeoJSON export, delete all.
 - **PWA:** manifest, icons, apple-touch-icon, service worker precaching the app

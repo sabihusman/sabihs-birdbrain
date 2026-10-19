@@ -404,3 +404,21 @@ Sabih's approval and a baseline check of the other sites after every reload.
   IndexedDB and is a member feature; it reveals where someone walks, so it is
   never exported or sent anywhere (README › Privacy).
 
+## 31. Default confidence threshold 60 %, migrated once from 25 %
+
+- **Decision:** `DEFAULT_SETTINGS.threshold` is 0.6 (was 0.25) and the
+  auto-save bar defaults to 0.6 as well. Stored settings carry a `version`;
+  loading a store without one (or < 2) replaces a saved threshold that
+  equals the old default with the new default and stamps version 2. Any
+  other saved value is a user's choice and stays, and after the stamp a
+  threshold of 25 % stays too.
+- **Auto-save clamp:** `sanitize()` raises `autoSaveMinConfidence` to the
+  detection threshold whenever it would be lower, because a clip is only
+  saved for a detection; the Settings sliders re-read the store after each
+  change so the clamped value is what they show.
+- **Reason:** at 25 % BirdNET lists many weak candidates on a phone; 60 %
+  matches what the sample clip and field use produced as reliable. The
+  Listen screen's help line already says what lowering does.
+- **Not verified:** field behaviour at 60 % on a phone; the e2e tests still
+  detect the sample clip at the new default.
+
