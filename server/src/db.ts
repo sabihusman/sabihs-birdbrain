@@ -27,6 +27,35 @@ export function openDatabase(path: string): DatabaseSync {
       count INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (day, scope)
     );
+    -- Friends (DECISIONS.md #43): invites by account, accepted pairs, and the species-only shared lists.
+    CREATE TABLE IF NOT EXISTS friend_invite (
+      id TEXT PRIMARY KEY,
+      from_user_id TEXT NOT NULL,
+      to_user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS friend_invite_to ON friend_invite (to_user_id, status);
+    CREATE INDEX IF NOT EXISTS friend_invite_from ON friend_invite (from_user_id, status);
+    CREATE TABLE IF NOT EXISTS friendship (
+      user_a TEXT NOT NULL,
+      user_b TEXT NOT NULL,
+      since INTEGER NOT NULL,
+      PRIMARY KEY (user_a, user_b)
+    );
+    CREATE TABLE IF NOT EXISTS shared_species (
+      user_id TEXT NOT NULL,
+      scientific TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      PRIMARY KEY (user_id, scientific)
+    );
+    CREATE TABLE IF NOT EXISTS invite_usage (
+      day TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (day, user_id)
+    );
   `);
   return db;
 }

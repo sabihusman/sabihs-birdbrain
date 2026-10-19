@@ -16,6 +16,16 @@ export class Users {
     return row ? toAppUser(row) : null;
   }
 
+  /** Case-insensitive lookup; signup stores the lower-cased address, older rows may not. */
+  getByEmail(email: string): AppUser | null {
+    const row = this.db.prepare('SELECT id, email, name, emailVerified, status, role, createdAt FROM user WHERE lower(email) = lower(?)').get(email) as Record<string, unknown> | undefined;
+    return row ? toAppUser(row) : null;
+  }
+
+  setName(id: string, name: string): boolean {
+    return this.db.prepare('UPDATE user SET name = ?, updatedAt = ? WHERE id = ?').run(name, new Date().toISOString(), id).changes > 0;
+  }
+
   setStatus(id: string, status: UserStatus): boolean {
     const r = this.db.prepare('UPDATE user SET status = ?, updatedAt = ? WHERE id = ?').run(status, new Date().toISOString(), id);
     if (status !== 'approved') this.revokeSessions(id);

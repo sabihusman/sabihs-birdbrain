@@ -8,6 +8,7 @@ import { answerQuestion, type AnswerModel, type CapConfig } from './ask.js';
 import { publicUser, toAppUser, type AppUser, type Auth, type UserStatus } from './auth.js';
 import type { Config } from './config.js';
 import { createUsageStore } from './db.js';
+import { FriendsStore, INVITES_PER_DAY, INVITE_TTL_DAYS, MAX_SHARED_SPECIES, isCalendarDay } from './friends.js';
 import { clientIp, emailSchema, passwordSchema, readJson } from './http.js';
 import type { SpeciesLabels } from './labels.js';
 import { LoginChallenges } from './login-codes.js';
@@ -29,17 +30,35 @@ export interface AppDeps {
   article?: ArticleFetcher;
   model: AnswerModel | null;
   /** Override limits in tests. */
-  limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number; signupNotifyWindowMs?: number };
+  limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number; signupNotifyWindowMs?: number; invitesPerDay?: number };
   /** Clock for the sign-up notifier (tests). */
   now?: () => number;
 }
 
 export const BODY_LIMIT_BYTES = 16 * 1024;
+/** The shared species list is the one body that can be large: 2,000 entries of ~60 bytes. */
+export const SPECIES_BODY_LIMIT_BYTES = 256 * 1024;
+const SPECIES_UPLOAD_PATH = '/v1/me/species';
 
 const signupSchema = z.object({ email: emailSchema, password: passwordSchema, name: z.string().trim().max(80).optional() }).strict();
 const loginSchema = z.object({ email: emailSchema, password: passwordSchema }).strict();
 const verifySchema = z.object({ challenge: z.string().min(16).max(64), code: z.string().regex(/^\d{6}$/) }).strict();
 const idParam = z.string().min(1).max(64);
+/** Display name: trimmed, 1–40 characters, no control or format characters (bidi overrides, zero-width marks). */
+export const displayNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .refine((v) => !/[\p{Cc}\p{Cf}]/u.test(v), 'control characters are not allowed');
+const nameSchema = z.object({ name: displayNameSchema }).strict();
+const inviteSchema = z.object({ email: emailSchema }).strict();
+const sharedSpeciesSchema = z
+  .object({
+    species: z.array(z.object({ sci: z.string().min(1).max(80), lastSeen: z.string().length(10).refine(isCalendarDay, 'not a calendar day') }).strict()).max(MAX_SHARED_SPECIES),
+  })
+  .strict();
+const emptySchema = z.object({}).strict();
 
 const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 502 | 503, body: unknown) => c.json(body, status);
 
@@ -48,6 +67,8 @@ export function createApp(deps: AppDeps) {
   const users = new Users(db);
   const challenges = new LoginChallenges(db, config.BETTER_AUTH_SECRET, config.LOGIN_CODE_TTL_SECONDS);
   const usage = createUsageStore(db);
+  const friends = new FriendsStore(db);
+  const invitesPerDay = deps.limits?.invitesPerDay ?? INVITES_PER_DAY;
   const caps: CapConfig = { perUserDaily: config.ASK_DAILY_PER_USER, globalDaily: config.ASK_DAILY_GLOBAL };
   const windowMs = deps.limits?.windowMs ?? 10 * 60 * 1000;
   const authByIp = new RateLimiter(deps.limits?.ipPerWindow ?? 20, windowMs);
@@ -76,7 +97,10 @@ export function createApp(deps: AppDeps) {
       maxAge: 600,
     }),
   );
-  app.use('/v1/*', bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: (c) => c.json({ error: 'payload_too_large' }, 413) }));
+  const tooLarge = (c: Context) => c.json({ error: 'payload_too_large' }, 413);
+  const smallBody = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: tooLarge });
+  const speciesBody = bodyLimit({ maxSize: SPECIES_BODY_LIMIT_BYTES, onError: tooLarge });
+  app.use('/v1/*', (c, next) => (c.req.path === SPECIES_UPLOAD_PATH ? speciesBody(c, next) : smallBody(c, next)));
 
   app.onError((err, c) => {
     console.error(`[error] ${c.req.method} ${c.req.path}: ${err.name}: ${err.message}`);
@@ -192,6 +216,136 @@ export function createApp(deps: AppDeps) {
     const s = await sessionUser(c);
     if (!s) return json(c, 401, { error: 'unauthorized' });
     return json(c, 200, { user: publicUser(s.user) });
+  });
+
+  app.post('/v1/me/name', async (c) => {
+    const s = await sessionUser(c);
+    if (!s) return json(c, 401, { error: 'unauthorized' });
+    const body = await readJson(c, nameSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    users.setName(s.user.id, body.name);
+    return json(c, 200, { ok: true, user: publicUser({ ...s.user, name: body.name }) });
+  });
+
+  /**
+   * Delete the account and everything it owns, in one transaction (see
+   * FriendsStore.deleteUserCompletely). Any signed-in user may delete their own
+   * account; the admin account is the exception, since it is the only one that
+   * can approve people (sign up again with ADMIN_EMAIL would recreate it, but
+   * that is an operational decision, not a tap).
+   */
+  app.post('/v1/me/delete', async (c) => {
+    const s = await sessionUser(c);
+    if (!s) return json(c, 401, { error: 'unauthorized' });
+    const body = await readJson(c, emptySchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    if (s.user.role === 'admin') return json(c, 400, { error: 'admin_account' });
+    friends.deleteUserCompletely(s.user.id);
+    return json(c, 200, { ok: true });
+  });
+
+  // ---- friends (approved members only; DECISIONS.md #43) ---------------------
+
+  /** 401 for no session, 403 `not_approved` for pending/rejected/disabled, else the member. */
+  async function requireMember(c: Context): Promise<{ user: AppUser } | { error: Response }> {
+    const s = await sessionUser(c);
+    if (!s) return { error: json(c, 401, { error: 'unauthorized' }) };
+    if (s.user.status !== 'approved') return { error: json(c, 403, { error: 'not_approved' }) };
+    return { user: s.user };
+  }
+
+  const INVITE_SENT = { ok: true, message: 'Invite sent' };
+
+  /**
+   * Always answers "Invite sent" (and 429 only for the caller's own daily cap,
+   * which counts every attempt). A mail goes out only when an approved account
+   * with that address exists, is not the caller, is not already a friend and
+   * has no open invite with the caller; the body is identical either way.
+   */
+  app.post('/v1/friends/invite', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const body = await readJson(c, inviteSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    const now = Date.now();
+    if (friends.invitesToday(m.user.id, now) >= invitesPerDay) return json(c, 429, { error: 'rate_limited' });
+    friends.recordInviteAttempt(m.user.id, now);
+    friends.purgeExpired(now);
+    const target = users.getByEmail(body.email);
+    const sendable = target && target.id !== m.user.id && target.status === 'approved' && !friends.areFriends(m.user.id, target.id) && !friends.openInviteBetween(m.user.id, target.id, now);
+    if (sendable) {
+      friends.createInvite(m.user.id, target.id, now);
+      try {
+        await mailer.send({
+          to: target.email,
+          subject: 'A friend invite on Birdbrain',
+          text: `${m.user.name} invited you to be friends on Sabih’s Birdbrain.\n\nOpen the Account card on the Settings tab to accept or decline: ${config.allowedOrigins[0]}/#/settings\n\nFriends can share which birds they have spotted and the date they last spotted each one, and nothing else, and only if they turn sharing on. The invite expires in ${INVITE_TTL_DAYS} days. If you do not know this person, ignore this message.`,
+        });
+      } catch (err) {
+        // The invite is stored and shows up in the app; the mail is only a nudge.
+        console.error(`[error] invite mail failed: ${describeMailError(err)}`);
+      }
+    }
+    return json(c, 200, INVITE_SENT);
+  });
+
+  app.get('/v1/friends', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const now = Date.now();
+    friends.purgeExpired(now);
+    return json(c, 200, { friends: friends.friendsOf(m.user.id), invites: friends.incomingInvites(m.user.id, now) });
+  });
+
+  app.post('/v1/friends/invites/:id/:action', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const id = idParam.safeParse(c.req.param('id'));
+    const action = c.req.param('action');
+    if (!id.success || (action !== 'accept' && action !== 'decline')) return json(c, 400, { error: 'invalid_request' });
+    const ok = action === 'accept' ? friends.accept(id.data, m.user.id) : friends.decline(id.data, m.user.id);
+    if (!ok) return json(c, 404, { error: 'not_found' });
+    return json(c, 200, { ok: true });
+  });
+
+  /** Idempotent: 200 whether or not the pair was friends, so ids cannot be probed. */
+  app.post('/v1/friends/:id/remove', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const id = idParam.safeParse(c.req.param('id'));
+    if (!id.success) return json(c, 400, { error: 'invalid_request' });
+    friends.removeFriend(m.user.id, id.data);
+    return json(c, 200, { ok: true });
+  });
+
+  /** Each accepted friend's display name and (scientific name, last-seen day) pairs; nothing else. */
+  app.get('/v1/friends/species', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    return json(c, 200, { friends: friends.friendsSpecies(m.user.id) });
+  });
+
+  /** The full current list replaces the stored one; unknown scientific names are refused outright. */
+  app.post(SPECIES_UPLOAD_PATH, async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const body = await readJson(c, sharedSpeciesSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    if (body.species.some((s) => !labels.has(s.sci))) return json(c, 400, { error: 'unknown_species' });
+    const seen = new Set<string>();
+    for (const s of body.species) {
+      if (seen.has(s.sci)) return json(c, 400, { error: 'invalid_request' });
+      seen.add(s.sci);
+    }
+    friends.replaceSharedSpecies(m.user.id, body.species);
+    return json(c, 200, { ok: true, count: body.species.length });
+  });
+
+  app.post('/v1/me/species/clear', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    friends.clearSharedSpecies(m.user.id);
+    return json(c, 200, { ok: true });
   });
 
   // ---- admin ----------------------------------------------------------------
