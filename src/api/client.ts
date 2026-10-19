@@ -113,6 +113,9 @@ export class ApiError extends Error {
 
 export const SESSION_KEY = 'birdbrain.auth.v1';
 
+/** Why the admin account has no delete flow (the server answers `admin_account`). */
+export const ADMIN_DELETE_MESSAGE = 'The admin account can’t be deleted from the app, because it approves other members. Ask Sabih.';
+
 /** Human-readable text for API error codes. */
 export function describeApiError(e: unknown): string {
   if (!(e instanceof ApiError)) return e instanceof Error && e.name === 'TypeError' ? 'Could not reach the server. Check your connection.' : 'Something went wrong.';
@@ -149,7 +152,11 @@ export function describeApiError(e: unknown): string {
     case 'unknown_species':
       return 'The server did not recognise a species in your list. Update the app and try again.';
     case 'admin_account':
-      return 'The admin account cannot be deleted from the app.';
+      return ADMIN_DELETE_MESSAGE;
+    case 'wrong_password':
+      return 'That password is wrong. Your account was not deleted.';
+    case 'confirm_mismatch':
+      return 'Type DELETE in capitals to confirm. Your account was not deleted.';
     default:
       return `Request failed (${e.status}).`;
   }
@@ -267,13 +274,15 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return res.user;
   }
 
-  /** Delete the account and everything the server holds for it; the local session is dropped either way. */
-  async deleteAccount(): Promise<void> {
-    try {
-      await this.call('/v1/me/delete', {});
-    } finally {
-      this.setSession(null);
-    }
+  /**
+   * Delete the account and everything the server holds for it, immediately and
+   * permanently. The password is checked again on the server and `confirm`
+   * must be the word DELETE. On success the local session is dropped; on a
+   * refusal (wrong password, wrong word, admin account) it stays.
+   */
+  async deleteAccount(password: string, confirm: string): Promise<void> {
+    await this.call('/v1/me/delete', { password, confirm });
+    this.setSession(null);
   }
 
   /** Always resolves with "Invite sent" (the server never says whether the address has an account). */
