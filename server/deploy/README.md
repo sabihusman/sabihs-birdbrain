@@ -15,6 +15,7 @@ reverse action listed next to it.
 | `nginx/birdbrain.http-only`, `nginx/birdbrain` | Stage-1 (ACME + redirect) and final (proxy to `127.0.0.1:8010`, `limit_req` 6 r/min burst 5 → 429, `limit_conn` 3, 16 KB bodies, HSTS/nosniff/no-referrer, no CORS) site files. `__LEGO_PATH__` is substituted from `setup.conf`. |
 | `systemd/lego-renew-birdbrain.service`, `.timer` | Sentinel's pattern: `EnvironmentFile=/etc/lego/lego-birdbrain.env`, `ExecStart=/usr/local/bin/lego run`, `ExecStartPost=/bin/systemctl reload nginx`, `After=network-online.target nginx.service`; timer `OnCalendar=*-*-* 03:00:00`. Only the domain and the env file differ from Sentinel's units; step 5 prints that diff before installing. |
 | `birdbrain-deploy.sh`, `sudoers-birdbrain-deploy`, `authorized_keys.example` | The forced-command deploy user (section 1). |
+| `fill-env.sh` | Interactive prompts (as root) for `ADMIN_EMAIL`, `SMTP_USER`, `SMTP_APP_PASSWORD`, `GEMINI_API_KEY` into `/opt/birdbrain/.env`; secrets are typed invisibly and confirmed twice, Gmail app-password spaces are removed, nothing is echoed. Easier than editing the file by hand over SSH. |
 
 Suggested order: `verify.sh baseline` → `setup.sh --dry-run` → `setup.sh` → add
 `.env` values → `setup.sh --only 8` → `verify.sh check`.

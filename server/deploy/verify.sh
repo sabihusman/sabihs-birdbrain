@@ -33,7 +33,8 @@ case "$MODE" in
     curl -sSI --max-time 10 https://bird-brain.duckdns.org/health 2>/dev/null | grep -iE '^(strict-transport-security|x-content-type-options|referrer-policy):' | sed 's/^/   /'
 
     echo "== port 8010 must NOT be reachable publicly"
-    p="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://$SERVER_IP:8010/health" 2>/dev/null || echo 000)"
+    # curl prints 000 itself when the connection fails; a second fallback would make "000000".
+    p="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://$SERVER_IP:8010/health" 2>/dev/null || true)"; p="${p:-000}"
     if [ "$p" = 000 ]; then echo "   public :8010 -> no response (good)"; else echo "   public :8010 -> $p (BAD: exposed)"; rc=1; fi
     if command -v ss >/dev/null; then
       l="$(ss -tln 2>/dev/null | awk '$4 ~ /:8010$/ {print $4}' | tr '\n' ' ')"; echo "   listeners on 8010: ${l:-none}"
