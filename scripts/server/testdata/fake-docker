@@ -6,7 +6,8 @@ echo "$*" >> "${FAKE_LOG:?}"
 case "$1" in
   info) exit 0 ;;
   volume)  # volume inspect -f '{{.Mountpoint}}' NAME  (the name is the last argument; $4 is the format)
-    case "${*: -1}" in
+    name="${!#}"
+    case "$name" in
       birdbrain-backups) echo "${FAKE_HOME:?}/volumes/backups" ;;
       birdbrain-data) echo "${FAKE_HOME:?}/volumes/data" ;;
       *) echo "no such volume" >&2; exit 1 ;;
