@@ -2,9 +2,10 @@
 
 Sabih’s Birdbrain is a mobile-first PWA that identifies bird sounds on-device
 with BirdNET V2.4 running in TensorFlow.js inside a Web Worker. Audio never
-leaves the phone. Front end on Vercel (base path `/`), with GitHub Pages
-(`https://sabihusman.github.io/sabihs-birdbrain/`, base `/sabihs-birdbrain/`)
-kept until Vercel is verified. Optional back end (`server/`) at
+leaves the phone. Front end on Vercel at `https://sabihs-birdbrain.vercel.app`
+(base path `/`; verified live with the strict CSP on 2026-10-19). GitHub Pages
+(`https://sabihusman.github.io/sabihs-birdbrain/`, base `/sabihs-birdbrain/`) is
+still published as a fallback until Sabih turns it off. Optional back end (`server/`) at
 `https://bird-brain.duckdns.org`: accounts with an emailed login code, admin
 approval, and member-only "Ask about this bird" answered by Gemini from the
 Wikipedia summary.
@@ -61,6 +62,16 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   Nginx site files, lego renew units, forced-command deploy user files; see
   `server/deploy/README.md`). Env variable names: `server/.env.example`.
   Default Gemini model: `gemini-3.8-flash` (`GEMINI_MODEL`).
+- Server state (installed 2026-10-19 with `setup.sh` steps 1-8 on 95.216.159.93,
+  which also hosts other projects that must never be touched; see
+  `server/deploy/README.md`): `/opt/birdbrain/.env` sets `BIRDBRAIN_IMAGE_TAG=latest`,
+  so every push to `main` that touches `server/` rebuilds the image and the CI
+  deploy job redeploys it through the forced command; pin a `sha-<commit>` tag
+  there to roll back. The Nginx vhost has **no** `http2` listen flag (nginx 1.24
+  sets HTTP/2 per socket and the mba-vault catch-all already enables it; the
+  flag only made `nginx -t` warn). `~birdbrain-deploy/.ssh` and its
+  `authorized_keys` are root-owned. `server/deploy/verify.sh check` is the
+  acceptance test: other sites unchanged, `/health` 200, 8010 loopback-only.
 
 Folder map:
 
