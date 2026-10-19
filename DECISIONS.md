@@ -556,7 +556,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
   browser (the fallback covers a refused batch); the 25 km radius is a
   guess at "same area" for a bird list.
 
-## 35. AI context: relevant Wikipedia article sections, cached, cited
+## 37. AI context: relevant Wikipedia article sections, cached, cited
 
 - **Endpoint:** the MediaWiki Action API, TextExtracts module:
   `api.php?action=query&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&titles=…&format=json&formatversion=2`.
