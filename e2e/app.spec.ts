@@ -168,7 +168,8 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await card.getByTestId('clip-why-run').click();
   await expect(card.getByTestId('clip-why-result')).toContainText(/Lesser Redpoll: baseline \d+% on this window/, { timeout: 240_000 });
 
-  await card.click();
+  // Tap the card's own text (the spectrogram at the card's centre seeks instead; the header row sits under the sticky app header after the tick's scroll).
+  await card.getByText('none with a position yet').click();
   await page.waitForURL(/#\/species\/Acanthis%20cabaret\/history/);
   await expect(page.getByTestId('history-summary')).toContainText(/1 sighting \(1 analysed window\), 0 with a position/);
   await expect(page.getByTestId('history-list')).toContainText('No position recorded');
