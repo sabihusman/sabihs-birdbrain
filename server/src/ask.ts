@@ -1,5 +1,6 @@
 import { FinishReason, GoogleGenAI, HarmBlockThreshold, HarmCategory, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { z } from 'zod';
+import { filterAnswer } from './hardening/filters.js';
 import type { AnswerCache } from './answer-cache.js';
 import { CACHE_HIT_LOG_LINE, describeCost, type AskCostStore } from './ask-cost.js';
 import { CONTEXT_TOKEN_BUDGET, estimateTokens, selectRelevantSections } from './context-select.js';
@@ -447,9 +448,15 @@ export async function answerQuestion(deps: AskDeps, user: { id: string; status?:
   } catch {
     return { status: 502, body: { error: 'model_unavailable' } };
   }
-  const answer = toPlainText(text);
+  const plain = toPlainText(text);
+  if (!plain) return { status: 502, body: { error: 'empty_answer' } };
+  // Output filter (hardening/filters.ts, #54): rejects a system-prompt echo, redacts env-like strings and coordinates,
+  // and names what the raw reply carried (markup, runaway) in the log line, never the text itself.
+  const filtered = filterAnswer(text, plain);
+  if (filtered.flags.length) deps.log?.(`[ask] output_filter=${filtered.flags.join(',')}${filtered.rejected ? ' rejected' : ''}`);
+  if (filtered.rejected) return { status: 502, body: { error: 'answer_rejected' } };
+  const answer = filtered.text;
   if (!answer) return { status: 502, body: { error: 'empty_answer' } };
-  if (leaksSystemPrompt(answer)) return { status: 502, body: { error: 'answer_rejected' } };
   const body: AnswerBody = { answer, source: { title, url }, citations: extractCitations(answer, sections), context, sources, region };
   deps.answers?.put(species, question, scope, body, now);
   return { status: 200, body };

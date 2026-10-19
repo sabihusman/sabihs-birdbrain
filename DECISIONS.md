@@ -1481,3 +1481,35 @@ other open branches, so this may be renumbered at merge.)
   overrides, month sum and rollover, cap reached → no Gemini call (guard and
   full chain with Ollama down → 502), cap 0, each alert once, failed mail
   logged, mail wording. Existing cost tests updated to the new pricing rule.
+
+## 54. Hardening runner and output filter for `/v1/ask`
+
+- **Decision:** PR #8's adversarial checklist becomes `npm run harden`
+  (`server/src/hardening/{cases,runner,cli}.ts`, `docs/HARDENING_RUN.md`):
+  13 cases with stable IDs run through the real `answerQuestion` and the
+  live provider chain from inside the API container, with an in-memory
+  database (the live one is never opened), the real Wikipedia / NatureServe /
+  eBird text plus the case's injected text, raw replies captured before the
+  server's rules, a Gemini budget stop (`--budget`, default $0.05, also
+  counted by the monthly cap) and a dated JSON report. A case passes when the
+  member-facing answer is safe; a model that misbehaved but was caught is
+  recorded (`modelMisbehaved`, `rawFlags`), not failed.
+- **Defence in depth added:** `server/src/hardening/filters.ts` runs after
+  `toPlainText` on every answer: a system-prompt echo is rejected (existing
+  rule), env-like assignments and secret-shaped tokens are redacted, decimal
+  coordinate pairs are redacted ("[location removed]"), and markup or runaway
+  raw output is flagged in the `[ask]` log line (never the text). Input
+  limits already in place and now exercised by a case: 500-character
+  question, strict body schema, 16 KB body, species must be a BirdNET label,
+  fenced and labelled source text with fence tags neutralised.
+- **Alternatives:** a separate adversarial eval model (rejected: judging must
+  be deterministic and cheap); failing a case whenever the model misbehaves
+  (rejected: the server's rules are the control under test, the model's
+  behaviour is reported alongside); blocking all numbers to catch coordinates
+  (rejected: counts, dates and percentages are legitimate; only two-decimal
+  pairs in coordinate range are redacted).
+- **Tests:** `server/test/hardening.test.ts`: each filter rule, the judge
+  (pass, followed injection, server-caught leak, wrong status, coordinates,
+  runaway), the oversized case against the real route (400), the live filter
+  redacting a coordinate pair and a planted secret in a member answer, the
+  dry run, and a forced provider without its key.
