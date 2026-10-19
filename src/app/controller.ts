@@ -1,4 +1,4 @@
-import { AudioEngine, describeMicError, type EngineState } from '../audio/engine';
+import { AudioEngine, describeMicError, type EngineState, type StartError } from '../audio/engine';
 import { Recorder } from '../audio/recorder';
 import { ConditionsMeter, type ConditionsAssessment } from '../audio/conditions';
 import { renderLowCut } from '../audio/highpass';
@@ -116,6 +116,7 @@ export class AppController extends Emitter<ControllerEvents> {
   private geoCount = 0;
   private modelReady = false;
   private localCache = new LocalSpeciesCache();
+  private micError: StartError | null = null;
   private localComputing: Promise<void> | null = null;
   private conditions = new ConditionsMeter(SAMPLE_RATE, (a) => this.emit('conditions', a));
   /** Raw (unfiltered) live audio for species clips; member feature, see setClipsEnabled. */
@@ -272,10 +273,12 @@ export class AppController extends Emitter<ControllerEvents> {
   async startListening(): Promise<void> {
     if (this.engine.getState() !== 'stopped') return;
     if (this.settings.get().locationMode === 'auto' && !this.location.get().location) void this.location.refresh();
+    this.micError = null;
     try {
       await this.engine.start();
     } catch (err) {
       const e = describeMicError(err);
+      this.micError = e;
       this.emit('notice', { kind: 'error', text: e.message });
       throw err;
     }
@@ -310,6 +313,18 @@ export class AppController extends Emitter<ControllerEvents> {
 
   get listening(): boolean {
     return this.engine.getState() !== 'stopped';
+  }
+
+  /** Why the last start failed (denied, no mic, …), or null. */
+  getMicError(): StartError | null {
+    return this.micError;
+  }
+
+  /** The audio context was suspended (app in the background); resume it from a tap. */
+  async resumeListening(): Promise<void> {
+    if (!this.listening) return;
+    await this.engine.resume();
+    if (!this.wakeLock) await this.requestWakeLock();
   }
 
   private onChunk(chunk: Float32Array): void {

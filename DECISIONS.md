@@ -596,3 +596,43 @@ Sabih's approval and a baseline check of the other sites after every reload.
   microphone. The headless "mic blocked" shot shows "No microphone was found"
   (no device in the container) rather than a denied permission.
 
+## 38. Listen layouts and states per docs/DESIGN_GUIDE.md §5–7
+
+- **Decision:** the Listen view is one set of pieces (status row with icon
+  and words, 140 px mic button, listening panel with timer, "screen stays
+  on", level meter, conditions line and full-width Stop, result cards,
+  collapsed "How it works" and "Recent sightings" folds, context chips)
+  arranged by `listenLayout` (Settings → Listen layout, remembered on the
+  device): **Consolidated** (default; panel on top, cards below, newest
+  first), **Bottom dock** (cards fill the screen; a dock above the tabs shows
+  "● Listening · 02:14" + Stop, or "Start listening" when ready) and **Focus
+  mode** (one large card for the latest bird with the conditions, large
+  Stop, "▲ N more birds · swipe up" that also opens by tap and closes with
+  Escape).
+- **States** (`src/ui/status.ts`): loading (progress + the 78 MB note),
+  ready, listening, paused (resume button; the controller exposes
+  `resumeListening()`), mic blocked (iPhone steps, Try again, import link),
+  error, offline. The header pill shows the same text with a tone dot; both
+  always carry words. The controller keeps the last start error so the view
+  can tell "denied" from "no microphone" or "busy".
+- **Result cards:** Wikipedia thumbnail from the cached summary (one lookup
+  per species per session, sage tile with a bird outline until it arrives
+  or when there is none), colour dot + common name, scientific name,
+  confidence, "just now / 0:40 ago"; members get the saved-clip button; the
+  whole card links to the species page. One card per species, refreshed by
+  the newest detection. Candidates between 10 % and the minimum are counted
+  behind "N more sounds below your minimum · show".
+- **Moved:** the confidence slider left the Listen screen for Settings (the
+  chip "Min. 60 %" links there); the waveform, spectrogram, pipeline and
+  timeline live inside "How it works", which stays open for the session once
+  opened; stats (windows, inference time) are no longer shown on Listen.
+- **Accessibility:** 44 px targets, buttons everywhere (keyboard), `aria-live`
+  status, reduced motion stops the live dot, nothing plays until tapped.
+- **Tests:** Playwright now launches Chromium with a fake microphone, so each
+  layout is exercised through Ready → sample clip cards → Listening → Stop,
+  plus the blocked-microphone state; unit tests cover the state mapping and
+  relative times. Screenshots of all three layouts in both themes (Ready,
+  results, Listening, Mic blocked) are in `docs/screenshots/`.
+- **Not verified:** on a phone (swipe, safe areas with the dock, real
+  microphone states); the "paused" state needs a real backgrounding.
+

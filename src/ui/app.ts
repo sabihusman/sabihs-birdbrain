@@ -11,6 +11,7 @@ import { helpView } from './views/help';
 import { adminView } from './views/admin';
 import type { ApiClient } from '../api/client';
 import { applyTheme, currentTheme, otherTheme, storeTheme } from '../theme/theme';
+import { listenStatus } from './status';
 
 export interface View {
   el: HTMLElement;
@@ -92,10 +93,19 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     setTimeout(() => node.remove(), n.kind === 'error' ? 12000 : 6000);
   };
   controller.on('notice', notify);
-  controller.on('model', (s) => {
-    modelPill.textContent = s.state === 'ready' ? `Model ready · ${s.backend}` : s.state === 'error' ? 'Model error' : s.state === 'loading' ? `${Math.round(s.progress * 100)}% ${s.phase === 'warmup' ? 'warming up' : 'loading'}` : 'Model idle';
-    modelPill.className = `model-pill ${s.state}`;
-  });
+  // Status pill (DESIGN_GUIDE.md §5): text always present, dot colour by tone.
+  const renderPill = () => {
+    const st = listenStatus(controller);
+    const model = controller.inference.getStatus();
+    modelPill.textContent = st.status === 'ready' && model.backend ? `${st.pill} · ${model.backend}` : st.pill;
+    modelPill.className = `model-pill ${st.status} tone-${st.tone}`;
+  };
+  controller.on('model', renderPill);
+  controller.on('engine', renderPill);
+  controller.on('notice', renderPill);
+  window.addEventListener('online', renderPill);
+  window.addEventListener('offline', renderPill);
+  renderPill();
 
   const ctx: ViewContext = { controller, api, notify };
   let current: View | null = null;

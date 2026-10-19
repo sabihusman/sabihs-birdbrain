@@ -45,11 +45,18 @@ for (const theme of ['dark', 'light'] as const) {
     await page.getByTestId('model-status').filter({ hasText: 'Model ready' }).waitFor({ timeout: 240_000 });
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(out, `listen-ready-${suffix}.png`) });
-    await page.getByTestId('start-stop').click();
-    await page.getByTestId('listen-status').filter({ hasText: /Listening/ }).waitFor({ timeout: 30_000 });
+    // Result cards from the sample clip (Ready state), then the Listening state with the fake microphone.
+    await page.getByTestId('demo').click();
+    await page.getByTestId('listen-status').filter({ hasText: /Sample analysed/ }).waitFor({ timeout: 120_000 });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: path.join(out, `listen-results-${suffix}.png`) });
+    const start = LAYOUT === 'dock' ? page.getByTestId('dock-start') : page.getByTestId('start-stop');
+    await start.click();
+    await page.getByTestId('model-status').filter({ hasText: /Listening/ }).waitFor({ timeout: 30_000 });
     await page.waitForTimeout(4000);
     await page.screenshot({ path: path.join(out, `listen-listening-${suffix}.png`) });
-    await page.getByTestId('start-stop').click();
+    const stop = LAYOUT === 'dock' ? page.getByTestId('dock-stop') : page.getByTestId('stop');
+    await stop.click();
     await page.goto(`${BASE}#/species/Acanthis%20cabaret`);
     await page.waitForTimeout(2500);
     await page.screenshot({ path: path.join(out, `species-${theme}.png`) });

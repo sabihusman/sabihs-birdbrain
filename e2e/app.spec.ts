@@ -63,9 +63,10 @@ test('tabs, settings and map render', async ({ page }) => {
   await expect(page.getByText('Location & season filter')).toBeVisible();
   await expect(page.getByTestId('voice-processing')).toContainText('Voice processing: unknown');
   await expect(page.getByLabel('Low-cut filter (150 Hz)')).toBeChecked();
-  await page.goto('./#/listen');
-  await expect(page.getByTestId('conditions')).toContainText('Conditions:');
   await expect(page.getByTestId('threshold-help')).toContainText('Lower catches faint or distant birds but adds false IDs.');
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('how-it-works')).not.toHaveAttribute('open', /.*/);
+  await expect(page.getByTestId('context-chips')).toContainText('Min. 60%');
   await page.goto('./#/map');
   await expect(page.getByTestId('map')).toBeVisible();
   await expect(page.locator('.leaflet-control-attribution')).toContainText('OpenStreetMap');
@@ -197,5 +198,77 @@ test('no horizontal scrolling and the primary control visible at 320, 375, 390 a
     expect(b!.x + b!.width, `start button inside ${width}px`).toBeLessThanOrEqual(width);
     await context.close();
   }
+});
+
+for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+  test(`Listen layout ${layout}: ready, listening with the fake microphone, result cards, stop`, async ({ page }) => {
+    await page.addInitScript((l) => {
+      const raw = localStorage.getItem('birdbrain.settings.v1');
+      const s = raw ? JSON.parse(raw) : {};
+      s.listenLayout = l;
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify(s));
+    }, layout);
+    await page.goto('./#/listen');
+    await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+    await expect(page.locator('.listen')).toHaveAttribute('data-layout', layout);
+    // One main action in the Ready state; nothing else is a filled button.
+    const start = layout === 'dock' ? page.getByTestId('dock-start') : page.getByTestId('start-stop');
+    await expect(start).toBeVisible();
+    if (layout !== 'dock') {
+      const box = await page.getByTestId('start-stop').boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(120);
+    }
+    await expect(page.getByTestId('how-it-works')).not.toHaveAttribute('open', /.*/);
+    // Result cards from the sample clip: thumbnail tile, dot + name, scientific name, confidence.
+    await page.getByTestId('demo').click();
+    await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
+    const card = page.getByTestId('result-card').first();
+    if (layout === 'focus') {
+      await expect(page.getByTestId('results-empty')).toBeHidden();
+    } else {
+      await expect(card).toContainText('Lesser Redpoll');
+      await expect(card).toContainText('Acanthis cabaret');
+      await expect(card).toContainText(/\d+%/);
+      await expect(card.locator('.result-thumb').first()).toBeAttached();
+    }
+    // Listening with the fake microphone: panel/dock/focus card, status text, conditions line, timer.
+    await start.click();
+    await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
+    if (layout === 'dock') {
+      await expect(page.getByTestId('dock')).toContainText('Listening');
+      await expect(page.getByTestId('dock-stop')).toBeVisible();
+    } else {
+      await expect(page.getByTestId('listen-panel')).toBeVisible();
+      await expect(page.getByTestId('conditions')).toContainText('Conditions:', { timeout: 15_000 });
+      await expect(page.getByTestId('stop')).toBeVisible();
+    }
+    if (layout === 'focus') {
+      await expect(page.getByTestId('focus-latest')).toBeVisible();
+      await expect(page.getByTestId('more-birds')).toBeVisible();
+    }
+    await page.waitForTimeout(1500);
+    const stop = layout === 'dock' ? page.getByTestId('dock-stop') : page.getByTestId('stop');
+    await stop.click();
+    await expect(page.getByTestId('model-status')).toContainText('Model ready');
+    await expect(page.getByTestId('listen-status')).toContainText('Stopped.');
+  });
+}
+
+test('mic blocked state explains the iPhone steps and offers Try again and import', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], permissions: [] });
+  const page = await context.newPage();
+  // The fake-media flags auto-grant the microphone; make getUserMedia refuse like a denied permission instead.
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = () => Promise.reject(Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' }));
+  });
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.getByTestId('start-stop').click();
+  await expect(page.locator('.listen')).toHaveAttribute('data-status', 'mic-blocked', { timeout: 30_000 });
+  await expect(page.getByTestId('try-again')).toBeVisible();
+  await expect(page.getByTestId('model-status')).toContainText('Mic blocked');
+  await expect(page.getByTestId('mic-steps')).toContainText('Settings → Safari → Microphone');
+  await expect(page.getByTestId('mic-steps')).toContainText('import a recording');
+  await context.close();
 });
 
