@@ -21,6 +21,8 @@ const envSchema = z.object({
   OLLAMA_API_KEY: z.string().optional(),
   OLLAMA_MODEL: z.string().default('gemma4:31b'),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(8000),
+  /** eBird API 2.0 key (optional): without it /v1/ask answers without eBird sightings. Never logged. */
+  EBIRD_API_KEY: z.string().trim().min(1).optional(),
   ASK_DAILY_PER_USER: z.coerce.number().int().min(0).default(20),
   ASK_DAILY_GLOBAL: z.coerce.number().int().min(0).default(200),
   ASK_MAX_QUESTION_CHARS: z.coerce.number().int().min(1).max(500).default(500),

@@ -159,7 +159,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const color = speciesColor(sp.scientific);
     const about = aboutBird(sp);
     disposers.push(about.dispose);
-    const ask = askBox(ctx.api, sp);
+    const ask = askBox(ctx.api, sp, () => controller.location.get().location);
     disposers.push(ask.dispose);
     const idCard = speciesIdCard(ctx, sp);
     disposers.push(idCard.dispose);

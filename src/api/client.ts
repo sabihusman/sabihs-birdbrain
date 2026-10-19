@@ -18,13 +18,18 @@ export interface AdminUser extends AuthUser {
 
 export interface AskAnswer {
   answer: string;
+  /** The Wikipedia page (kept for older servers; `sources` lists everything used). */
   source: { title: string; url: string };
-  /** Wikipedia sections the answer cites ("[Diet]"), with section links. Absent from older servers. */
-  citations?: Array<{ section: string; url: string }>;
+  /** Sections the answer cites ("[Wikipedia – Diet]"), with links. Absent from older servers. */
+  citations?: Array<{ section: string; url: string; source?: string }>;
   /** Whether the full article sections or only the summary were available. */
   context?: 'article' | 'summary';
   /** True when the server reused an earlier answer to the same question (no model call). */
   cached?: boolean;
+  /** Every source the answer drew on: Wikipedia, NatureServe Explorer, eBird (when available). */
+  sources?: Array<{ name: string; url: string }>;
+  /** The region code the server used. */
+  region?: string;
 }
 
 /** One UTC day of /v1/ask spend as the admin endpoint reports it (counts only, no questions). */
@@ -56,6 +61,12 @@ export interface AskCostSummary {
   providerOrder?: Array<'ollama' | 'gemini'>;
   models?: { ollama: string; gemini: string };
   providers?: AskProviderTotals[];
+}
+
+/** What goes to the server with a question (shaped on the device by src/geo/region.ts). */
+export interface AskOptions {
+  region?: string;
+  near?: { lat: number; lon: number };
 }
 
 /** A friend as the server lists it: id, display name, since when. */
@@ -242,8 +253,11 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     }
   }
 
-  ask(species: string, question: string): Promise<AskAnswer> {
-    return this.call('/v1/ask', { species, question });
+  ask(species: string, question: string, opts: AskOptions = {}): Promise<AskAnswer> {
+    const body: Record<string, unknown> = { species, question };
+    if (opts.region) body.region = opts.region;
+    if (opts.near) body.near = { lat: opts.near.lat, lon: opts.near.lon };
+    return this.call('/v1/ask', body);
   }
 
   /** Set the display name friends see; the cached session is updated so the Account card shows it at once. */

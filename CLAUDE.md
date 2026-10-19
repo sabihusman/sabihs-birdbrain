@@ -69,13 +69,16 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 
 - `src/app.ts` routes; `src/auth.ts` Better Auth options (bearer plugin,
   `status`/`role` user fields, admin via `ADMIN_EMAIL`); `src/login-codes.ts`
-  the email second factor; `src/ask.ts` the Gemini pipeline and caps, with
-  `src/context-select.ts` (sections relevant to the question, ~1,500 tokens),
-  `src/answer-cache.ts` (same species + question → 7-day reuse),
-  `src/pricing.ts` (list prices and thinking level per model, verified
-  dates in the comment) and `src/ask-cost.ts` (per-day token/cost totals,
-  `GET /v1/admin/ask-costs`); `src/users.ts` admin SQL; `src/backup.ts`
-  `VACUUM INTO` backups. See DECISIONS.md #48.
+  the email second factor; `src/ask.ts` the Gemini pipeline and caps;
+  `src/wiki-article.ts`, `src/natureserve.ts`, `src/ebird.ts` the three
+  fetched, cached sources (`EBIRD_API_KEY` optional; DECISIONS #47);
+  `src/context-select.ts` (Wikipedia sections relevant to the question, the
+  whole fenced source ~1,500 tokens), `src/answer-cache.ts` (same species +
+  region + position + question → 7-day reuse), `src/pricing.ts` (list prices
+  and thinking level per model, verified dates in the comment) and
+  `src/ask-cost.ts` (per-day token/cost totals, `GET /v1/admin/ask-costs`;
+  DECISIONS #48); `src/users.ts` admin SQL; `src/backup.ts` `VACUUM INTO`
+  backups.
 - Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or
   Better Auth logs a schema mismatch.
 - Tests: `cd server && npm test` (Vitest, in-memory SQLite, `FakeMailer`).

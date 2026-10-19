@@ -125,7 +125,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         return;
       }
       const about = aboutBird(sp);
-      const ask = askBox(ctx.api, sp);
+      const ask = askBox(ctx.api, sp, () => controller.location.get().location);
       topDisposers.push(about.dispose, ask.dispose);
       aboutSlot.replaceChildren(about.el);
       askSlot.replaceChildren(ask.el);

@@ -1,0 +1,46 @@
+{
+  "_fixture": "Doc-derived: 'Example 1' response of 'Recent observations of a species in a region' in the eBird API 2.0 Postman documentation (documenter.getpostman.com/view/664302/S1ENwy59), read 2026-10-19; no key was available to record live. Dates moved into the test window.",
+  "rows": [
+    {
+      "speciesCode": "amerob",
+      "comName": "American Robin",
+      "sciName": "Turdus migratorius",
+      "locId": "L1150539",
+      "locName": "Hanshaw Rd. fields",
+      "obsDt": "2026-10-17 20:05",
+      "howMany": 30,
+      "lat": 42.4663513,
+      "lng": -76.4531064,
+      "obsValid": true,
+      "obsReviewed": false,
+      "locationPrivate": false
+    },
+    {
+      "speciesCode": "amerob",
+      "comName": "American Robin",
+      "sciName": "Turdus migratorius",
+      "locId": "L6208778",
+      "locName": "169 Locust Ln, Richfield US-NY (42.8366,-75.0028)",
+      "obsDt": "2026-10-16 19:45",
+      "howMany": 13,
+      "lat": 42.83663,
+      "lng": -75.002794,
+      "obsValid": true,
+      "obsReviewed": false,
+      "locationPrivate": true
+    },
+    {
+      "speciesCode": "amerob",
+      "comName": "American Robin",
+      "sciName": "Turdus migratorius",
+      "locId": "L123",
+      "locName": "Hickory Grove Park (41.95, -92.98)",
+      "obsDt": "2026-10-12 08:10",
+      "lat": 41.95,
+      "lng": -92.98,
+      "obsValid": true,
+      "obsReviewed": true,
+      "locationPrivate": false
+    }
+  ]
+}
