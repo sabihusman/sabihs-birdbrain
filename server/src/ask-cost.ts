@@ -4,7 +4,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { utcDay } from './db.js';
-import { costMicros, formatUsd, type TokenUsage } from './pricing.js';
+import { cappedCostMicros, formatUsd, type PriceOverrides, type TokenUsage } from './pricing.js';
 
 export interface AskCostDay {
   day: string;
@@ -23,18 +23,53 @@ export interface AskCostDay {
   cacheHits: number;
 }
 
+/** Which cap alerts have gone out this month: 50 and/or 100 (percent of the cap). */
+export type CapAlertLevel = 50 | 100;
+
+export interface MonthStatus {
+  /** "YYYY-MM" in UTC. */
+  month: string;
+  spentMicros: number;
+  capMicros: number;
+  /** Whole percent of the cap spent (can exceed 100). */
+  percent: number;
+  alertsSent: CapAlertLevel[];
+}
+
 export interface AskCostStore {
-  /** One billed model call. Returns the estimated cost (null when the model has no price). */
-  record(model: string, usage: TokenUsage, now?: Date): number | null;
+  /**
+   * One billed model call. Returns the estimated cost in micro-dollars. Since
+   * the monthly cap (#53) every Gemini call is priced, unknown models at the
+   * most expensive known price, so `unpricedRequests` stays 0 from then on.
+   */
+  record(model: string, usage: TokenUsage, now?: Date): number;
   recordCacheHit(now?: Date): void;
   /** The last `days` UTC days that have a row, newest first. */
   summary(days?: number, now?: Date): AskCostDay[];
+  /** Estimated spend in micro-dollars over the UTC calendar month of `now`. */
+  monthSpendMicros(now?: Date): number;
+  /** Spend, cap and alerts for the month of `now`. */
+  monthStatus(capMicros: number, now?: Date): MonthStatus;
+  /** Records that the alert for `level` went out this month; false when it already had. */
+  markAlert(level: CapAlertLevel, now?: Date): boolean;
+}
+
+/** "YYYY-MM" of a date in UTC. */
+export function utcMonth(now = new Date()): string {
+  return now.toISOString().slice(0, 7);
 }
 
 export const COST_SUMMARY_DAYS = 30;
 
-export function createAskCostStore(db: DatabaseSync): AskCostStore {
+export function createAskCostStore(db: DatabaseSync, opts: { priceOverrides?: PriceOverrides } = {}): AskCostStore {
+  const overrides = opts.priceOverrides ?? {};
   db.exec(`
+    CREATE TABLE IF NOT EXISTS ask_cost_alert (
+      month TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      sent_at TEXT NOT NULL,
+      PRIMARY KEY (month, level)
+    );
     CREATE TABLE IF NOT EXISTS ask_cost (
       day TEXT PRIMARY KEY,
       requests INTEGER NOT NULL DEFAULT 0,
@@ -61,11 +96,31 @@ export function createAskCostStore(db: DatabaseSync): AskCostStore {
   `);
   const hit = db.prepare('INSERT INTO ask_cost (day, cache_hits) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET cache_hits = cache_hits + 1');
   const list = db.prepare('SELECT * FROM ask_cost WHERE day >= ? ORDER BY day DESC');
+  const monthSum = db.prepare('SELECT COALESCE(SUM(cost_micros), 0) AS micros FROM ask_cost WHERE day >= ? AND day < ?');
+  const alertsFor = db.prepare('SELECT level FROM ask_cost_alert WHERE month = ? ORDER BY level');
+  const insertAlert = db.prepare('INSERT OR IGNORE INTO ask_cost_alert (month, level, sent_at) VALUES (?, ?, ?)');
+  const monthRange = (now: Date): [string, string] => {
+    const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    return [`${utcMonth(now)}-01`, utcDay(next)];
+  };
+  const monthSpendMicros = (now = new Date()): number => {
+    const [from, to] = monthRange(now);
+    return Number((monthSum.get(from, to) as { micros: number }).micros);
+  };
   return {
     record(model, usage, now = new Date()) {
-      const cost = costMicros(model, usage);
-      add.run(utcDay(now), usage.promptTokens, usage.answerTokens, usage.thinkingTokens, usage.cachedTokens, cost ?? 0, cost === null ? 1 : 0);
+      const cost = cappedCostMicros(model, usage, overrides);
+      add.run(utcDay(now), usage.promptTokens, usage.answerTokens, usage.thinkingTokens, usage.cachedTokens, cost, 0);
       return cost;
+    },
+    monthSpendMicros,
+    monthStatus(capMicros, now = new Date()) {
+      const spentMicros = monthSpendMicros(now);
+      const alertsSent = (alertsFor.all(utcMonth(now)) as Array<{ level: number }>).map((r) => Number(r.level) as CapAlertLevel);
+      return { month: utcMonth(now), spentMicros, capMicros, percent: capMicros > 0 ? Math.floor((spentMicros * 100) / capMicros) : 100, alertsSent };
+    },
+    markAlert(level, now = new Date()) {
+      return Number(insertAlert.run(utcMonth(now), level, now.toISOString()).changes) === 1;
     },
     recordCacheHit(now = new Date()) {
       hit.run(utcDay(now));

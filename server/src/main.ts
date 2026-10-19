@@ -20,9 +20,9 @@ async function main() {
   const auth = createAuth(db, config);
   const labels = loadLabels(config.LABELS_PATH);
   const mailer = withSendTimeout(config.MAIL_TRANSPORT === 'smtp' ? createSmtpMailer(config.SMTP_USER!, config.SMTP_APP_PASSWORD!, config.MAIL_FROM ?? `Sabih's Birdbrain <${config.SMTP_USER}>`) : createConsoleMailer());
-  const costs = createAskCostStore(db);
+  const costs = createAskCostStore(db, { priceOverrides: { inputPerM: config.GEMINI_PRICE_IN, outputPerM: config.GEMINI_PRICE_OUT } });
   const providerUsage = createProviderUsageStore(db);
-  const model = createProviderChain(config, { costs, providerUsage });
+  const model = createProviderChain(config, { costs, providerUsage, mailer, adminEmail: config.adminEmail });
   if (!model) console.warn('[startup] no AI provider has a key (OLLAMA_API_KEY, GEMINI_API_KEY): /v1/ask will answer 502');
   const article = createArticleCache(db).wrap(fetchWikipediaArticle);
   const natureserve = createNatureServeCache(db).wrap(fetchNatureServeStatus);

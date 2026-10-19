@@ -27,7 +27,7 @@ export interface OllamaChatResponse {
   error?: string;
 }
 
-export type ProviderFailureKind = 'rate_limit' | 'queue_full' | 'server' | 'network' | 'timeout' | 'auth' | 'bad_request' | 'unknown';
+export type ProviderFailureKind = 'rate_limit' | 'queue_full' | 'server' | 'network' | 'timeout' | 'auth' | 'bad_request' | 'cap' | 'unknown';
 
 /** A provider that could not answer. `kind` is for the log line; the message never carries the question. */
 export class ProviderError extends Error {

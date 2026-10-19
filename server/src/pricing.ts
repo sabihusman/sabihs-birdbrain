@@ -68,6 +68,42 @@ export function priceFor(model: string): ModelPrice | null {
   return PRICES[model] ?? null;
 }
 
+/** `.env` overrides for the configured model: GEMINI_PRICE_IN / GEMINI_PRICE_OUT (USD per million tokens). */
+export interface PriceOverrides {
+  inputPerM?: number;
+  outputPerM?: number;
+}
+
+/** The most expensive known price (highest output rate, then input): what an unknown model is billed at, so the cap cannot be dodged by a renamed model. */
+export function maxKnownPrice(): ModelPrice {
+  const [first, ...rest] = Object.values(PRICES);
+  return rest.reduce((a, b) => (b.outputPerM > a.outputPerM || (b.outputPerM === a.outputPerM && b.inputPerM > a.inputPerM) ? b : a), first);
+}
+
+/**
+ * The price a Gemini call is billed at for the monthly cap (DECISIONS.md #53):
+ * the table price when the model is known, else the most expensive known
+ * price; `.env` overrides replace the input and/or output rate either way.
+ */
+export function priceForModel(model: string, overrides: PriceOverrides = {}): ModelPrice {
+  const base = PRICES[model] ?? maxKnownPrice();
+  const p = { ...base };
+  if (overrides.inputPerM != null) {
+    p.inputPerM = overrides.inputPerM;
+    p.cachedInputPerM = Math.min(base.cachedInputPerM, overrides.inputPerM);
+  }
+  if (overrides.outputPerM != null) p.outputPerM = overrides.outputPerM;
+  return p;
+}
+
+/** Cost in micro-dollars under the cap's pricing rule: never null (unknown models use the most expensive known price). */
+export function cappedCostMicros(model: string, usage: TokenUsage, overrides: PriceOverrides = {}): number {
+  const p = priceForModel(model, overrides);
+  const cached = Math.min(usage.cachedTokens, usage.promptTokens);
+  const uncached = usage.promptTokens - cached;
+  return Math.round(uncached * p.inputPerM + cached * p.cachedInputPerM + (usage.answerTokens + usage.thinkingTokens) * p.outputPerM);
+}
+
 export interface TokenUsage {
   promptTokens: number;
   answerTokens: number;

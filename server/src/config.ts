@@ -16,6 +16,11 @@ const envSchema = z.object({
   MAIL_FROM: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
+  /** Hard monthly Gemini spend cap in USD (UTC calendar month); 0 disables Gemini entirely (DECISIONS.md #53). */
+  GEMINI_MONTHLY_CAP_USD: z.coerce.number().min(0).default(2),
+  /** Optional price overrides for GEMINI_MODEL, USD per million tokens; an unknown model otherwise uses the most expensive known price. */
+  GEMINI_PRICE_IN: z.coerce.number().positive().optional(),
+  GEMINI_PRICE_OUT: z.coerce.number().positive().optional(),
   // Provider chain for /v1/ask (DECISIONS.md #49): tried in this order, each one falling back to the next.
   AI_PROVIDER_ORDER: z.string().default('ollama,gemini'),
   OLLAMA_API_KEY: z.string().optional(),

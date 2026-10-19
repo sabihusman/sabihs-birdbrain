@@ -1446,3 +1446,38 @@ other open branches, so this may be renumbered at merge.)
   filesystem (the bind is a separate mount, so it should), and the actual
   backup listing; docs/SERVER_RUNBOOK.md §3 lists the read-only checks to run
   first.
+
+## 53. Hard $2/month Gemini cap, enforced in the provider chain
+
+- **Decision:** `GEMINI_MONTHLY_CAP_USD` (default 2.00, per UTC calendar month)
+  is enforced by `createGeminiCapGuard` (`server/src/gemini-cap.ts`) wrapped
+  around the Gemini provider in `configuredProviders`. Before every Gemini
+  call the month's estimated spend is read from the existing `ask_cost` table
+  (one row per UTC day, #48); at or over the cap the call is skipped with
+  `ProviderError('cap')`, so the chain falls back to Ollama, and when every
+  provider fails the member sees "Bird questions are busy right now. Please
+  try again in a few minutes." (the `model_unavailable` text). A cap of 0
+  disables Gemini.
+- **Pricing rule:** one table (`server/src/pricing.ts`, from #26); an unknown
+  model is billed at the most expensive known price (`maxKnownPrice`, today
+  gemini-3.8-flash at $0.75 in / $3.75 out) so a renamed model cannot slip
+  under the cap; `GEMINI_PRICE_IN` / `GEMINI_PRICE_OUT` override the rates
+  for the configured model. Every Gemini call is therefore priced
+  (`unpricedRequests` stays 0 from now on). The eval script keeps "plan
+  allowance" for Ollama models: it is not under the cap.
+- **Alerts:** at 50 % and 100 % of the cap the admin is mailed through the
+  existing SMTP mailer, once per level per month, recorded in the new
+  `ask_cost_alert (month, level)` table so a restart cannot repeat a mail; a
+  failed mail is logged and never fails the member's request.
+- **Where it shows:** `GET /v1/admin/ask-costs` gains `month` (spend, cap,
+  percent, alerts sent) and the admin view a "Gemini this month" line; never
+  on the public `/health`.
+- **Alternatives:** a separate monthly table (rejected: the daily rows already
+  sum per month); counting the cap before recording (rejected: the check runs
+  before the call and the alerts after it, so a call that crosses the cap
+  still completes and is counted); hard-failing at the cap (rejected: Ollama
+  answers first by design, #49).
+- **Tests:** `server/test/gemini-cap.test.ts`: unknown model → highest price,
+  overrides, month sum and rollover, cap reached → no Gemini call (guard and
+  full chain with Ollama down → 502), cap 0, each alert once, failed mail
+  logged, mail wording. Existing cost tests updated to the new pricing rule.

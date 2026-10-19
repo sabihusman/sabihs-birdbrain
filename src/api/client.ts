@@ -55,9 +55,19 @@ export interface AskProviderTotals {
   fallbacks: number;
 }
 
+/** This UTC month's estimated Gemini spend against the hard cap (admin only). */
+export interface AskCostMonth {
+  month: string;
+  spentMicros: number;
+  capMicros: number;
+  percent: number;
+  alertsSent: number[];
+}
+
 export interface AskCostSummary {
   model: string;
   days: AskCostDay[];
+  month?: AskCostMonth;
   providerOrder?: Array<'ollama' | 'gemini'>;
   models?: { ollama: string; gemini: string };
   providers?: AskProviderTotals[];
@@ -140,7 +150,7 @@ export function describeApiError(e: unknown): string {
       return 'There is no Wikipedia summary to answer from for this species.';
     case 'wikipedia_unavailable':
     case 'model_unavailable':
-      return 'The answer service is unavailable right now.';
+      return 'Bird questions are busy right now. Please try again in a few minutes.';
     case 'unauthorized':
       return 'Please sign in again.';
     case 'payload_too_large':

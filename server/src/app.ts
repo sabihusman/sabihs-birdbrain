@@ -401,6 +401,8 @@ export function createApp(deps: AppDeps) {
     return json(c, 200, {
       model: config.GEMINI_MODEL,
       days: costs.summary(COST_SUMMARY_DAYS),
+      // Monthly Gemini cap (#53): admin-only, never on /health.
+      month: costs.monthStatus(Math.round(config.GEMINI_MONTHLY_CAP_USD * 1_000_000)),
       // Which provider answered (DECISIONS.md #49): one row per provider over the same window, with the configured model names.
       providerOrder: config.providerOrder,
       models: { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL },
