@@ -8,9 +8,10 @@ reverse action listed next to it.
 
 | File | Purpose |
 | --- | --- |
-| `setup.sh` | Numbered steps 1-8 (preflight, /opt/birdbrain + .env, Nginx port-80 block, lego certificate, renew service/timer, Nginx port-443 block, deploy user, container). `--dry-run` prints every command and writes nothing; `--only N` / `--from N` to resume. Refuses to overwrite any target file it did not create (the stage-1 Nginx file is the one exception, recognised by its `# birdbrain-stage: http-only` marker). Only ever `nginx -t` then `systemctl reload nginx`. |
+| `setup.sh` | Numbered steps 1-9 (preflight, /opt/birdbrain + .env, Nginx port-80 block, lego certificate, renew service/timer, Nginx port-443 block, deploy user, container, renewal-failure alert). `--dry-run` prints every command and writes nothing; `--only N` / `--from N` to resume. Refuses to overwrite any target file it did not create (the stage-1 Nginx file is the one exception, recognised by its `# birdbrain-stage: http-only` marker). Only ever `nginx -t` then `systemctl reload nginx`. |
 | `setup.conf.example` | Copy to `setup.conf`; set `DEPLOY_PUBKEY_FILE` (step 7 refuses without it). Lego settings are not configured here: step 4 copies `/etc/lego/lego-sentinel.env` to `/etc/lego/lego-birdbrain.env` changing only `LEGO_DOMAINS`, exactly Sentinel's pattern. |
-| `rollback.sh` | Reverse order: container, deploy user, Nginx site (checked for our marker), renewal units. Keeps `.env`, the data volumes and the certificate unless `--purge`. |
+| `rollback.sh` | Reverse order: renewal alert, container, deploy user, Nginx site (checked for our marker), renewal units. Keeps `.env`, the data volumes and the certificate unless `--purge`. `--only-alert` undoes step 9 alone. |
+| `birdbrain-renew-alert.sh`, `systemd/birdbrain-renew-alert.service`, `systemd/lego-renew-birdbrain.service.d-onfailure.conf` | Step 9. A drop-in adds `OnFailure=birdbrain-renew-alert.service` to the renewal unit (the unit file itself stays Sentinel's exact pattern). The alert unit runs the root-owned script, which writes the failure, the current certificate's expiry and the last 40 journal lines of the renewal unit, and mails it to `ADMIN_EMAIL` with `docker compose run --rm --no-deps -T api node dist/alert-mail.js` (the app's own mailer; SMTP settings stay in `/opt/birdbrain/.env`). It also logs to the journal, so a failed mail is still visible. Test: `systemctl start birdbrain-renew-alert.service` (sends a real mail). |
 | `verify.sh` | `baseline` records the status codes of `/`, `/vault`, `/wellmark/` and `sabih-sentinel.duckdns.org`; `check` diffs them, checks Birdbrain's `/health`, the HTTP→HTTPS redirect and security headers, and that port 8010 is **not** reachable on the public address (curl to `95.216.159.93:8010` must get no response; `ss -tln` must show only `127.0.0.1:8010`). Run `baseline` before step 1 and `check` after step 8. |
 | `nginx/birdbrain.http-only`, `nginx/birdbrain` | Stage-1 (ACME + redirect) and final (proxy to `127.0.0.1:8010`, `limit_req` 6 r/min burst 5 → 429, `limit_conn` 3, 16 KB bodies, HSTS/nosniff/no-referrer, no CORS) site files. `__LEGO_PATH__` is substituted from `setup.conf`. |
 | `systemd/lego-renew-birdbrain.service`, `.timer` | Sentinel's pattern: `EnvironmentFile=/etc/lego/lego-birdbrain.env`, `ExecStart=/usr/local/bin/lego run`, `ExecStartPost=/bin/systemctl reload nginx`, `After=network-online.target nginx.service`; timer `OnCalendar=*-*-* 03:00:00`. Only the domain and the env file differ from Sentinel's units; step 5 prints that diff before installing. |
@@ -84,11 +85,13 @@ tag is pinned, so promoting a new build means editing that one line (or setting
 `latest`) and running the deploy script. Digest pinning (`@sha256:...`) is the
 stricter option once the image is stable.
 
-**Volume ownership.** The image has no `/data` or `/backups` directory, so Docker would
-create the named volumes' mount points as `root:root 0755`, and the container (user 1000,
-read-only root filesystem) could not create its SQLite file. Step 8 therefore runs
-`docker compose create api` first, chowns both volumes to `1000:1000` from a throwaway
-`alpine` container, and only then `docker compose up -d api`. Rerunning is harmless.
+**Volume ownership.** The image creates `/data` and `/backups` owned by uid 1000, so a
+new named volume mounted there inherits that ownership and the container (user 1000,
+read-only root filesystem) can create its SQLite file. Images built before that change
+had no such directories, so Docker created the mount points as `root:root 0755`. Step 8
+therefore still runs `docker compose create api` first, chowns both volumes to
+`1000:1000` from a throwaway `alpine` container (a no-op for volumes created by the
+current image), and only then `docker compose up -d api`. Rerunning is harmless.
 
 ## 4. Daily backup
 
