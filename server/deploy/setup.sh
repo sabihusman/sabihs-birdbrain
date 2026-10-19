@@ -175,7 +175,8 @@ step7_deploy_user() {
   run install -o root -g root -m 0750 "$HERE/birdbrain-deploy.sh" "$DEPLOY_SCRIPT"
   run visudo -cf "$HERE/sudoers-birdbrain-deploy"
   run install -o root -g root -m 0440 "$HERE/sudoers-birdbrain-deploy" "$SUDOERS_FILE"
-  local home; home="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"
+  # In a dry run the user does not exist yet (getent fails under pipefail): assume the default home.
+  local home; home="$(getent passwd "$DEPLOY_USER" 2>/dev/null | cut -d: -f6)" || true; home="${home:-/home/$DEPLOY_USER}"
   refuse_if_exists "$home/.ssh/authorized_keys"
   run install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 "$home/.ssh"
   local key; key="$(tr -d '\n' < "$DEPLOY_PUBKEY_FILE")"
