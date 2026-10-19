@@ -471,7 +471,46 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone; the thresholds (×100 cap, 60 dB span,
   −70 dBFS top floor) are first guesses for real microphone levels.
 
-## 33. Sightings: consecutive detections of a species are one event
+## 33. `/data` and `/backups` are created in the image, owned by uid 1000
+
+- **Decision:** the Dockerfile now runs `mkdir -p /data /backups && chown
+  node:node /data /backups` (the `node` user in the official image is uid
+  1000, the uid `compose.yml` runs as). Docker populates a *new* named volume
+  from the image directory it is mounted over, ownership included, so fresh
+  volumes are writable without any host-side step.
+- **Kept:** `setup.sh` step 8 still chowns both volumes from a throwaway
+  `alpine` container. Existing volumes created by images without these
+  directories stay `root:root` until something chowns them, and the step is a
+  harmless no-op otherwise. This closes the follow-up noted in #22.
+- **Not verified here:** the live server's volumes already exist and were
+  chowned by step 8; the image change only matters for a `--purge` reinstall
+  or a new host. The CI image build is the check that the layer is valid.
+
+## 34. Certificate-renewal failure alert through the app's mailer
+
+- **Decision:** `lego-renew-birdbrain.service` gets `OnFailure=birdbrain-renew-alert.service`
+  through a drop-in (`lego-renew-birdbrain.service.d/onfailure.conf`), not by
+  editing the unit, so the unit file stays an exact copy of Sentinel's pattern
+  and `setup.sh` step 5's diff stays clean. The alert unit runs a root-owned
+  script that composes the failure report (result, exit code, certificate
+  expiry, last 40 journal lines) and mails `ADMIN_EMAIL` via
+  `docker compose run --rm --no-deps -T api node dist/alert-mail.js`, a small
+  CLI in the image that reuses `createSmtpMailer`. The SMTP app password
+  therefore never leaves `/opt/birdbrain/.env`.
+- **Alternatives:** `mail`/`sendmail` on the host (needs an MTA or the Gmail
+  password in a second place); `docker exec` into the running API container
+  (fails exactly when the API is down, while `compose run` only needs the
+  image). Rejected for those reasons.
+- **Behaviour:** the timer keeps running daily, so a persistent failure mails
+  once a day; Let's Encrypt's 90-day lifetime and lego's 30-day renewal
+  window leave time to act. The script also logs to the journal, so a mail
+  that cannot be sent is still visible.
+- **Not verified:** nothing ran on the server from this session; step 9 and
+  `rollback.sh --only-alert` are to be applied from the PC with approval.
+  `MONITOR_*` variables need systemd ≥ 251 (Ubuntu 22.04 has 249: the mail
+  then says "unknown" for result and exit code, the journal lines still tell).
+
+## 35. Sightings: consecutive detections of a species are one event
 
 - **Decision:** a new IndexedDB store `sightings` (DB version 3) holds one
   record per run of detections of a species: `firstTime`, `lastTime`,
@@ -496,7 +535,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone; the migration is tested with
   `fake-indexeddb` from a hand-built version-2 database.
 
-## 34. Species tab lists local species by default
+## 36. Species tab lists local species by default
 
 - **Decision:** "local" means the existing BirdNET geo model scores the
   species at or above the range threshold (`geoThreshold`, the Settings
@@ -517,7 +556,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
   browser (the fallback covers a refused batch); the 25 km radius is a
   guess at "same area" for a bird list.
 
-## 35. AI context: relevant Wikipedia article sections, cached, cited
+## 37. AI context: relevant Wikipedia article sections, cached, cited
 
 - **Endpoint:** the MediaWiki Action API, TextExtracts module:
   `api.php?action=query&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&titles=…&format=json&formatversion=2`.
