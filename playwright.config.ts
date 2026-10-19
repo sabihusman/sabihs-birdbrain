@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+// PLAYWRIGHT_PORT lets parallel worktrees run the suite side by side (the preview uses --strictPort).
+const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 4173);
 const BASE = `http://localhost:${PORT}${(process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/')}`;
 
 export default defineConfig({

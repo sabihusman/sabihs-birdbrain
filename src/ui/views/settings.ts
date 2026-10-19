@@ -104,7 +104,7 @@ export function settingsView(ctx: ViewContext): View {
   });
 
   const modelStatus = controller.inference.getStatus();
-  const account = accountSection(ctx.api);
+  const account = accountSection(ctx);
 
   // Microphone
   const micHeadline = el('div', { 'data-testid': 'voice-processing' }, '');

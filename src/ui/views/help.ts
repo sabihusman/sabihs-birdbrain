@@ -22,6 +22,14 @@ export function helpView(_ctx: ViewContext): View {
     el(
       'section',
       { class: 'card' },
+      el('h2', null, 'Friends (members)'),
+      el('p', null, 'In Settings › Account you can set a display name, invite a friend by email and accept or decline invites. The answer to an invite is always “Invite sent”, so it never reveals whether an address has an account; an email goes out only to an approved member who is not already your friend. Invites expire after 30 days; you can send up to 10 a day.'),
+      el('p', null, 'Sharing is off until you turn on “Share my species list with friends”. When it is on, the app uploads, for each species, only the scientific name and the date you last spotted it (the calendar day, no time): no places, no recordings, no counts, no history. The list is replaced after each new sighting. Friends see “Spotted by Alex, Sam” on the Species tab, the “Spotted by friends” chip, and a “Spotted by” list on each species page with one row per person and that one date.'),
+      el('p', null, 'Turning sharing off removes the list from the server immediately, and so does “Delete account”, which also deletes your sign-in, friends and invites. Recordings and detections stay on this device until you delete them in Settings › Data.'),
+    ),
+    el(
+      'section',
+      { class: 'card' },
       el('h2', null, 'Why this ID'),
       el('p', null, 'On saved recordings you can run an occlusion analysis: regions of the spectrogram are silenced one at a time and the model is re-run. Regions whose removal lowers the confidence most are drawn in the species colour. It is slow on phones, so the grid is coarse by default (Settings).'),
     ),

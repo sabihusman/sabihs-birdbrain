@@ -1,17 +1,25 @@
-import { ApiError, describeApiError, type ApiClient, type AuthUser } from '../../api/client';
+import { ApiError, describeApiError, type AuthUser } from '../../api/client';
+import { isMember } from '../../app/access';
+import { setSharingOn } from '../../species/sharing';
+import type { ViewContext } from '../app';
+import { friendsPanel } from '../components/friends-panel';
 import { el } from '../dom';
 
 type Step = 'signed-out' | 'code' | 'signed-in';
 
-/** Account card: sign up, sign in with emailed code, status, sign out. */
-export function accountSection(api: ApiClient): { el: HTMLElement; dispose: () => void } {
+/** Account card: sign up, sign in with emailed code, display name, status, friends and sharing (members), sign out, delete account. */
+export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: () => void } {
+  const { api } = ctx;
   const root = el('section', { class: 'card', 'data-testid': 'account' });
+  let panel: { el: HTMLElement; dispose: () => void } | null = null;
   let step: Step = api.signedIn ? 'signed-in' : 'signed-out';
   let challenge = '';
   let message = '';
   let busy = false;
 
   const render = () => {
+    panel?.dispose();
+    panel = null;
     root.replaceChildren();
     root.appendChild(el('h2', null, 'Account'));
     const user = api.user;
@@ -46,7 +54,67 @@ export function accountSection(api: ApiClient): { el: HTMLElement; dispose: () =
       message = 'Signed out.';
       render();
     });
-    return el('div', { class: 'stack' }, el('div', null, el('strong', null, u.email)), el('div', { class: 'small', 'data-testid': 'account-status' }, statusText(u)), u.role === 'admin' ? el('a', { class: 'btn small', href: '#/admin' }, 'Open admin page') : null, el('div', { class: 'row' }, out));
+    const identity = el('div', { class: 'stack', 'data-testid': 'account-identity' }, el('div', null, el('strong', { 'data-testid': 'account-name' }, u.name || u.email), el('div', { class: 'small muted', 'data-testid': 'account-email' }, u.email)));
+    const editName = el('button', { class: 'btn small', type: 'button', 'data-testid': 'edit-name' }, 'Edit name');
+    editName.addEventListener('click', () => {
+      const input = el('input', { type: 'text', value: u.name, maxlength: '40', required: true, autocomplete: 'nickname', 'aria-label': 'Display name', 'data-testid': 'name-input' });
+      const save = el('button', { class: 'btn small primary', type: 'submit' }, 'Save');
+      const cancel = el('button', { class: 'btn small', type: 'button' }, 'Cancel');
+      const form = el('form', { class: 'stack' }, el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'Display name (what friends see; 1–40 characters)'), input), el('div', { class: 'row' }, save, cancel));
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!form.reportValidity() || busy) return;
+        busy = true;
+        save.disabled = true;
+        try {
+          await api.setName(input.value.trim());
+          message = 'Name saved.';
+        } catch (err) {
+          message = describeApiError(err);
+        } finally {
+          busy = false;
+          render();
+        }
+      });
+      cancel.addEventListener('click', () => render());
+      identity.replaceChildren(form);
+      input.focus();
+    });
+    identity.append(el('div', { class: 'row' }, editName));
+
+    // Delete account: an inline two-step confirmation instead of a pop-up.
+    const delBtn = el('button', { class: 'btn small danger', type: 'button', 'data-testid': 'delete-account' }, 'Delete account');
+    const delBox = el('div', { class: 'stack' }, delBtn);
+    delBtn.addEventListener('click', () => {
+      const yes = el('button', { class: 'btn danger', type: 'button', 'data-testid': 'delete-account-confirm' }, 'Yes, delete my account');
+      const no = el('button', { class: 'btn', type: 'button' }, 'Keep my account');
+      delBox.replaceChildren(el('div', { class: 'notice warn', role: 'alert' }, 'This deletes your account on the server: your sign-in, your friends and invites, and your shared species list, right away. Recordings and detections on this device stay until you delete them in Data below. This cannot be undone.'), el('div', { class: 'row' }, yes, no));
+      no.addEventListener('click', () => delBox.replaceChildren(delBtn));
+      yes.addEventListener('click', async () => {
+        if (busy) return;
+        busy = true;
+        yes.disabled = no.disabled = true;
+        try {
+          setSharingOn(u.id, false); // the server copy goes with the account; the device flag must not linger
+          await api.deleteAccount();
+          step = 'signed-out';
+          message = 'Your account was deleted.';
+        } catch (err) {
+          message = describeApiError(err);
+        } finally {
+          busy = false;
+          render();
+        }
+      });
+    });
+
+    const children: Array<HTMLElement | null> = [identity, el('div', { class: 'small', 'data-testid': 'account-status' }, statusText(u)), u.role === 'admin' ? el('a', { class: 'btn small', href: '#/admin' }, 'Open admin page') : null];
+    if (isMember(u)) {
+      panel = friendsPanel(ctx);
+      children.push(el('hr', { class: 'rule' }), panel.el);
+    }
+    children.push(el('hr', { class: 'rule' }), el('div', { class: 'row' }, out), delBox);
+    return el('div', { class: 'stack' }, ...children);
   };
 
   const renderSignedOut = () => {
@@ -126,5 +194,11 @@ export function accountSection(api: ApiClient): { el: HTMLElement; dispose: () =
     }
   });
   render();
-  return { el: root, dispose: unsub };
+  return {
+    el: root,
+    dispose() {
+      unsub();
+      panel?.dispose();
+    },
+  };
 }

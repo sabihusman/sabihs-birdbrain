@@ -163,6 +163,28 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('history-list')).toContainText('No position recorded');
   await expect(page.getByTestId('history-map')).toBeHidden();
 
+  // Account card for a member: display name with the email under it, the friends panel with the exact consent text, sharing off by default, delete with an inline confirmation (DECISIONS.md #43).
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('account-name')).toHaveText('member');
+  await expect(page.getByTestId('account-email')).toHaveText('member@example.com');
+  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
+  await expect(page.getByTestId('share-species')).not.toBeChecked();
+  await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
+  await expect(page.getByTestId('invite-send')).toBeVisible();
+  await page.getByTestId('delete-account').click();
+  await expect(page.getByTestId('delete-account-confirm')).toBeVisible();
+  await page.getByRole('button', { name: 'Keep my account' }).click();
+  await expect(page.getByTestId('delete-account-confirm')).toBeHidden();
+  // The species page shows the "Spotted by" card with the member's own row (friends unreachable: only "You").
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await expect(page.getByTestId('spotted-by-me')).toContainText(/You · /);
+  await expect(page.getByTestId('spotted-by-friend')).toHaveCount(0);
+  await expect(page.getByTestId('friends-filter')).toBeHidden(); // not on the species page
+  await page.goto('./#/species');
+  await expect(page.getByTestId('friends-filter')).toBeVisible();
+  await page.goto('./#/species/Acanthis%20cabaret/history');
+  await expect(page.getByTestId('history-summary')).toBeVisible();
+
   // Sign-out hides the features but keeps the data.
   await page.evaluate(() => {
     sessionStorage.setItem('e2e-signed-out', '1');
@@ -170,6 +192,8 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   });
   await page.reload();
   await expect(page.getByTestId('history-gate')).toContainText('Sign in to unlock Sighting history.');
+  await page.goto('./#/species');
+  await expect(page.getByTestId('friends-filter')).toBeHidden();
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('wiki')).toBeVisible();
   await expect(page.getByText('Your sightings')).toBeVisible();
