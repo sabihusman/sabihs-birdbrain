@@ -687,3 +687,71 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone (swipe, safe areas with the dock, real
   microphone states); the "paused" state needs a real backgrounding.
 
+## 45. Sighting card: title, map preview, confidence text, About this bird, Ask box
+
+(Numbered 45 on the branch; may be renumbered at merge.)
+
+- **What the user saw:** the recording detail opened from Recordings carried
+  the recording's stored name as its title: `Auto clip: <bird>` for
+  auto-saved clips (`controller.persistDetections`), `Recording <date>` for
+  mic recordings, the file name for imports. There was no "Audio clip" string
+  in the code; the auto-clip name is what was being read as one.
+- **Title:** the top detection's common name with the scientific name in
+  italics beneath (`recording-title`, `recording-sci`); "Recording" when
+  nothing is detected. The recording's own name, date, length and size move
+  to the meta line. The title comes from the stored summary at once and from
+  the per-window results after each analysis.
+- **Location:** a 160 px `mapPreview` (`src/ui/components/map-preview.ts`,
+  `createPreviewMap` in `src/ui/views/map.ts`) above the coordinates with one
+  `L.circleMarker` dot in the species colour (accent until a species is
+  known). Every Leaflet handler is off and there is no zoom control until the
+  "Tap to explore" cover button is tapped; Leaflet 1.9 has no `tap` option any
+  more (the handler was removed in 1.8), so touch is covered by `dragging`
+  and `touchZoom`. The OSM attribution stays. Offline, a muted placeholder
+  stands in and the map is built on the `online` event. `locationBlock` keeps
+  coordinates + Copy + "Open in Google Maps" and folds the Plus Code into a
+  `<details>` "More location details" with the line "Google's short code for
+  this spot; works in Google Maps." The species ID card uses the same two
+  pieces in the same order, so the two cards match; `createMiniMap` remains
+  for the free user's multi-sighting map on the species page.
+- **Confidence:** the per-species timeline canvas under the spectrogram is
+  gone from this card (`TimelineView` still serves "How it works" on
+  Listen). In its place: "Confidence 96% · your minimum 60%" (threshold from
+  settings) and, when the top species matched several 3 s windows, one line
+  per window in time order, "0:02–0:05 · 96%" (`src/ui/confidence-text.ts`,
+  unit-tested). The per-species chips with "▶ best at" stay in Detections.
+- **About this bird:** `src/ui/components/about-bird.ts` renders the summary
+  (text, thumbnail with Commons attribution, article link; the same markup
+  the species page had) plus collapsed Description, Song and calls, Habitat
+  and Diet sections from the full article. `src/species/wiki-sections.ts`
+  mirrors the server's TextExtracts request (#37) with `origin=*` added for
+  the browser:
+  `api.php?action=query&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&titles=…&format=json&formatversion=2&origin=*`
+  (parameters checked against `action=help&modules=query+extracts` on
+  mediawiki.org, 2026-10-19). Headings are split at every level, so
+  "Vocalisations" is found under "Description"; the first heading matching
+  each kind wins (description/identification/appearance; vocalisation/voice/
+  song/call/sound; distribution and habitat/habitat/distribution/range; diet/
+  feeding/food/foraging); each is cut to 600 characters at a sentence end
+  with a link to the section. Cached in the existing IndexedDB `wiki` store
+  under `wiki-sections:en:<scientific>`, so no DB version bump (another open
+  PR bumps it for clips). The species page now uses the same component.
+- **Ask:** `askBox` (previously mounted only on the species page,
+  `src/ui/views/species.ts`) is mounted on the card for the top species.
+  Its own gating stays: approved members get the form; signed-out and
+  pending users see a "Sign in to ask" line (`ask-locked`). Answers come from
+  the full article with section citations (#37); the box itself is
+  unchanged.
+- **Tests:** unit tests for the section parser, picker, truncation and the
+  cached fetcher (`tests/wiki-sections.test.ts`, hand-written fixture in
+  `tests/fixtures/`, as en.wikipedia.org rate-limits this environment) and
+  the confidence text; the import e2e test now sets a manual position and
+  checks the title, confidence line, map preview, folded Plus Code, About and
+  "Sign in to ask"; the member test checks the Ask form on the card.
+  Screenshots: `scripts/sighting-card-screenshots.ts` →
+  `docs/screenshots/sighting-card-{dark,light}-{signed-in,signed-out}.png`.
+  `playwright.config.ts` now reads `PREVIEW_PORT` (default 4173) so several
+  worktrees can run the suite side by side, each against its own preview.
+- **Not verified:** a live TextExtracts response in the browser (429 here;
+  the fixture follows the documented format and the server's parser) and the
+  map cover on a real touch screen.

@@ -91,12 +91,42 @@ test('WebAssembly backend fallback loads the model and runs inference', async ({
 });
 
 test('imports a recording, analyses it and explains an identification', async ({ page }) => {
+  // A manual position so the sighting card has a location (headless Chromium has no GPS).
+  await page.addInitScript(() => {
+    const raw = localStorage.getItem('birdbrain.settings.v1');
+    const s = raw ? JSON.parse(raw) : {};
+    Object.assign(s, { locationMode: 'manual', manualLat: 47.36559, manualLon: 8.524997 });
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify(s));
+  });
   await page.goto('./#/recordings');
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
   await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
   await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
   await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId('recording-detections')).toContainText('Redpoll');
+
+  // Sighting card: the bird's names as the title, confidence as text, map preview above the coordinates,
+  // Plus Code folded away, About this bird, and "Sign in to ask" for a free user.
+  await expect(page.getByTestId('recording-title')).toHaveText('Lesser Redpoll');
+  await expect(page.getByTestId('recording-sci')).toHaveText('Acanthis cabaret');
+  await expect(page.getByTestId('confidence-line')).toHaveText(/^Confidence \d+% · your minimum 60%$/);
+  await expect(page.locator('canvas.timeline')).toHaveCount(0);
+  const location = page.getByTestId('sighting-location');
+  await expect(location.getByTestId('map-preview')).toBeVisible();
+  await expect(location.getByRole('button', { name: /Tap to explore/ })).toBeVisible();
+  await expect(location.locator('.leaflet-control-attribution')).toContainText('OpenStreetMap');
+  await expect(location.locator('code').first()).toHaveText('47.36559, 8.52500');
+  await expect(location.getByRole('link', { name: 'Open in Google Maps' })).toBeVisible();
+  const more = location.getByTestId('location-more');
+  await expect(more).not.toHaveAttribute('open', /.*/);
+  await expect(more).not.toContainText('8FVC9G8F+6X', { useInnerText: true });
+  await more.locator('summary').click();
+  await expect(more).toContainText('8FVC9G8F+6X');
+  await expect(more).toContainText("Google's short code for this spot; works in Google Maps.");
+  await location.getByRole('button', { name: /Tap to explore/ }).click();
+  await expect(location.locator('.leaflet-control-zoom')).toBeVisible();
+  await expect(page.getByTestId('about-bird')).toContainText('About this bird');
+  await expect(page.getByTestId('ask-box').getByTestId('ask-locked')).toContainText('Sign in to ask');
 
   const why = page.getByRole('button', { name: /^Why Lesser Redpoll/ });
   await why.click();
@@ -128,6 +158,11 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
   await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
   await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
+  // Members get the Ask box on the sighting card itself.
+  await expect(page.getByTestId('recording-title')).toHaveText('Lesser Redpoll');
+  await expect(page.getByTestId('ask-box').getByLabel('Your question')).toBeVisible();
+  await expect(page.getByTestId('ask-box').getByTestId('ask-locked')).toHaveCount(0);
+  await expect(page.getByTestId('sighting-location')).toHaveCount(0); // no position in this test
 
   await page.goto('./#/species/Acanthis%20cabaret');
   const card = page.getByTestId('species-id-card');

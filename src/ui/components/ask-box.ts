@@ -12,11 +12,11 @@ export function askBox(api: ApiClient, species: Species): { el: HTMLElement; dis
     root.replaceChildren(el('h2', null, 'Ask about this bird'));
     const user = api.user;
     if (!user) {
-      root.append(el('p', { class: 'small muted' }, 'Members can ask an AI questions about a species, answered only from its Wikipedia article. ', el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.')));
+      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, 'Sign in to ask. Members can ask an AI questions about a species, answered only from its Wikipedia article. ', el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.')));
       return;
     }
     if (user.status !== 'approved') {
-      root.append(el('p', { class: 'small muted' }, user.status === 'pending' ? 'Your account is awaiting approval; questions unlock once Sabih approves it.' : 'Your account cannot use member features.'));
+      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, user.status === 'pending' ? 'Sign in to ask: your account is awaiting approval, and questions unlock once Sabih approves it.' : 'Your account cannot use member features.'));
       return;
     }
     const input = el('textarea', { rows: '3', maxlength: String(MAX_QUESTION), placeholder: `What would you like to know about the ${species.common}?`, 'aria-label': 'Your question', style: 'width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font:inherit' });

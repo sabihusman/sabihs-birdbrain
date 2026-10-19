@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+// PREVIEW_PORT lets several worktrees run the suite side by side (each needs its own preview).
+const PORT = Number(process.env.PREVIEW_PORT ?? 4173);
 const BASE = `http://localhost:${PORT}${(process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/')}`;
 
 export default defineConfig({
