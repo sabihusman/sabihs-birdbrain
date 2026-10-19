@@ -47,7 +47,7 @@ export function speciesListView(ctx: ViewContext): View {
     spottedChip.setAttribute('aria-pressed', String(on));
     search();
   });
-  // "Spotted by friends": species any accepted friend has shared (DECISIONS.md #43). Members only; the chip hides otherwise.
+  // "Spotted by friends": species any accepted friend has shared (DECISIONS.md #44). Members only; the chip hides otherwise.
   let friendsOnly = false;
   const friendsCount = el('span', { class: 'filter-chip-count' }, '');
   const friendsChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': 'false', 'data-testid': 'friends-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '👥'), 'Spotted by friends', friendsCount);

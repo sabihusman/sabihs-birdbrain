@@ -24,7 +24,7 @@ export interface ViewContext {
   controller: AppController;
   api: ApiClient;
   notify: (n: Notice) => void;
-  /** Uploads my species-only list while sharing is on (DECISIONS.md #43). */
+  /** Uploads my species-only list while sharing is on (DECISIONS.md #44). */
   sharing: SpeciesSharer;
   /** Friends' shared lists for the Species tab. */
   friends: FriendsCache;

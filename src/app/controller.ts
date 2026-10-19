@@ -4,7 +4,7 @@ import { ConditionsMeter, type ConditionsAssessment } from '../audio/conditions'
 import { renderLowCut } from '../audio/highpass';
 import type { VoiceProcessingReport } from '../audio/mic-constraints';
 import { SampleRing } from '../audio/ring-buffer';
-import { CLIP_MAX_SECONDS, clipRange, saveClipIfBetter, shouldReplaceClip, type ClipCandidate } from '../species/clips';
+import { CLIP_MAX_SECONDS, clipRange, saveClipIfBetter, shouldReplaceClip, windowsInClip, type ClipCandidate, type TimedWindow } from '../species/clips';
 import { decodeWav, encodeWav, toMono } from '../audio/wav';
 import { resampleLinear } from '../audio/resample';
 import { LABELS_JSON, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
@@ -90,6 +90,9 @@ interface PendingLiveClip {
   offsetSamples: number;
 }
 
+/** How a saved detection window is named in Recordings (the auto-save setting, not the species ID clip). */
+export const AUTO_SAVE_RECORDING_PREFIX = 'Detection window';
+
 export interface LocalSpeciesState {
   /** Species indices the geo model scores at or above the range threshold in any week; null when no position is known. */
   indices: Set<number> | null;
@@ -122,6 +125,8 @@ export class AppController extends Emitter<ControllerEvents> {
   /** Raw (unfiltered) live audio for species clips; member feature, see setClipsEnabled. */
   private liveRing = new SampleRing(SAMPLE_RATE * LIVE_RING_SECONDS);
   private pendingClips = new Map<string, PendingLiveClip>();
+  /** Per species, the live windows (session seconds) that detected it, for the clip's identifying-window list. */
+  private liveWindows = new Map<string, TimedWindow[]>();
   private clipsEnabled = false;
 
   constructor(readonly baseUrl: string) {
@@ -288,6 +293,7 @@ export class AppController extends Emitter<ControllerEvents> {
     this.conditions.reset();
     this.liveRing.reset();
     this.pendingClips.clear();
+    this.liveWindows.clear();
     this.stats = { listening: true, startedAt: this.sessionStartedAt, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: this.engine.contextSampleRate };
     this.emit('stats', this.stats);
     this.timer = window.setInterval(() => {
@@ -378,7 +384,7 @@ export class AppController extends Emitter<ControllerEvents> {
       const last = this.lastAutoClip.get(sp.scientific) ?? 0;
       if (best.prob >= s.autoSaveMinConfidence && Date.now() - last > 30_000) {
         this.lastAutoClip.set(sp.scientific, Date.now());
-        const rec = await this.saveRecording(windowAudio, `Auto clip: ${sp.common}`, 'autoclip', result.detections);
+        const rec = await this.saveRecording(windowAudio, `${AUTO_SAVE_RECORDING_PREFIX}: ${sp.common}`, 'autoclip', result.detections);
         recordingId = rec.id;
       }
     }
@@ -404,7 +410,10 @@ export class AppController extends Emitter<ControllerEvents> {
     this.emit('detections-changed', undefined);
     if (this.clipsEnabled) {
       const offsetSamples = Math.round(result.offsetSec * SAMPLE_RATE);
-      for (const r of records) await this.queueLiveClip(r, offsetSamples);
+      for (const r of records) {
+        this.rememberLiveWindow(r.scientific, { startSec: result.offsetSec, confidence: r.confidence });
+        await this.queueLiveClip(r, offsetSamples);
+      }
     }
   }
 
@@ -413,7 +422,18 @@ export class AppController extends Emitter<ControllerEvents> {
   /** Clips are only collected while an approved member is signed in. Existing clips are never deleted here. */
   setClipsEnabled(on: boolean): void {
     this.clipsEnabled = on;
-    if (!on) this.pendingClips.clear();
+    if (!on) {
+      this.pendingClips.clear();
+      this.liveWindows.clear();
+    }
+  }
+
+  /** Keep the species' recent detection windows (those still inside the raw ring) so the clip can list all that fall in it. */
+  private rememberLiveWindow(scientific: string, w: TimedWindow): void {
+    const oldest = this.liveRing.start / SAMPLE_RATE;
+    const kept = (this.liveWindows.get(scientific) ?? []).filter((x) => x.startSec + WINDOW_SECONDS > oldest);
+    kept.push(w);
+    this.liveWindows.set(scientific, kept);
   }
 
   get clipsCollected(): boolean {
@@ -426,7 +446,7 @@ export class AppController extends Emitter<ControllerEvents> {
    * species replaces the pending one.
    */
   private async queueLiveClip(det: DetectionRecord, offsetSamples: number): Promise<void> {
-    const candidate: ClipCandidate = { scientific: det.scientific, common: det.common, confidence: det.confidence, time: det.time, lat: det.lat, lon: det.lon, accuracy: det.accuracy, source: 'live', recordingId: null };
+    const candidate: ClipCandidate = { scientific: det.scientific, common: det.common, confidence: det.confidence, time: det.time, lat: det.lat, lon: det.lon, accuracy: det.accuracy, source: 'live', recordingId: null, windows: [] };
     const pending = this.pendingClips.get(det.scientific);
     if (pending && !shouldReplaceClip(pending.candidate, candidate)) return;
     if (!pending) {
@@ -449,8 +469,10 @@ export class AppController extends Emitter<ControllerEvents> {
       const length = Math.round((range.end - range.start) * SAMPLE_RATE);
       const audio = this.liveRing.slice(startSamples, length);
       if (!audio) continue;
+      // Every window of the species that falls inside the clip, the triggering one included.
+      const windows = windowsInClip([...(this.liveWindows.get(scientific) ?? []), { startSec: p.offsetSamples / SAMPLE_RATE, confidence: p.candidate.confidence }], range);
       try {
-        const saved = await saveClipIfBetter(p.candidate, audio);
+        const saved = await saveClipIfBetter({ ...p.candidate, windows }, audio);
         if (saved) this.emit('clip-saved', saved);
       } catch (e) {
         this.emit('notice', { kind: 'warn', text: `Could not save the species clip: ${(e as Error).message}` });

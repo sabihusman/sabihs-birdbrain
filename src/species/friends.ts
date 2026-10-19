@@ -3,7 +3,7 @@ import { isMember } from '../app/access';
 import { Emitter } from '../shared/emitter';
 
 /**
- * Friends' shared species lists for the Species tab (DECISIONS.md #43):
+ * Friends' shared species lists for the Species tab (DECISIONS.md #44):
  * fetched from the API when a member opens the tab and online, kept in
  * memory and sessionStorage (per user id) so the tab works offline for the
  * session, and dropped on sign-out. Each friend contributes only a display

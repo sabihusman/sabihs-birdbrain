@@ -1,6 +1,6 @@
 /* eslint-disable no-control-regex -- these tests deliberately probe control characters */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { answerQuestion, buildPrompt, createGeminiModel, leaksSystemPrompt, MAX_ANSWER_CHARS, neutralizeFence, SYSTEM_INSTRUCTION } from '../src/ask.js';
+import { ANSWER_MAX_OUTPUT_TOKENS, answerQuestion, buildPrompt, createGeminiModel, leaksSystemPrompt, MAX_ANSWER_CHARS, neutralizeFence, SYSTEM_INSTRUCTION } from '../src/ask.js';
 import { createUsageStore, openDatabase } from '../src/db.js';
 import { fetchWikipediaSummary, MAX_EXTRACT_CHARS } from '../src/wiki.js';
 import { FakeGemini } from './fake-gemini.js';
@@ -40,7 +40,7 @@ describe('LLM01 prompt injection through the question', () => {
     expect(contents.indexOf('</source>')).toBeLessThan(contents.indexOf(`QUESTION: ${q}`));
     expect(contents).not.toContain('birdwatching app'); // the instruction is not in the user turn
     expect(call.config?.temperature).toBe(0.2);
-    expect(call.config?.maxOutputTokens).toBe(400);
+    expect(call.config?.maxOutputTokens).toBe(ANSWER_MAX_OUTPUT_TOKENS);
     expect(call.config?.safetySettings?.length).toBe(4);
     expect(call.model).toBe('gemini-test');
   });

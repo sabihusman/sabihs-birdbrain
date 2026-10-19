@@ -140,7 +140,7 @@ What the suite exercises, and what it found:
 | A12 | Admin routes as pending member, approved member, anonymous; admin on own account; unknown action; path traversal | Passes: 403 / 400; role decides, not approval status. |
 | A13 | Address enumeration via signup or login | Passes: identical bodies for existing and new addresses, identical 401 for wrong password and unknown user. |
 
-## Friends: species-only sharing (2026-10-19, DECISIONS.md #43)
+## Friends: species-only sharing (2026-10-19, DECISIONS.md #44)
 
 New surface: display names, friend invites by email, and a per-member list
 of (scientific name, last-seen day) pairs that accepted friends can read.

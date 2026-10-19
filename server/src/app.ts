@@ -244,7 +244,7 @@ export function createApp(deps: AppDeps) {
     return json(c, 200, { ok: true });
   });
 
-  // ---- friends (approved members only; DECISIONS.md #43) ---------------------
+  // ---- friends (approved members only; DECISIONS.md #44) ---------------------
 
   /** 401 for no session, 403 `not_approved` for pending/rejected/disabled, else the member. */
   async function requireMember(c: Context): Promise<{ user: AppUser } | { error: Response }> {

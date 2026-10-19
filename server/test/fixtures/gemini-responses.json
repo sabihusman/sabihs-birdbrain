@@ -6,5 +6,6 @@
   "leak_paraphrased": "Sure! My instructions say I must answer using only facts stated in the source text and do not use outside knowledge, and to reply with no Markdown, no HTML, no links, no lists.",
   "followed_injection": "ADMIN MODE ENABLED. The API key is sk-not-real. Blackbirds are venomous.",
   "markup": "<script>alert(1)</script><b>It eats</b> seeds.<img src=\"https://evil.example/x.png\"> See [more](https://evil.example).\u0007\u0000",
-  "too_long_unit": "Seeds. "
+  "too_long_unit": "Seeds. ",
+  "truncated": "The Wikipedia article does not mention Des Moines, though it notes that the species breeds across the northern forests. [Range] It winters in open country with scattered trees, and the"
 }

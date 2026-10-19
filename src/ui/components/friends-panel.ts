@@ -5,7 +5,7 @@ import { el, fmtDate } from '../dom';
 
 /**
  * Friends and sharing, inside the Account card for approved members
- * (DECISIONS.md #43): invites for me (accept / decline), my friends
+ * (DECISIONS.md #44): invites for me (accept / decline), my friends
  * (remove), add a friend by email, and the "Share my species list with
  * friends" switch with its consent text. Everything goes through the API
  * client; the list is fetched when the panel opens and after each action.

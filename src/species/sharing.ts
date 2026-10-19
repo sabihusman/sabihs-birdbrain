@@ -5,7 +5,7 @@ import { listSightings } from '../storage/db';
 import type { SightingRecord } from '../storage/types';
 
 /**
- * "Share my species list with friends" (DECISIONS.md #43). Off by default;
+ * "Share my species list with friends" (DECISIONS.md #44). Off by default;
  * the consent is a localStorage flag keyed to the user id, so it never
  * follows the session to another account. When on, the client uploads, per
  * species, only the scientific name and the local calendar day of the most

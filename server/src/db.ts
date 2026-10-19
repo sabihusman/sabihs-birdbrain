@@ -27,7 +27,7 @@ export function openDatabase(path: string): DatabaseSync {
       count INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (day, scope)
     );
-    -- Friends (DECISIONS.md #43): invites by account, accepted pairs, and the species-only shared lists.
+    -- Friends (DECISIONS.md #44): invites by account, accepted pairs, and the species-only shared lists.
     CREATE TABLE IF NOT EXISTS friend_invite (
       id TEXT PRIMARY KEY,
       from_user_id TEXT NOT NULL,

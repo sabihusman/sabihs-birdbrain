@@ -1,16 +1,13 @@
 import { FFT, hannWindow } from '../../audio/fft';
-import { stft } from '../../audio/stft';
 import { SAMPLE_RATE } from '../../model/constants';
 import type { SpeciesColor } from '../../species/colors';
 import { fitCanvas } from '../dom';
 import { AdaptiveDbRange, columnDb, maxOf } from './autoscale';
 import { cssToken } from '../../theme/theme';
 import { INFERNO } from './colormap';
+import { computeStaticSpectrogram, frameX, hzToY, SPEC_FFT, SPEC_MAX_BIN, SPEC_MAG_SCALE, timeToX, xToTime } from './static-spectrogram';
 
-export const SPEC_FFT = 1024;
-export const SPEC_MAX_HZ = 15000;
-/** A full-scale sine through a Hann window peaks at N/4 in the FFT, so 4/N reads 0 dBFS. */
-export const SPEC_MAG_SCALE = 4 / SPEC_FFT;
+export { SPEC_FFT, SPEC_MAG_SCALE, SPEC_MAX_HZ } from './static-spectrogram';
 /** The colour map needs a near-black field in both themes (THEME_TOKENS.*.vizBg). */
 const VIZ_BG = '#000004';
 
@@ -19,6 +16,14 @@ export interface WindowMark {
   endSec: number;
   colors: SpeciesColor[];
   labels: string[];
+}
+
+/** An outlined time span with a label (the ID clip's identifying windows). */
+export interface WindowOutline {
+  startSec: number;
+  endSec: number;
+  color: SpeciesColor;
+  label: string;
 }
 
 export interface Heatmap {
@@ -46,10 +51,11 @@ export class SpectrogramView {
   private image: HTMLCanvasElement;
   private imageCtx: CanvasRenderingContext2D;
   private column: ImageData;
-  private readonly maxBin = Math.floor((SPEC_MAX_HZ / SAMPLE_RATE) * SPEC_FFT);
+  private readonly maxBin = SPEC_MAX_BIN;
   /** Stream time (seconds) at the right edge of the image. */
   private nowSec = 0;
   private marks: WindowMark[] = [];
+  private outlines: WindowOutline[] = [];
   private heatmap: Heatmap | null = null;
   private liveWindow: { startSec: number; endSec: number } | null = null;
   private staticDuration: number | null = null;
@@ -83,6 +89,7 @@ export class SpectrogramView {
     this.pending = new Float32Array(0);
     this.nowSec = 0;
     this.marks = [];
+    this.outlines = [];
     this.heatmap = null;
     this.liveWindow = null;
     this.staticDuration = null;
@@ -149,39 +156,24 @@ export class SpectrogramView {
     return out;
   }
 
-  /** Static mode: render a whole recording to fit the image width. */
+  /** Static mode: render a whole recording or clip to fit the image width. */
   renderStatic(audio: Float32Array): void {
     this.marks = [];
+    this.outlines = [];
     this.heatmap = null;
     this.liveWindow = null;
     this.staticDuration = audio.length / SAMPLE_RATE;
     this.nowSec = this.staticDuration;
     const width = this.image.width;
-    const hop = Math.max(256, Math.floor(audio.length / width));
-    const s = stft(audio, SPEC_FFT, hop, this.window, this.fft);
     const ctx = this.imageCtx;
     ctx.fillStyle = VIZ_BG;
     ctx.fillRect(0, 0, width, this.image.height);
-    // Two passes: one fixed colour window for the whole clip, set from its loudest bin.
-    const re = new Float64Array(SPEC_FFT);
-    const im = new Float64Array(SPEC_FFT);
-    const columns: Float32Array[] = [];
-    let peakDb = -Infinity;
-    for (let f = 0; f < s.frames; f++) {
-      const o = f * s.bins;
-      for (let k = 0; k < s.bins; k++) {
-        re[k] = s.re[o + k];
-        im[k] = s.im[o + k];
-      }
-      const db = columnDb(re, im, this.imageHeight, this.maxBin, SPEC_MAG_SCALE);
-      peakDb = Math.max(peakDb, maxOf(db));
-      columns.push(db);
-    }
-    this.range.reset(Math.max(peakDb, -70));
-    for (let f = 0; f < columns.length; f++) {
-      const x = Math.floor((f / columns.length) * width);
-      this.column.data.set(this.pixelsFromDb(columns[f]));
-      ctx.putImageData(this.column, x, 0);
+    // One fixed colour window for the whole clip, set from its loudest bin (computed without the DOM, see static-spectrogram.ts).
+    const spec = computeStaticSpectrogram(audio, width, this.imageHeight, this.fft, this.window);
+    this.range.reset(spec.topDb);
+    for (let f = 0; f < spec.frames; f++) {
+      this.column.data.set(this.pixelsFromDb(spec.db.subarray(f * spec.rows, (f + 1) * spec.rows)));
+      ctx.putImageData(this.column, frameX(f, spec.frames, width), 0);
     }
     this.draw();
   }
@@ -192,6 +184,11 @@ export class SpectrogramView {
 
   setLiveWindow(startSec: number, endSec: number): void {
     this.liveWindow = { startSec, endSec };
+  }
+
+  /** Outlined, labelled spans (the ID clip's identifying windows); replaces the previous set. */
+  setOutlines(outlines: WindowOutline[]): void {
+    this.outlines = outlines;
   }
 
   setHeatmap(h: Heatmap | null): void {
@@ -213,11 +210,11 @@ export class SpectrogramView {
   }
 
   xFor(sec: number, width: number): number {
-    return ((sec - this.leftSec) / this.spanSec) * width;
+    return timeToX(sec, this.leftSec, this.spanSec, width);
   }
 
   secAt(x: number, width: number): number {
-    return this.leftSec + (x / width) * this.spanSec;
+    return xToTime(x, this.leftSec, this.spanSec, width);
   }
 
   draw(): void {
@@ -232,7 +229,7 @@ export class SpectrogramView {
     const fg = cssToken('viz-fg', '#E4EDE8');
     const fgA = (a: number) => `color-mix(in srgb, ${fg} ${Math.round(a * 100)}%, transparent)`;
     const xFor = (sec: number) => this.xFor(sec, w);
-    const yForHz = (hz: number) => h - (Math.min(SPEC_MAX_HZ, hz) / SPEC_MAX_HZ) * h;
+    const yForHz = (hz: number) => hzToY(hz, h);
 
     // Heatmap (occlusion) in the species colour, alpha by importance.
     if (this.heatmap) {
@@ -273,6 +270,25 @@ export class SpectrogramView {
         octx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.95)`;
         octx.fillRect(x0, i * strip, x1 - x0, strip - 1);
       });
+    }
+
+    // Identifying windows of a clip: outline in the species colour with the confidence label, clamped to the canvas.
+    for (const o of this.outlines) {
+      const x0 = Math.max(0, xFor(o.startSec));
+      const x1 = Math.min(w, xFor(o.endSec));
+      if (x1 <= x0) continue;
+      const [r, g, b] = o.color.rgb;
+      octx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.95)`;
+      octx.lineWidth = 2;
+      octx.strokeRect(x0 + 1, 1, x1 - x0 - 2, h - 2);
+      if (o.label) {
+        octx.font = 'bold 11px system-ui, sans-serif';
+        const tw = octx.measureText(o.label).width + 8;
+        octx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.95)`;
+        octx.fillRect(x0 + 1, 1, Math.min(tw, x1 - x0 - 2), 16);
+        octx.fillStyle = '#000004';
+        octx.fillText(o.label, x0 + 5, 13);
+      }
     }
 
     // Current analysis window outline.
