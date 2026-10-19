@@ -585,7 +585,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** a live TextExtracts response for a bird page (fixture
   only); how well Gemini follows the citation format.
 
-## 36. Admin is told about new sign-ups, at most once per 10 minutes
+## 38. Admin is told about new sign-ups, at most once per 10 minutes
 
 - **Decision:** when a pending account verifies its e-mail code for the
   first time, the API mails `ADMIN_EMAIL` "New Birdbrain sign-up:
@@ -603,7 +603,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Failure:** a mailer error is logged and never surfaces to the
   signing-up user; approval is still possible from the admin page.
 
-## 37. Theme system per docs/DESIGN_GUIDE.md (dark by default)
+## 39. Theme system per docs/DESIGN_GUIDE.md (dark by default)
 
 - **Decision:** two themes from the guide, "Forest Night" (dark, the default
   whatever the phone prefers) and "Field Guide, cream" (light), as CSS tokens
