@@ -148,7 +148,7 @@ step5_renew_units() {
   run systemctl daemon-reload
   run systemctl enable --now lego-renew-birdbrain.timer
   run systemctl start lego-renew-birdbrain.service
-  run systemctl status --no-pager lego-renew-birdbrain.service
+  run systemctl status --no-pager lego-renew-birdbrain.service || true  # status exits 3 for an inactive oneshot
   echo "   rollback: systemctl disable --now lego-renew-birdbrain.timer; rm $UNIT_DIR/lego-renew-birdbrain.{service,timer}; systemctl daemon-reload"
 }
 
