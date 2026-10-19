@@ -82,7 +82,7 @@ describe('account deletion', () => {
     expect(mail).toHaveLength(1);
     expect(mail[0].subject).toBe('Your Birdbrain account was deleted');
     expect(mail[0].text).toContain('permanently');
-    expect(mail[0].text).toContain('server backups');
+    expect(mail[0].text).toContain('keeps no backups');
     expect(mail[0].text).not.toContain(PASSWORD);
     expect(mail[0].text).not.toContain(sam.id);
   });

@@ -12,9 +12,9 @@ export const WHAT_WE_STORE_TEXT =
   'Your sightings, recordings, clips and ticks stay on this phone only and are never uploaded. ' +
   'If you turn on sharing, the server also keeps your species list: for each bird, its scientific name and the day you last spotted it; friends see your display name, those species and those dates, and nothing else. ' +
   'When you ask about a bird, the species name, your question and your state or province code go to the server, which looks the species up on Wikipedia and NatureServe Explorer and, with that region code, on eBird; for questions about birds near you, your position rounded to about 10 km goes to eBird too. ' +
-  'The question and the fetched text are then sent to Ollama Cloud and, if it is busy, to Google’s Gemini model; neither ever sees your name, email or exact location. ' +
+  'The question and the fetched text are then sent to Ollama Cloud and, if it is busy or fails, to Google’s Gemini model; neither ever sees your name, email or exact location. ' +
   'Answers are kept on the server for seven days so the same question is not asked again, without your name or email. ' +
-  'Deleting your account removes all of it from the server at once. Copies in server backups are removed when those backups expire.';
+  'Deleting your account removes all of it from the server at once. The server keeps no backups of this data at the moment, so nothing lingers.';
 
 export function whatWeStore(): HTMLParagraphElement {
   return el('p', { class: 'small muted', 'data-testid': 'what-we-store' }, WHAT_WE_STORE_TEXT);

@@ -42,6 +42,6 @@ export function deletionMail(to: string): { to: string; subject: string; text: s
   return {
     to,
     subject: 'Your Birdbrain account was deleted',
-    text: 'Your Sabih’s Birdbrain account and everything stored with it on the server (sign-in details, sessions, friends, invites and your shared species list) were deleted just now, permanently. Copies in server backups are removed when those backups expire. Sightings and recordings saved on your phone are not affected unless you chose to clear them.\n\nIf you did not do this, reply to this message.',
+    text: 'Your Sabih’s Birdbrain account and everything stored with it on the server (sign-in details, sessions, friends, invites and your shared species list) were deleted just now, permanently. The server keeps no backups of account data at the moment, so nothing lingers. Sightings and recordings saved on your phone are not affected unless you chose to clear them.\n\nIf you did not do this, reply to this message.',
   };
 }
