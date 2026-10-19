@@ -14,16 +14,25 @@ export function settingsView(ctx: ViewContext): View {
   const settings = controller.settings;
   const s = settings.get();
 
-  const slider = (label: string, key: 'threshold' | 'overlapSeconds' | 'geoThreshold' | 'autoSaveMinConfidence', min: number, max: number, step: number, fmt: (v: number) => string) => {
+  // Sliders re-read the store after every change, so a value the store clamped (auto-save never below the detection threshold) shows its real value.
+  const syncs: Array<() => void> = [];
+  const slider = (label: string, key: 'threshold' | 'overlapSeconds' | 'geoThreshold' | 'autoSaveMinConfidence', min: number, max: number, step: number, fmt: (v: number) => string, hint?: string) => {
     const value = el('span', null, fmt(s[key]));
     const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(s[key]), 'aria-label': label });
-    input.addEventListener('input', () => {
-      const v = Number(input.value);
+    const sync = () => {
+      const v = settings.get()[key];
+      input.value = String(v);
       value.textContent = fmt(v);
-      settings.update({ [key]: v });
+    };
+    syncs.push(sync);
+    input.addEventListener('input', () => {
+      settings.update({ [key]: Number(input.value) });
     });
-    return el('div', { class: 'slider' }, el('div', { class: 'row' }, el('span', null, label), value), input);
+    return el('div', { class: 'slider' }, el('div', { class: 'row' }, el('span', null, label), value), input, hint ? el('div', { class: 'small muted' }, hint) : null);
   };
+  const unsubSettings = settings.on('change', () => {
+    for (const f of syncs) f();
+  });
 
   const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut', hint?: string) => {
     const input = el('input', { type: 'checkbox', checked: s[key] });
@@ -141,7 +150,7 @@ export function settingsView(ctx: ViewContext): View {
       slider('Species range threshold', 'geoThreshold', 0.01, 0.2, 0.01, (v) => v.toFixed(2)),
       locationStatus,
     ),
-    el('section', { class: 'card' }, el('h2', null, 'Recording'), toggle('Auto-save a clip for each detection', 'autoSaveClips', 'Saves the 3-second window (one per species every 30 s).'), slider('Auto-save when confidence is at least', 'autoSaveMinConfidence', 0.1, 0.95, 0.05, pct)),
+    el('section', { class: 'card' }, el('h2', null, 'Recording'), toggle('Auto-save a clip for each detection', 'autoSaveClips', 'Saves the 3-second window (one per species every 30 s).'), slider('Auto-save when confidence is at least', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below the confidence threshold: raising the threshold raises this too.')),
     el(
       'section',
       { class: 'card' },
@@ -177,6 +186,7 @@ export function settingsView(ctx: ViewContext): View {
   return {
     el: root,
     dispose() {
+      unsubSettings();
       unsubLoc();
       unsubMic();
       account.dispose();
