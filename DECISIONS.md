@@ -535,7 +535,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone; the migration is tested with
   `fake-indexeddb` from a hand-built version-2 database.
 
-## 34. Species tab lists local species by default
+## 36. Species tab lists local species by default
 
 - **Decision:** "local" means the existing BirdNET geo model scores the
   species at or above the range threshold (`geoThreshold`, the Settings
