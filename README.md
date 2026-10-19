@@ -180,9 +180,11 @@ What does leave the phone, and why:
   species' scientific name and your question (up to 500 characters) are sent.
   The server fetches the relevant sections of the Wikipedia article
   (description, voice, range, behaviour, diet, status; capped, cached for
-  seven days on the server) and asks Google's Gemini model to answer from
-  that text alone; the answer comes back as plain text with the sections it
-  cites as links. When the article cannot be fetched, the summary is used. Questions are not logged. There are daily limits per person and
+  seven days on the server) and asks an AI model to answer from that text
+  alone: Ollama Cloud first, Google's Gemini when Ollama is unavailable or
+  over its limit. Both receive exactly the same data (the species name, the
+  Wikipedia sections and your question); nothing about you goes with it. The
+  answer comes back as plain text with the sections it cites as links. When the article cannot be fetched, the summary is used. Questions are not logged. There are daily limits per person and
   overall.
 
 - If you are an approved member and use **Friends** (Settings › Account):

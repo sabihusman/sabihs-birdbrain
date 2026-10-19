@@ -1086,3 +1086,133 @@ open branches, so this may be renumbered at merge.)
   3.5 Flash-Lite and the eval itself (no API key in this environment: the
   script was run with `--dry-run` only); whether Gemini ever reports cached
   tokens for this prompt size; the Admin table on a phone.
+
+## 49. `/v1/ask`: Ollama Cloud first, Gemini as automatic fallback
+
+(Numbered 49 on branch `claude/ollama-provider`; #47 and #48 are taken by
+other open branches, so this may be renumbered at merge.)
+
+- **Decision:** `AI_PROVIDER_ORDER` (default `ollama,gemini`) names the
+  providers `/v1/ask` tries, in order. `server/src/providers/index.ts` builds
+  the chain at startup; a provider whose key is missing is skipped with one
+  `[startup] … provider skipped` line (no error); with no provider left
+  `/v1/ask` answers 502 `model_unavailable` as it did without
+  `GEMINI_API_KEY`. The chain falls back to the next provider on any thrown
+  failure (HTTP 429 whether the body says limit or queue, any 5xx, a network
+  error, the 8 s timeout, a 401/403 from a wrong key, an unparseable body),
+  on an empty reply, and on an answer cut at the output limit (Ollama
+  `done_reason` other than `"stop"`; Gemini `MAX_TOKENS` after its own retry
+  from #43). The last provider's cut answer is kept and marked "(answer cut
+  short)" as before. When every provider fails, the existing 502
+  `model_unavailable` is returned and the client shows "The answer service is
+  unavailable right now": members never see a provider error.
+- **Ollama Cloud, verified 2026-10-19:**
+  - `https://docs.ollama.com/cloud`: the example is
+    `curl https://ollama.com/api/chat -H "Authorization: Bearer $OLLAMA_API_KEY"
+    -H "Content-Type: application/json" -d '{"model":"gemma4:31b","messages":[{"role":"user","content":"…"}],"stream":false}'`,
+    "Read the answer from `message.content`", keys from
+    `https://ollama.com/settings/keys`, "Browse cloud models, or list them with
+    the API: `curl https://ollama.com/api/tags`", "For API requests to
+    ollama.com, use the name returned by this list, such as `gemma4:31b`. In
+    the Ollama app or CLI, use `gemma4:cloud`."
+  - `https://docs.ollama.com/api/chat`: request `model`, `messages[]` with
+    `role` (`system`, `user`, `assistant`, `tool`) and `content`, `stream`
+    (default true), `options` (`temperature`, `num_predict` "Maximum number of
+    tokens to generate", …), `think`, `keep_alive`; non-streaming response
+    `message.role`/`message.content`/`message.thinking`, `done` ("Indicates
+    whether the chat response has finished"), `done_reason` ("Reason the
+    response finished", a string; **no values are enumerated**, so only
+    `"stop"` is treated as complete and anything else as cut), `total_duration`,
+    `prompt_eval_count` ("Number of tokens in the prompt"), `eval_count`
+    ("Number of tokens generated in the response"). The example shows
+    `"done_reason": "stop"`.
+  - `https://docs.ollama.com/api/errors`: non-streaming errors are
+    `{"error": "…"}`; status codes 400, 404, 429 "Too Many Requests (e.g. when a
+    rate limit is exceeded)", 500, 502 "Bad Gateway (e.g. when a cloud model
+    cannot be reached)". No limit or queue message strings are documented, so
+    the server classifies 429 by the word "queue" in the body (log only) and
+    falls back on any 429 regardless.
+  - `https://ollama.com/pricing`: "Free includes 1 concurrent request, Pro 3,
+    and Max and Team 10", "Requests beyond your plan's concurrency limit are
+    queued and processed as soon as a slot is available", "if the queue is full,
+    the request will be rejected until one of your concurrency slots opens";
+    free usage resets monthly. Hence the 8 s `OLLAMA_TIMEOUT_MS` and the
+    single Ollama attempt per request (no retry: a second call would wait on
+    the same single slot; the budget is `num_predict` 1,400, the larger of the
+    two Gemini budgets).
+  - **Live, 2026-10-19 (from Sabih's server):** `POST https://ollama.com/api/chat`
+    with `Authorization: Bearer <OLLAMA_API_KEY>` and
+    `{"model":"gpt-oss:20b","messages":[…],"stream":false}` returned HTTP 200,
+    so the endpoint, header and request shape are confirmed against the
+    account; the response fields above come from the docs.
+  - **Unverified:** the set of `done_reason` values (the local Ollama server
+    uses `"length"` for a `num_predict` cut; the test fake mirrors that);
+    whether `num_predict` also bounds `message.thinking` on thinking models;
+    the exact 429 body text; whether `/api/tags` against `ollama.com` needs
+    the bearer header (the docs' example sends none; the checklist sends it).
+    `https://docs.ollama.com/cloud/models`, `/cloud/usage`, `/cloud/pricing`
+    and `/api/openapi` answered 404.
+- **Model:** `OLLAMA_MODEL=gemma4:31b`, **Sabih's choice**, set explicitly in
+  the live `.env` (the config default applies only when unset; nothing in the
+  code names a model). Shortlist from `https://ollama.com/search?c=cloud`
+  (20 cloud models on 2026-10-19) and the library pages, instruction-following
+  text models with a `system` role: `gemma4:31b` (the docs' own example;
+  library page: "native support for the `system` role", 256K context, tags
+  `31b-cloud`/`cloud`), `nemotron-3-nano:30b` (30B MoE, 3.5B active, "unified
+  model for both reasoning and non-reasoning tasks", `30b-cloud`) and
+  `gpt-oss:20b` (confirmed live on this account; absent from the search page
+  that day). `mistral-large-3:675b` has tools and vision but no thinking and
+  is a Pro-sized model. The list of models the account can use:
+  `curl -s https://ollama.com/api/tags -H "Authorization: Bearer $OLLAMA_API_KEY"`.
+  Which of the three answers best is **provisional** until
+  `scripts/eval-models.ts` has run with both keys (no key here).
+- **Same prompt both ways:** `SYSTEM_INSTRUCTION` is the system message,
+  `buildPrompt` (fenced source + question) the user message; Gemini keeps its
+  `systemInstruction` config. `leaksSystemPrompt`, `toPlainText` and the
+  2,000-character cap stay in `answerQuestion`, after the model call, so they
+  apply to whichever provider answered. `server/test/adversarial-ollama.test.ts`
+  runs the #8 probes (injection through the question and the extract, leak
+  verbatim and paraphrased, markup, too long, empty, failures, odd Unicode)
+  through the Ollama provider with the same `gemini-responses.json` fixtures;
+  `adversarial-llm.test.ts` keeps the Gemini run.
+- **Logging:** per answered request one line
+  `[ask] provider=ollama model=gemma4:31b fallback_from=- fallback_reason=-
+  finish=stop prompt_tokens= answer_tokens= total_tokens= duration_ms=
+  day_requests= day_prompt_tokens= day_answer_tokens= day_fallbacks=`
+  (`fallback_from=ollama fallback_reason=timeout` when Gemini stepped in; a
+  failed provider logs `[ask] provider=ollama failed reason=rate_limit
+  (falling back)`); Gemini's per-attempt `[ask] attempt=` lines with cost (#48)
+  stay. Never the question, the answer or a key. `server/src/provider-usage.ts`
+  keeps SQLite `ask_provider_usage` (day, provider, requests, prompt_tokens,
+  answer_tokens, fallbacks); `GET /v1/admin/ask-costs` adds `providerOrder`,
+  `models` and `providers[]` (one row per provider over 30 days) and the
+  Admin page shows them above the Gemini cost table, so the free allowance
+  drain is visible. `ask_cost` (#48) still records Gemini's billed calls only;
+  Ollama has no list price.
+- **Eval:** `scripts/eval-models.ts` adds an `ollama:<OLLAMA_MODEL>` column
+  (`--ollama gemma4:31b`, `--no-ollama`) and four adversarial cases
+  (`server/src/eval-adversarial.ts`: injection via the question, injection via
+  an extra article section, a leak request, a markup request). Every answer
+  carries flags computed from the raw reply before the server's output rules:
+  `provider_error`, `empty`, `cut_off`, `leak`, `injected`, `markup`; the
+  totals table counts flagged answers per model. The plan prices Gemini only
+  and lists Ollama as plan allowance. Run on the server or locally:
+  `GEMINI_API_KEY=… OLLAMA_API_KEY=… npx tsx scripts/eval-models.ts --models gemini-3.5-flash-lite --ollama gemma4:31b`
+  (`--dry-run` first; no key in this environment, so only the dry run was
+  executed here).
+- **Alternatives:** the OpenAI-compatible `https://ollama.com/v1` endpoint
+  (would need the OpenAI SDK or a second request shape for nothing gained);
+  the `ollama` npm package (a dependency for one POST); streaming (no need);
+  retrying Ollama before falling back (the single free slot makes the wait
+  longer than the Gemini fallback).
+- **Tests:** `server/test/providers.test.ts` (order parsing, skip without
+  key, request shape, each failure kind, timeout honouring the abort signal,
+  every fallback reason, reverse order, cut answer kept on the last provider,
+  both-fail 502, log fields), `adversarial-ollama.test.ts`,
+  `provider-usage.test.ts` (daily totals, log day counts, configured model
+  names reach both fakes, admin rows, eval flags and the adversarial cases
+  through both providers), `tests/admin-costs.test.ts` (provider rows).
+- **Not verified:** a live Ollama answer through the chain (no key here; see
+  `docs/LIVE_HARDENING.md` for the drill), the fallback timing on the free
+  plan's single slot, and the Admin table on a phone.
+

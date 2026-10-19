@@ -87,6 +87,18 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   Nginx site files, lego renew units, forced-command deploy user files; see
   `server/deploy/README.md`). Env variable names: `server/.env.example`.
   Default Gemini model: `gemini-3.8-flash` (`GEMINI_MODEL`).
+- AI providers for `/v1/ask` (DECISIONS.md #49): `src/providers/ollama.ts`
+  (Ollama Cloud, `POST https://ollama.com/api/chat`, plain `fetch` with an
+  `AbortController` timeout), `src/providers/gemini.ts` (the existing wrapper
+  behind the provider interface), `src/providers/index.ts` (the chain:
+  `AI_PROVIDER_ORDER`, default `ollama,gemini`, fallback on any failure,
+  empty or cut-off answer; one `[ask] provider=… fallback_from=…` line per
+  request). `src/provider-usage.ts` keeps per-provider daily totals
+  (`ask_provider_usage`) shown on the admin cost summary. The live `.env`
+  sets `OLLAMA_MODEL` and `GEMINI_MODEL`; never hardcode model names.
+  Tests: `test/fake-ollama.ts`, `test/providers.test.ts`,
+  `test/adversarial-ollama.test.ts`, `test/provider-usage.test.ts`.
+  `docs/LIVE_HARDENING.md` is the checklist to run against the live server.
 - Server state (installed 2026-10-19 with `setup.sh` steps 1-8 on 95.216.159.93,
   which also hosts other projects that must never be touched; see
   `server/deploy/README.md`): `/opt/birdbrain/.env` sets `BIRDBRAIN_IMAGE_TAG=latest`,
