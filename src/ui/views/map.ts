@@ -1,5 +1,6 @@
 import L from 'leaflet';
 import 'leaflet.markercluster';
+import 'leaflet.heat';
 import type { AppController } from '../../app/controller';
 import { speciesColor } from '../../species/colors';
 import { listDetections } from '../../storage/db';
@@ -49,6 +50,35 @@ export function createMiniMap(container: HTMLElement, dets: DetectionRecord[], c
   const bounds = cluster.getBounds();
   if (bounds.isValid()) map.fitBounds(bounds.pad(0.2), { maxZoom: 14 });
   return () => map.remove();
+}
+
+export type HistoryMapMode = 'pins' | 'heat';
+
+/**
+ * Map for one species' sighting history: clustered pins or a heat layer
+ * (leaflet.heat, BSD-2-Clause) over the same OSM tiles. Returns controls.
+ */
+export function createHistoryMap(container: HTMLElement, dets: DetectionRecord[], controller: AppController, mode: HistoryMapMode): { setMode(mode: HistoryMapMode): void; dispose(): void } {
+  const map = baseMap(container);
+  const pins = L.markerClusterGroup({ maxClusterRadius: 40 });
+  for (const d of dets) pins.addLayer(markerFor(d, controller));
+  // Weight each point by confidence so sure identifications glow brighter.
+  const heat = L.heatLayer(
+    dets.map((d) => [d.lat!, d.lon!, Math.max(0.2, d.confidence)] as L.HeatLatLngTuple),
+    { radius: 28, blur: 20, maxZoom: 17, minOpacity: 0.3 },
+  );
+  let current: L.Layer | null = null;
+  const setMode = (m: HistoryMapMode) => {
+    const next = m === 'heat' ? heat : pins;
+    if (current === next) return;
+    if (current) map.removeLayer(current);
+    map.addLayer(next);
+    current = next;
+  };
+  setMode(mode);
+  const bounds = pins.getBounds();
+  if (bounds.isValid()) map.fitBounds(bounds.pad(0.2), { maxZoom: 15 });
+  return { setMode, dispose: () => map.remove() };
 }
 
 export function mapView(ctx: ViewContext): View {

@@ -6,9 +6,7 @@ the device, using the BirdNET V2.4 neural network running in TensorFlow.js
 inside a Web Worker. It records, re-analyses, explains its own identifications,
 looks species up, maps where you heard them, and works offline once installed.
 
-Live app: **https://sabihs-birdbrain.vercel.app** (verified 2026-10-19). GitHub
-Pages at https://sabihusman.github.io/sabihs-birdbrain/ stays published as a
-fallback for now. API: `https://bird-brain.duckdns.org` (`server/`).
+Live app: **https://sabihs-birdbrain.vercel.app**. API: `https://bird-brain.duckdns.org` (`server/`).
 
 | Listen (light) | Listen (dark) | Species | Map |
 | --- | --- | --- | --- |
@@ -87,7 +85,13 @@ The name is always shown next to the colour.
 - **Listen:** Start/Stop continuous listening, multi-species results with
   confidences, confidence threshold slider, elapsed time, inference time,
   dropped-window count, screen wake lock (with a notice when unsupported),
-  resume after returning to the foreground, a “Try the sample clip” demo.
+  resume after returning to the foreground, a “Try the sample clip” demo,
+  and a conditions indicator (Good / Too quiet / Windy, guidance only).
+- **Microphone handling:** asks the browser for raw audio (echo cancellation,
+  noise suppression and automatic gain off) and shows in Settings what was
+  actually applied; a 150 Hz low-cut filter on the analysis path (default on)
+  removes wind rumble from what the model hears while saved recordings stay
+  unfiltered.
 - **Location filter:** GPS plus BirdNET’s week-of-year (four per month) through
   the official geo model; manual coordinates or off when location is denied.
   The strongest filtered-out species is shown greyed so the filter is visible.
@@ -97,6 +101,12 @@ The name is always shown next to the colour.
   3 s clip per detection.
 - **Location sharing:** every located detection shows coordinates and a
   10-character Plus Code with copy buttons and an "Open in Google Maps" link.
+- **Species ID card and sighting history (members):** on each species page, a
+  card with the most recent sighting (Plus Code, coordinates, mini map, Google
+  Maps link) and a play button for the species' saved clip; tap it for the
+  full sighting history with a heat map / pin map of your own detections. One
+  raw 10-second clip is kept per species and replaced only by a more confident
+  detection. Free users see a short "Sign in to unlock" note instead.
 - **Accounts (optional):** email + password + emailed code; approved members
   can ask AI questions about a species, answered only from its Wikipedia
   summary; Sabih approves members on an admin page.
@@ -108,8 +118,10 @@ The name is always shown next to the colour.
 - **Map:** OpenStreetMap with markers in species colours, clustering, species
   and date filters, tap a marker to open the species page. Attribution shown;
   tiles are never cached or prefetched.
-- **Settings:** threshold, overlap, location source and manual coordinates,
-  seasonal filter, species-range threshold, auto-save, compute backend,
+- **Settings:** threshold (default 60 %; lower catches faint birds but adds
+  false IDs), overlap, location source and manual coordinates,
+  seasonal filter, species-range threshold, auto-save (its own confidence bar,
+  never below the threshold), compute backend,
   occlusion resolution, storage used vs available, `navigator.storage.persist()`
   result, CSV and GeoJSON export, delete all.
 - **PWA:** manifest, icons, apple-touch-icon, service worker precaching the app
@@ -137,6 +149,14 @@ What does leave the phone, and why:
   answer from that text alone; the answer comes back as plain text with the
   source link. Questions are not logged. There are daily limits per person and
   overall.
+
+Member features keep everything on the device too: the species ID card,
+sighting history, heat map and the one saved clip per species are read from
+IndexedDB and are never uploaded. The heat map in particular is sensitive
+location data (it shows where you have been listening); it is built from your
+own detections only, is not part of the exports, and signing out hides it
+without deleting anything. Whether you are a member is decided from the
+session cached on the device, so no request is made to check it.
 
 No analytics, no ads, no third-party trackers. The API's design and its review
 against the OWASP LLM Top 10 and ASVS are in [docs/SECURITY.md](docs/SECURITY.md).
@@ -177,10 +197,10 @@ both apps agree.
 
 ```
 npm install
-npm run dev            # http://localhost:5173/sabihs-birdbrain/
+npm run dev            # http://localhost:5173/
 npm run lint && npm run typecheck && npm test
 npm run build          # typecheck + vite build → dist/
-npm run preview        # serve the build at http://localhost:4173/sabihs-birdbrain/
+npm run preview        # serve the build at http://localhost:4173/
 npm run test:e2e       # Playwright: loads the model, analyses the bundled sample, goes offline
 cd server && npm install && npm test   # API unit + integration tests (fake mailer, in-memory SQLite)
 ```
@@ -196,8 +216,8 @@ and decoding, occlusion masking, and CSV/GeoJSON export. The Playwright test
 runs the built app in Chromium at iPhone size, waits for the models to load in
 the worker, identifies the sample clip that ships with the official BirdNET
 TF.js export (a redpoll), checks the WebAssembly fallback, then reloads offline
-and does it again from the caches. GitHub Actions runs all of it on every push
-and deploys `dist/` to GitHub Pages on every push to `main`.
+and does it again from the caches. GitHub Actions runs all of it on every push;
+Vercel builds and deploys the front end from `main`.
 
 Architecture notes for contributors are in [CLAUDE.md](CLAUDE.md); the build
 decisions and their alternatives are in [DECISIONS.md](DECISIONS.md); sources,

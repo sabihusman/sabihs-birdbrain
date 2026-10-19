@@ -11,7 +11,7 @@ import { createUsageStore } from './db.js';
 import { clientIp, emailSchema, passwordSchema, readJson } from './http.js';
 import type { SpeciesLabels } from './labels.js';
 import { LoginChallenges } from './login-codes.js';
-import type { Mailer } from './mailer.js';
+import { MailError, type Mailer } from './mailer.js';
 import { RateLimiter } from './rate-limit.js';
 import { Users } from './users.js';
 import type { WikiFetcher } from './wiki.js';
@@ -35,7 +35,7 @@ const loginSchema = z.object({ email: emailSchema, password: passwordSchema }).s
 const verifySchema = z.object({ challenge: z.string().min(16).max(64), code: z.string().regex(/^\d{6}$/) }).strict();
 const idParam = z.string().min(1).max(64);
 
-const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 502, body: unknown) => c.json(body, status);
+const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 502 | 503, body: unknown) => c.json(body, status);
 
 export function createApp(deps: AppDeps) {
   const { config, db, auth, mailer, labels } = deps;
@@ -75,6 +75,12 @@ export function createApp(deps: AppDeps) {
     return json(c, 500, { error: 'internal_error' });
   });
   app.notFound((c) => json(c, 404, { error: 'not_found' }));
+
+  /** One safe line for the log: the error kind, never the recipient or the code. */
+  function describeMailError(err: unknown): string {
+    if (err instanceof MailError) return `${err.code}: ${err.message}`;
+    return err instanceof Error ? `${err.name}: ${err.message}` : 'unknown error';
+  }
 
   app.get('/health', (c) => c.json({ ok: true }));
 
@@ -129,11 +135,18 @@ export function createApp(deps: AppDeps) {
       return json(c, 403, { error: 'account_disabled' });
     }
     const challenge = challenges.create(user.id, user.email, token);
-    await mailer.send({
-      to: user.email,
-      subject: 'Your Birdbrain sign-in code',
-      text: `Your sign-in code is ${challenge.code}\n\nIt expires in ${Math.round(config.LOGIN_CODE_TTL_SECONDS / 60)} minutes. If you did not try to sign in to Sabih’s Birdbrain, ignore this message.`,
-    });
+    try {
+      await mailer.send({
+        to: user.email,
+        subject: 'Your Birdbrain sign-in code',
+        text: `Your sign-in code is ${challenge.code}\n\nIt expires in ${Math.round(config.LOGIN_CODE_TTL_SECONDS / 60)} minutes. If you did not try to sign in to Sabih’s Birdbrain, ignore this message.`,
+      });
+    } catch (err) {
+      // A hanging or failing SMTP path must not stall the request into the proxy timeout:
+      // answer quickly and clearly. Never log the address or the code.
+      console.error(`[error] login mail failed: ${describeMailError(err)}`);
+      return json(c, 503, { error: 'email_unavailable' });
+    }
     return json(c, 200, { challenge: challenge.id, expiresInSeconds: config.LOGIN_CODE_TTL_SECONDS });
   });
 
@@ -194,10 +207,17 @@ export function createApp(deps: AppDeps) {
     const target = users.get(id.data);
     if (!target) return json(c, 404, { error: 'not_found' });
     users.setStatus(id.data, status);
+    let emailed = false;
     if (status === 'approved' && target.status !== 'approved') {
-      await mailer.send({ to: target.email, subject: 'Your Birdbrain account is approved', text: 'Sabih approved your account. Sign in again to use member features.' });
+      // The approval itself is already saved; a mail failure must not undo or hide it.
+      try {
+        await mailer.send({ to: target.email, subject: 'Your Birdbrain account is approved', text: 'Sabih approved your account. Sign in again to use member features.' });
+        emailed = true;
+      } catch (err) {
+        console.error(`[error] approval mail failed: ${describeMailError(err)}`);
+      }
     }
-    return json(c, 200, { ok: true, user: publicUser({ ...target, status }) });
+    return json(c, 200, { ok: true, user: publicUser({ ...target, status }), emailed });
   });
 
   // ---- ask ------------------------------------------------------------------

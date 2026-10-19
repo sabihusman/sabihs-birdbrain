@@ -47,7 +47,23 @@ export function listenView(ctx: ViewContext): View {
     settings.update({ threshold: v });
     rerenderResults();
   });
-  const threshold = el('div', { class: 'slider' }, el('div', { class: 'row' }, el('span', null, 'Confidence threshold'), thresholdValue), thresholdInput);
+  const threshold = el(
+    'div',
+    { class: 'slider' },
+    el('div', { class: 'row' }, el('span', null, 'Confidence threshold'), thresholdValue),
+    thresholdInput,
+    el('div', { class: 'small muted', 'data-testid': 'threshold-help' }, 'Lower catches faint or distant birds but adds false IDs.'),
+  );
+
+  // Conditions indicator: name + advice, guidance only, never blocks listening.
+  const conditionsTitle = el('strong', { 'data-testid': 'conditions' }, 'Conditions: –');
+  const conditionsAdvice = el('div', { class: 'small muted' }, 'Start listening to see whether the sound reaching the microphone is usable.');
+  const conditionsBox = el('div', { class: 'conditions', role: 'status', 'aria-live': 'polite' }, el('div', null, conditionsTitle, el('span', { class: 'small muted' }, ' · guidance only')), conditionsAdvice);
+  const renderConditions = (a: ReturnType<typeof controller.getConditions>) => {
+    conditionsBox.dataset.label = a?.label ?? '';
+    conditionsTitle.textContent = `Conditions: ${a ? a.title : '–'}`;
+    conditionsAdvice.textContent = a ? a.advice : controller.listening ? 'Measuring…' : 'Start listening to see whether the sound reaching the microphone is usable.';
+  };
 
   const locationLine = el('div', { class: 'small muted', 'data-testid': 'location-status' }, '');
   const locationBox = el('div', { 'data-testid': 'location-block' });
@@ -71,6 +87,7 @@ export function listenView(ctx: ViewContext): View {
   const timelineCanvas = el('canvas', { class: 'timeline', 'aria-label': 'Per-species confidence over time' });
   const legend = el('div', { class: 'legend' });
   const waveform = new WaveformView(waveCanvas);
+  const waveLabel = el('div', { class: 'viz-label', 'data-testid': 'waveform-label' }, 'Waveform (last 3 s), auto-scaled to the loudest recent sample');
   const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10);
   const timeline = new TimelineView(timelineCanvas, legend, () => controller.species);
   timeline.setThreshold(settings.get().threshold);
@@ -79,16 +96,16 @@ export function listenView(ctx: ViewContext): View {
   const root = el(
     'div',
     null,
-    el('section', { class: 'card' }, el('div', { class: 'row' }, startBtn, recordBtn), level, el('div', { class: 'row between' }, status, demoBtn), modelBox, el('div', { class: 'small muted' }, 'Keep the screen on and the app in front: iOS pauses the microphone in the background.')),
+    el('section', { class: 'card' }, el('div', { class: 'row' }, startBtn, recordBtn), level, conditionsBox, el('div', { class: 'row between' }, status, demoBtn), modelBox, el('div', { class: 'small muted' }, 'Keep the screen on and the app in front: iOS pauses the microphone in the background.')),
     el('section', { class: 'card' }, el('h2', null, 'Heard now'), resultsList, resultsEmpty, threshold, locationLine, locationBox, wakeLine, stats),
     el(
       'section',
       { class: 'card' },
       el('h2', null, 'What the model sees'),
       waveCanvas,
-      el('div', { class: 'viz-label' }, 'Waveform (last 3 s)'),
+      waveLabel,
       specBox,
-      el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT. An approximation of the two mel spectrograms BirdNET builds internally. Dashed box: current 3 s analysis window. Colour strips: species detected in each analysed window.'),
+      el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT. An approximation of the two mel spectrograms BirdNET builds internally. Colours follow the loudest recent sound (range shown bottom right). Dashed box: current 3 s analysis window. Colour strips: species detected in each analysed window.'),
       timelineCanvas,
       legend,
       el('div', { class: 'viz-label' }, 'Confidence per species over recent windows (dashed line = your threshold).'),
@@ -154,6 +171,8 @@ export function listenView(ctx: ViewContext): View {
       spectrogram.draw();
       timeline.draw();
       dirty = false;
+      const label = `Waveform (last 3 s), auto-scaled to the loudest recent sample: gain ×${waveform.gain}`;
+      if (waveLabel.textContent !== label) waveLabel.textContent = label;
     }
     raf = requestAnimationFrame(loop);
   };
@@ -185,6 +204,7 @@ export function listenView(ctx: ViewContext): View {
         timelinePoints.length = 0;
         status.textContent = 'Starting microphone…';
         await controller.startListening();
+        renderConditions(null);
         status.textContent = `Listening at ${controller.engine.contextSampleRate ?? '?'} Hz${controller.engine.contextSampleRate !== 48000 ? ' (resampling to 48 kHz)' : ''}`;
         pipeline.setResampling(controller.engine.contextSampleRate !== 48000);
       }
@@ -229,6 +249,7 @@ export function listenView(ctx: ViewContext): View {
       (level.firstElementChild as HTMLElement).style.width = `${Math.min(100, Math.round(Math.sqrt(l) * 140))}%`;
     }),
     controller.on('window-result', onResult),
+    controller.on('conditions', renderConditions),
     controller.on('stage', (s) => pipeline.pulse(s)),
     controller.on('model', (s) => {
       modelText.textContent = s.state === 'ready' ? `Model ready on ${s.backend} (loaded in ${(s.loadMs / 1000).toFixed(1)} s, warm-up ${(s.warmupMs / 1000).toFixed(1)} s)` : s.message;
@@ -265,6 +286,7 @@ export function listenView(ctx: ViewContext): View {
     const n = controller.getGeoCount();
     geoStat.textContent = n > 0 ? String(n) : 'all';
     if (controller.listening) status.textContent = 'Listening…';
+    renderConditions(controller.getConditions());
     updateButtons();
     rerenderResults();
   }

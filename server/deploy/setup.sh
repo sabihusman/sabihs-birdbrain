@@ -198,10 +198,11 @@ step8_container() {
   (
     cd "$APP_DIR"
     run docker compose pull api
-    # `create` builds the container and its named volumes without starting anything. The image
-    # has no /data or /backups directory, so Docker would create those mount points as root:root
-    # 0755 and the app (user 1000, read-only root fs) could not write its SQLite file. Chown the
-    # two volumes from a throwaway container; harmless when repeated.
+    # `create` builds the container and its named volumes without starting anything. Images
+    # built before the Dockerfile created /data and /backups (owned by uid 1000) had no such
+    # directories, so Docker created the mount points as root:root 0755 and the app (user 1000,
+    # read-only root fs) could not write its SQLite file. Newer images make this chown a no-op
+    # for fresh volumes; it stays for volumes created by the older images. Harmless when repeated.
     run docker compose create api
     run docker run --rm --network none -v birdbrain-data:/data -v birdbrain-backups:/backups alpine chown 1000:1000 /data /backups
     run docker compose up -d api

@@ -85,11 +85,13 @@ tag is pinned, so promoting a new build means editing that one line (or setting
 `latest`) and running the deploy script. Digest pinning (`@sha256:...`) is the
 stricter option once the image is stable.
 
-**Volume ownership.** The image has no `/data` or `/backups` directory, so Docker would
-create the named volumes' mount points as `root:root 0755`, and the container (user 1000,
-read-only root filesystem) could not create its SQLite file. Step 8 therefore runs
-`docker compose create api` first, chowns both volumes to `1000:1000` from a throwaway
-`alpine` container, and only then `docker compose up -d api`. Rerunning is harmless.
+**Volume ownership.** The image creates `/data` and `/backups` owned by uid 1000, so a
+new named volume mounted there inherits that ownership and the container (user 1000,
+read-only root filesystem) can create its SQLite file. Images built before that change
+had no such directories, so Docker created the mount points as `root:root 0755`. Step 8
+therefore still runs `docker compose create api` first, chowns both volumes to
+`1000:1000` from a throwaway `alpine` container (a no-op for volumes created by the
+current image), and only then `docker compose up -d api`. Rerunning is harmless.
 
 ## 4. Daily backup
 

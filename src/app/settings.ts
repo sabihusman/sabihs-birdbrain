@@ -7,6 +7,8 @@ export type LocationMode = 'auto' | 'manual' | 'off';
 export type OcclusionResolution = 'coarse' | 'medium' | 'fine';
 
 export interface Settings {
+  /** Stored-settings schema version; bumped when a saved default is migrated (see migrate()). */
+  version: number;
   threshold: number;
   overlapSeconds: number;
   locationMode: LocationMode;
@@ -20,10 +22,18 @@ export interface Settings {
   occlusionResolution: OcclusionResolution;
   includeNonBird: boolean;
   showAdvancedViz: boolean;
+  /** 150 Hz high-pass on the analysis path (live and imported clips). Saved audio is never filtered. */
+  lowCut: boolean;
 }
 
+/** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
+export const SETTINGS_VERSION = 2;
+/** Default confidence threshold before version 2; a saved 25 % is migrated once to the new default. */
+export const LEGACY_DEFAULT_THRESHOLD = 0.25;
+
 export const DEFAULT_SETTINGS: Settings = {
-  threshold: 0.25,
+  version: SETTINGS_VERSION,
+  threshold: 0.6,
   overlapSeconds: DEFAULT_OVERLAP_SECONDS,
   locationMode: 'auto',
   manualLat: null,
@@ -31,11 +41,12 @@ export const DEFAULT_SETTINGS: Settings = {
   geoThreshold: GEO_FILTER_THRESHOLD,
   useWeek: true,
   autoSaveClips: false,
-  autoSaveMinConfidence: 0.5,
+  autoSaveMinConfidence: 0.6,
   backend: 'auto',
   occlusionResolution: 'coarse',
   includeNonBird: false,
   showAdvancedViz: true,
+  lowCut: true,
 };
 
 const KEY = 'birdbrain.settings.v1';
@@ -54,7 +65,7 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
       const raw = storage.getItem(KEY);
       if (!raw) return { ...DEFAULT_SETTINGS };
       const parsed = JSON.parse(raw) as Partial<Settings>;
-      return sanitize({ ...DEFAULT_SETTINGS, ...parsed });
+      return sanitize(migrate(parsed));
     } catch {
       return { ...DEFAULT_SETTINGS };
     }
@@ -76,14 +87,31 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
   }
 }
 
+/**
+ * One-time migrations of saved settings, keyed by the stored `version`.
+ * Version 1 (or none) → 2: a saved threshold equal to the old default (25 %)
+ * becomes the new default (60 %); any other value was chosen by the user and
+ * stays. Once stamped with version 2, a threshold of 25 % is a choice too.
+ */
+export function migrate(parsed: Partial<Settings>): Settings {
+  const stored = { ...DEFAULT_SETTINGS, ...parsed };
+  const from = typeof parsed.version === 'number' ? parsed.version : 1;
+  if (from < 2 && parsed.threshold === LEGACY_DEFAULT_THRESHOLD) stored.threshold = DEFAULT_SETTINGS.threshold;
+  stored.version = SETTINGS_VERSION;
+  return stored;
+}
+
 export function sanitize(s: Settings): Settings {
   const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+  const threshold = clamp(s.threshold, 0.05, 0.99, DEFAULT_SETTINGS.threshold);
   return {
     ...s,
-    threshold: clamp(s.threshold, 0.05, 0.99, DEFAULT_SETTINGS.threshold),
+    version: SETTINGS_VERSION,
+    threshold,
     overlapSeconds: clamp(s.overlapSeconds, 0, 2.5, DEFAULT_SETTINGS.overlapSeconds),
     geoThreshold: clamp(s.geoThreshold, 0, 1, DEFAULT_SETTINGS.geoThreshold),
-    autoSaveMinConfidence: clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence),
+    // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
+    autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),
     manualLon: s.manualLon == null || !Number.isFinite(s.manualLon) ? null : clamp(s.manualLon, -180, 180, 0),
   };
