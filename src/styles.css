@@ -127,7 +127,7 @@ main.view { flex: 1; padding: var(--space-3) calc(var(--space-3) + var(--sar)) c
 .slider .row { justify-content: space-between; font-size: 0.9rem; }
 .chip { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-control); background: var(--surface-2); text-decoration: none; color: inherit; min-height: 48px; }
 .chip.out-of-range { opacity: 0.55; }
-/* Species dots keep their own colour in both themes; the 1 px muted ring keeps them visible on the cream card (DECISIONS.md #37). */
+/* Species dots keep their own colour in both themes; the 1 px muted ring keeps them visible on the cream card (DECISIONS.md #39). */
 .chip .swatch, .legend-item .swatch, .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; box-shadow: 0 0 0 1px var(--muted); }
 .chip-names { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .chip-common { font-weight: 600; }

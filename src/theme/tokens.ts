@@ -4,7 +4,7 @@
  * CSS variables at runtime) so no colour is hard-coded twice.
  *
  * Deviations from the guide's starting values, all for WCAG AA (recorded in
- * DECISIONS.md #37): light `--warn` #A8661B → #8F5614 (4.26:1 → 5.4:1 on the
+ * DECISIONS.md #39): light `--warn` #A8661B → #8F5614 (4.26:1 → 5.4:1 on the
  * card as text) and light `--muted` #6A7066 → #5F665C (4.33:1 → 5.2:1 on the
  * page).
  */
