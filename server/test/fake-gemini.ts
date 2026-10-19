@@ -1,8 +1,8 @@
 import type { GenerateContentParameters } from '@google/genai';
 import { readFileSync } from 'node:fs';
-import type { GenAiClient } from '../src/ask.js';
+import type { GenAiClient, GenAiResponse } from '../src/ask.js';
 
-export type Scenario = 'answer' | 'refusal' | 'leak_verbatim' | 'leak_paraphrased' | 'followed_injection' | 'markup' | 'too_long' | 'throw' | 'empty';
+export type Scenario = 'answer' | 'refusal' | 'leak_verbatim' | 'leak_paraphrased' | 'followed_injection' | 'markup' | 'too_long' | 'throw' | 'empty' | 'truncated_once' | 'truncated_twice';
 
 const fixtures = JSON.parse(readFileSync(new URL('./fixtures/gemini-responses.json', import.meta.url), 'utf8')) as Record<string, string>;
 
@@ -11,6 +11,8 @@ export function pickScenario(prompt: string): Scenario {
   const q = (prompt.split('\nQUESTION: ')[1] ?? '').toLowerCase();
   if (q.includes('[scenario:throw]')) return 'throw';
   if (q.includes('[scenario:empty]')) return 'empty';
+  if (q.includes('[scenario:truncated_once]')) return 'truncated_once';
+  if (q.includes('[scenario:truncated_twice]')) return 'truncated_twice';
   if (q.includes('[scenario:markup]')) return 'markup';
   if (q.includes('[scenario:too_long]')) return 'too_long';
   if (q.includes('[scenario:followed_injection]')) return 'followed_injection';
@@ -33,15 +35,29 @@ export function recordedResponse(s: Scenario): string {
   }
 }
 
+/** What Gemini returns when generation stops at maxOutputTokens: a half sentence, finishReason MAX_TOKENS, token counts. */
+export function truncatedResponse(limit: number): GenAiResponse {
+  return {
+    text: fixtures.truncated,
+    candidates: [{ finishReason: 'MAX_TOKENS' }],
+    usageMetadata: { promptTokenCount: 1800, candidatesTokenCount: limit, thoughtsTokenCount: 300, totalTokenCount: 1800 + limit + 300 },
+  };
+}
+
 /** Stand-in for `new GoogleGenAI({ apiKey }).models`: records every call, answers from the fixtures. */
 export class FakeGemini implements GenAiClient {
   readonly calls: GenerateContentParameters[] = [];
   readonly models = {
-    generateContent: (params: GenerateContentParameters): Promise<{ text: string | undefined }> => {
+    generateContent: (params: GenerateContentParameters): Promise<GenAiResponse> => {
       this.calls.push(params);
       const prompt = typeof params.contents === 'string' ? params.contents : JSON.stringify(params.contents);
+      const limit = params.config?.maxOutputTokens ?? 0;
+      const scenario = pickScenario(prompt);
+      // The retry (a larger limit) completes the answer in `truncated_once`; `truncated_twice` is cut both times.
+      if (scenario === 'truncated_twice' || (scenario === 'truncated_once' && this.calls.length === 1)) return Promise.resolve(truncatedResponse(limit));
       try {
-        return Promise.resolve({ text: recordedResponse(pickScenario(prompt)) });
+        const text = scenario === 'truncated_once' ? fixtures.answer : recordedResponse(scenario);
+        return Promise.resolve({ text, candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 1800, candidatesTokenCount: 120, thoughtsTokenCount: 200, totalTokenCount: 2120 } });
       } catch (e) {
         return Promise.reject(e instanceof Error ? e : new Error(String(e)));
       }

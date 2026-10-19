@@ -771,3 +771,31 @@ Sabih's approval and a baseline check of the other sites after every reload.
   `audio.currentTime` in a `requestAnimationFrame` loop, whose timing against
   the sound on iOS Safari has not been checked. Playwright exercises the card
   with the bundled sample (one window, the occlusion run) in Chromium.
+
+## 43. `/v1/ask` reads Gemini's finish reason; no half sentences
+
+- **Problem:** live answers ended mid-sentence ("…though it notes that the").
+  The call asked for 400 output tokens and the model's own thinking counts
+  against the same allowance on thinking models, so the visible answer was
+  cut without any sign of it.
+- **Decision:** `createGeminiModel` sends `maxOutputTokens: 700` (room for 2–4
+  short paragraphs with citations) and `thinkingConfig.thinkingLevel: LOW`
+  (`ThinkingConfig.thinkingLevel` / `ThinkingLevel.LOW` in `@google/genai`
+  2.30). The Gemini API "Thinking" page lists `gemini-3.8-flash` with levels
+  low, medium and high (default medium); `thinking_budget` is kept only for
+  backward compatibility and cannot be combined with `thinking_level` (400),
+  so the legacy field is not sent. It reads
+  `candidates[0].finishReason`; on `MAX_TOKENS` it retries once with 1400,
+  and if that is cut too it returns the complete sentences (citations kept)
+  followed by "(answer cut short)". The system instruction already asked for
+  at most 120 words. Each call logs one line, `[ask] attempt= limit= finish=
+  prompt_tokens= answer_tokens= thinking_tokens= total_tokens=`, never the
+  question or the answer.
+- **Alternatives:** streaming (more code for the same result); raising the
+  limit alone (hides the cause); asking the model to "finish the sentence"
+  (another call, same risk).
+- **Tests:** `server/test/ask-truncation.test.ts` with `FakeGemini` returning
+  `finishReason: 'MAX_TOKENS'` once and twice.
+- **Not verified:** a live call with the level set (a rejected value surfaces
+  through the existing 502 path; adjust `ANSWER_THINKING_LEVEL` in
+  `server/src/ask.ts`).
