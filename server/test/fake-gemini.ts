@@ -37,14 +37,18 @@ export function recordedResponse(s: Scenario): string {
 export class FakeGemini implements GenAiClient {
   readonly calls: GenerateContentParameters[] = [];
   readonly models = {
-    generateContent: async (params: GenerateContentParameters) => {
+    generateContent: (params: GenerateContentParameters): Promise<{ text: string | undefined }> => {
       this.calls.push(params);
       const prompt = typeof params.contents === 'string' ? params.contents : JSON.stringify(params.contents);
-      return { text: recordedResponse(pickScenario(prompt)) };
+      try {
+        return Promise.resolve({ text: recordedResponse(pickScenario(prompt)) });
+      } catch (e) {
+        return Promise.reject(e instanceof Error ? e : new Error(String(e)));
+      }
     },
   };
   get last(): GenerateContentParameters {
-    const c = this.calls[this.calls.length - 1];
+    const c = this.calls.at(-1);
     if (!c) throw new Error('no Gemini call recorded');
     return c;
   }

@@ -143,7 +143,7 @@ describe('adversarial: bearer tokens', () => {
     expect((await post(t.app, `/v1/admin/users/${id}/reject`, {}, bearer(admin))).status).toBe(200);
     expect((await get(t.app, '/v1/me', bearer(token2))).status).toBe(401);
     expect((await post(t.app, '/v1/auth/login', { email, password: PASSWORD })).status).toBe(403);
-    expect(t.mailer.sent.filter((m) => m.to === email && /code/i.test(m.subject)).length).toBe(2); // no code mail after rejection
+    expect(t.mailer.sent.filter((m) => m.to === email && /code/i.test(m.subject))).toHaveLength(2); // no code mail after rejection
   });
 
   it('a session issued at the password step is unusable until the code is verified', async () => {
@@ -180,7 +180,7 @@ describe('adversarial: authorization', () => {
     const body = { species: 'Turdus merula', question: 'What does it eat?' };
     expect((await post(t.app, '/v1/ask', body, bearer(token))).status).toBe(403);
     expect(wikiCalls).toBe(0);
-    expect(t.modelCalls.length).toBe(0);
+    expect(t.modelCalls).toHaveLength(0);
     // status cannot be set from the client side: signup ignores extra fields, verify returns the stored status
     const su = await post(t.app, '/v1/auth/signup', { email: 'elevate@example.com', password: PASSWORD, status: 'approved', role: 'admin' });
     expect(su.status).toBe(400); // strict schema

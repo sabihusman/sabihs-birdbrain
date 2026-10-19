@@ -169,14 +169,14 @@ describe('LLM10 output handling and LLM06 consumption', () => {
     expect((await t.app.request('/v1/ask', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://birdbrain-test.vercel.app', ...bearer(token) }, body: '{"species": "Turdus merula", "question": "unterminated' })).status).toBe(400);
     expect((await t.app.request('/v1/ask', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://birdbrain-test.vercel.app', ...bearer(token) }, body: JSON.stringify({ species: SPECIES, question: 'What?', pad: 'x'.repeat(20_000) }) })).status).toBe(413);
     expect(wikiCalls).toBe(0);
-    expect(gemini.calls.length).toBe(0);
+    expect(gemini.calls).toHaveLength(0);
     // accepted but sanitised: control characters, bidi overrides and zero-width characters do not reach the prompt as controls
-    const odd = 'What\u0000 does‮ it​ eat?\u0007 Ünïcödé ok 🐦';
+    const odd = 'What\u0000 does\u202E it\u200B eat?\u0007 \u00DCn\u00EFc\u00F6d\u00E9 ok \uD83D\uDC26'; // escapes only: no literal bidi or control characters in source
     const r = await ask(t, token, odd);
     expect(r.status).toBe(200);
     const contents = gemini.last.contents as string;
     expect(contents).not.toMatch(/[\u0000\u0007]/);
-    expect(contents).toContain('Ünïcödé ok 🐦');
+    expect(contents).toContain('\u00DCn\u00EFc\u00F6d\u00E9 ok \uD83D\uDC26');
   });
 
   it('answerQuestion never calls the model for a pending user or unknown species', async () => {

@@ -56,7 +56,7 @@ export const SYSTEM_INSTRUCTION = [
 export function neutralizeFence(text: string): string {
   return (
     text
-      .replace(/<\s*\/?\s*source\b[^>]*>/gi, '')
+      .replace(/<[\s/]*source\b[^>]*>/gi, '')
       // control characters other than tab and newline carry nothing a question or summary needs
       // eslint-disable-next-line no-control-regex
       .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
