@@ -2,7 +2,7 @@ import type { Species } from '../model/labels';
 import { describeLocalCount, filterLocal } from './local';
 import { countSpotted, filterSpotted, isSpotted, type SpottedSet } from './spotted';
 
-/** Everything the Species tab's list depends on (DECISIONS.md #41 and #43). */
+/** Everything the Species tab's list depends on (DECISIONS.md #41 and #44). */
 export interface ListScopeInput {
   /** Bird (and, when enabled, non-bird) species in label order. */
   all: Species[];
