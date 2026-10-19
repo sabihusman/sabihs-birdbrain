@@ -989,3 +989,90 @@ Sabih's approval and a baseline check of the other sites after every reload.
   - **Not verified:** a live TextExtracts response in the browser (429 here;
   the fixture follows the documented format and the server's parser) and the
   map cover on a real touch screen.
+
+## 47. `/v1/ask` sources: NatureServe Explorer and eBird beside Wikipedia
+
+- **Decision:** the answer is built from up to three fetched sources, each
+  with one role stated in the system instruction: Wikipedia for the biology,
+  NatureServe Explorer for the conservation status (global rank and the
+  S-rank for the asker's state/province), eBird for recent sightings in that
+  state/province and, for nearby questions, within 50 km of a rounded point.
+  The server fetches everything; Gemini has no tools. Every fact must carry
+  its source as a citation (`[Wikipedia – Diet]`, `[NatureServe Explorer –
+  Conservation status]`, `[eBird – Recent sightings]`, `[eBird – Recent
+  sightings nearby]`); when sources disagree the model is told to give both
+  and say "sources differ"; it must not invent counts, dates, places or
+  ranks and must say when eBird lists no reports.
+- **What the app sends (decided on the device, `src/geo/region.ts`):** the
+  species, the question, `region` (one of `US-IA`, `US-IL`, `US-WA`,
+  `CA-AB`, `CA-ON`, or `none`) and, only when the question reads as a nearby
+  one (near, nearby, around here, close by, in my area, local, this county…)
+  and location is on, `near: {lat, lon}` rounded with `Math.round(x*10)/10`
+  (about 10 km). The region comes from bounding boxes documented in that
+  file (five codes; Ontario in three boxes so Minnesota, Wisconsin and most
+  of Michigan stay out; the Iowa/Illinois overlap split by a five-point
+  polyline along the Mississippi; everything else `none`). `askSchema`
+  stays `.strict()`: the enum is fixed, coordinates are range-checked and
+  must have at most one decimal. The note under the Ask box shows the code
+  and whether the rounded position will be added before anything is sent.
+- **NatureServe (no key), `server/src/natureserve.ts`:** `POST
+  https://explorer.natureserve.org/api/data/speciesSearch` with
+  `{criteriaType:"species", textCriteria:[{paramType:"textSearch",
+  searchToken:<scientific>, matchAgainst:"scientificName",
+  operator:"equals"}], pagingOptions:{page:0, recordsPerPage:5}}`. Verified
+  against https://explorer.natureserve.org/api-docs/ ("Species Search",
+  "Text Criteria", "Species Result") on 2026-10-19: each result carries
+  `scientificName`, `primaryCommonName`, `roundedGRank`, `nsxUrl` (relative)
+  and `nations[].subnations[]` with `subnationCode` and `roundedSRank`, so
+  the taxon endpoints (`GET /api/data/taxon/{uid}`, which return the same
+  ranks as `elementNationals[].elementSubnationals[].roundedSRank` with
+  `subnation.subnationCode`) are not needed. The fixture
+  `server/test/fixtures/natureserve-robin.json` is a live recording of that
+  call for *Turdus migratorius* (trimmed). Cache: SQLite `natureserve_cache`,
+  one row per species (the record holds every S-rank, so the region is
+  picked out at prompt time), 30 days, misses cached too. Ranks are expanded
+  in the prompt ("S5B (secure, breeding population)"); range ranks such as
+  G3G4 are left as they are.
+- **eBird (`EBIRD_API_KEY`, optional), `server/src/ebird.ts`:** base
+  `https://api.ebird.org/v2`, header `X-eBirdApiToken`. Verified against the
+  eBird API 2.0 Postman documentation
+  (https://documenter.getpostman.com/view/664302/S1ENwy59, read through its
+  collection JSON on 2026-10-19): `GET /ref/taxonomy/ebird?fmt=json&cat=species`
+  (rows `{sciName, comName, speciesCode, category, …}`; its `species`
+  filter takes codes, not names, so the whole taxonomy is downloaded once
+  and cached 30 days as one `ebird_cache` row, and scientific name → code
+  is looked up in it); `GET /data/obs/{regionCode}/recent/{speciesCode}?back=30`
+  (regionCode is the subnational1 code, i.e. the app's `US-IA` style codes);
+  `GET /data/obs/geo/recent/{speciesCode}?lat=&lng=&back=30&dist=50`.
+  Observation rows are reduced to locality name, date and count: private
+  localities become "a private location", coordinates embedded in locality
+  names (eBird auto-names them that way) are stripped, and observer names,
+  checklist ids and coordinates never enter the prompt; at most 15 rows,
+  newest first. Cache: `ebird_cache`, one hour per species+region and per
+  species+rounded point. Without the key the source is skipped and startup
+  logs only that it is not set. Fixtures: `ebird-taxonomy.json` (first row
+  recorded live, the taxonomy endpoint needs no key), `ebird-obs-region.json`
+  (doc-derived: the documentation's "Example 1" response, dates moved; no
+  key was available to record live) and `sources-injected.json`
+  (adversarial).
+- **Pipeline:** `fetchExtraSources` runs both lookups concurrently with the
+  Wikipedia fetch, 8-second timeouts, every failure non-fatal; the response
+  adds `sources: [{name, url}]` (what was used) and `region`, and keeps
+  `source`, `citations` (now with the full label and a `source` field) and
+  `context` for older clients. The client shows "Sources: Wikipedia ·
+  NatureServe Explorer · eBird" as links under the answer.
+- **Injection defences kept:** every fetched field goes through `cleanField`
+  (control characters and square brackets removed, 120 characters) and then
+  `neutralizeFence` inside the single `<source>` fence; the NatureServe link
+  is rebuilt from a validated relative path. `adversarial-sources.test.ts`
+  proves an injected instruction in a locality/common name reaches the model
+  only as data and that the leak check still rejects a compliant answer.
+  See docs/SECURITY.md.
+- **Alternatives:** letting the model call the APIs (rejected: tools widen
+  the blast radius of an injection and the spec forbids it); sending the raw
+  position (rejected: the region code and a 0.1° point are enough for both
+  APIs); NatureServe `nation`/`subnation` location criteria instead of
+  caching the whole record (one extra call per region for no gain).
+- **Not verified:** live eBird observation responses (no key here); how well
+  Gemini keeps to the role rules and the "sources differ" wording; the
+  bounding boxes on a device near a border.

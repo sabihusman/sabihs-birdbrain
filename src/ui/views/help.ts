@@ -30,6 +30,13 @@ export function helpView(_ctx: ViewContext): View {
     el(
       'section',
       { class: 'card' },
+      el('h2', null, 'Ask about this bird (members)'),
+      el('p', null, 'On a species page, approved members can ask a question. The server answers it with Google’s Gemini model from three sources, each with one role: Wikipedia for the biology (description, voice, range, behaviour, diet, status), NatureServe Explorer for the conservation status globally and in your state or province, and eBird for sightings reported in your state or province, and near you, in the last 30 days. Every fact is labelled with its source; when sources disagree the answer says “sources differ”. The model never calls these services itself; the server fetches them and caches them (Wikipedia 7 days, NatureServe 30 days, eBird 1 hour).'),
+      el('p', null, 'What is sent: the species name, your question and your state/province code, worked out on the device from your location (US-IA, US-IL, US-WA, CA-AB or CA-ON; “none” elsewhere or when location is off). For questions about sightings near you (“near me”, “in my area”…), your position rounded to about 10 km is added. Never your exact location, and nothing else. The note under the question box shows exactly what the next question will send.'),
+    ),
+    el(
+      'section',
+      { class: 'card' },
       el('h2', null, 'Why this ID'),
       el('p', null, 'On saved recordings you can run an occlusion analysis: regions of the spectrogram are silenced one at a time and the model is re-run. Regions whose removal lowers the confidence most are drawn in the species colour. It is slow on phones, so the grid is coarse by default (Settings).'),
     ),

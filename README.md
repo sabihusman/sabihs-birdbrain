@@ -176,14 +176,26 @@ What does leave the phone, and why:
   code on every sign-in and keeps a short-lived session token (the API only
   accepts requests from `https://sabihs-birdbrain.vercel.app`). New accounts
   wait for Sabih's approval.
-- If you are an approved member and use "Ask about this bird": only the
-  species' scientific name and your question (up to 500 characters) are sent.
-  The server fetches the relevant sections of the Wikipedia article
-  (description, voice, range, behaviour, diet, status; capped, cached for
-  seven days on the server) and asks Google's Gemini model to answer from
-  that text alone; the answer comes back as plain text with the sections it
-  cites as links. When the article cannot be fetched, the summary is used. Questions are not logged. There are daily limits per person and
-  overall.
+- If you are an approved member and use "Ask about this bird": the species'
+  scientific name, your question (up to 500 characters) and your
+  state/province code are sent. The code is decided on the device from your
+  location (`US-IA`, `US-IL`, `US-WA`, `CA-AB`, `CA-ON`, or `none` elsewhere
+  or when location is off). For questions about sightings near you ("near
+  me", "in my area"…) your position rounded to one decimal (about 10 km) is
+  added; your exact location never is. The server fetches the relevant
+  sections of the Wikipedia article (description, voice, range, behaviour,
+  diet, status; capped, cached for seven days), the species' NatureServe
+  Explorer conservation ranks (global and for your state/province; cached
+  30 days) and, when the server has an eBird key, the recent eBird sightings
+  in your state/province and near the rounded point (last 30 days; locality
+  name, date and count only; cached one hour), then asks Google's Gemini
+  model to answer from that text alone, labelling each fact with its source
+  and saying "sources differ" when they disagree. The model never calls
+  these services. The answer comes back as plain text with the cited
+  sections and the sources used as links. When the article cannot be
+  fetched, the summary is used; when NatureServe or eBird are unavailable,
+  the answer says which sources it used. Questions are not logged. There are
+  daily limits per person and overall.
 
 - If you are an approved member and use **Friends** (Settings › Account):
   your display name is stored on the server and shown to friends instead of
