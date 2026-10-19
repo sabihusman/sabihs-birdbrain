@@ -14,7 +14,7 @@ import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { formatBytes } from '../../storage/quota';
 import { capImportedAudio, MAX_IMPORT_SECONDS } from '../../audio/import-cap';
 import { locationBlock } from '../components/location-block';
-import { clipFocus, clipRange, sliceClip } from '../../species/clips';
+import { bestByConfidence, clipFocus, clipRange, sliceClip } from '../../species/clips';
 
 export function recordingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -250,7 +250,8 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       const bySpecies = new Map<string, DetectionRecord[]>();
       for (const r of records) bySpecies.set(r.scientific, [...(bySpecies.get(r.scientific) ?? []), r]);
       for (const dets of bySpecies.values()) {
-        const best = dets.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+        const best = bestByConfidence(dets);
+        if (!best) continue; // cannot happen (groups are non-empty), but keeps the call total
         const focus = clipFocus(dets.map((d) => ({ offsetSec: d.offsetSec ?? 0, confidence: d.confidence })));
         const range = clipRange(focus, { start: 0, end: audio.length / SAMPLE_RATE });
         await controller

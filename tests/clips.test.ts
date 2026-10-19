@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLIP_MAX_SECONDS, clipFocus, clipRange, saveClipIfBetter, shouldReplaceClip, sliceClip } from '../src/species/clips';
+import { CLIP_MAX_SECONDS, bestByConfidence, clipFocus, clipRange, saveClipIfBetter, shouldReplaceClip, sliceClip } from '../src/species/clips';
 import { getClip } from '../src/storage/db';
 
 describe('species clip: replace-if-higher', () => {
@@ -46,6 +46,25 @@ describe('species clip: 10 s cap and centring', () => {
     const cut = sliceClip(audio, clipRange({ start: 5, end: 8 }, { start: 0, end: 12 }));
     expect(cut.length).toBe(48000 * 10);
     expect(sliceClip(audio, { start: 10, end: 30 }).length).toBe(48000 * 2);
+  });
+});
+
+describe('species clip: best-by-confidence and empty lists', () => {
+  it('bestByConfidence returns undefined for an empty list instead of throwing', () => {
+    expect(bestByConfidence([])).toBeUndefined();
+  });
+  it('bestByConfidence picks the highest confidence and keeps the first on a tie', () => {
+    const a = { id: 'a', confidence: 0.4 };
+    const b = { id: 'b', confidence: 0.9 };
+    const c = { id: 'c', confidence: 0.9 };
+    expect(bestByConfidence([a, b, c])).toBe(b);
+    expect(bestByConfidence([a])).toBe(a);
+  });
+  it('clipFocus rejects an empty window list with a clear error', () => {
+    expect(() => clipFocus([])).toThrow('clipFocus: no windows');
+  });
+  it('clipFocus with a single window over the cap still returns that window', () => {
+    expect(clipFocus([{ offsetSec: 7, confidence: 0.3 }], 1)).toEqual({ start: 7, end: 10 });
   });
 });
 

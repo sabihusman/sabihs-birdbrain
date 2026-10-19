@@ -56,6 +56,15 @@ export function clipRange(focus: Span, available: Span, maxSec = CLIP_MAX_SECOND
 }
 
 /**
+ * The item with the highest confidence, or `undefined` for an empty list.
+ * (An explicit initial value: `reduce` without one throws on an empty array.)
+ */
+export function bestByConfidence<T extends { confidence: number }>(items: readonly T[]): T | undefined {
+  if (items.length === 0) return undefined;
+  return items.reduce((a, b) => (b.confidence > a.confidence ? b : a), items[0]);
+}
+
+/**
  * Focus span for a species in one recording: the span of all its detection
  * windows when that fits in the cap, otherwise the single best window.
  */
@@ -64,7 +73,7 @@ export function clipFocus(windows: Array<{ offsetSec: number; confidence: number
   const first = Math.min(...windows.map((w) => w.offsetSec));
   const last = Math.max(...windows.map((w) => w.offsetSec)) + WINDOW_SECONDS;
   if (last - first <= maxSec) return { start: first, end: last };
-  const best = windows.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+  const best = bestByConfidence(windows) ?? windows[0];
   return { start: best.offsetSec, end: best.offsetSec + WINDOW_SECONDS };
 }
 
