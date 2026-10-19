@@ -87,6 +87,7 @@ export function listenView(ctx: ViewContext): View {
   const timelineCanvas = el('canvas', { class: 'timeline', 'aria-label': 'Per-species confidence over time' });
   const legend = el('div', { class: 'legend' });
   const waveform = new WaveformView(waveCanvas);
+  const waveLabel = el('div', { class: 'viz-label', 'data-testid': 'waveform-label' }, 'Waveform (last 3 s), auto-scaled to the loudest recent sample');
   const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10);
   const timeline = new TimelineView(timelineCanvas, legend, () => controller.species);
   timeline.setThreshold(settings.get().threshold);
@@ -102,9 +103,9 @@ export function listenView(ctx: ViewContext): View {
       { class: 'card' },
       el('h2', null, 'What the model sees'),
       waveCanvas,
-      el('div', { class: 'viz-label' }, 'Waveform (last 3 s)'),
+      waveLabel,
       specBox,
-      el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT. An approximation of the two mel spectrograms BirdNET builds internally. Dashed box: current 3 s analysis window. Colour strips: species detected in each analysed window.'),
+      el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT. An approximation of the two mel spectrograms BirdNET builds internally. Colours follow the loudest recent sound (range shown bottom right). Dashed box: current 3 s analysis window. Colour strips: species detected in each analysed window.'),
       timelineCanvas,
       legend,
       el('div', { class: 'viz-label' }, 'Confidence per species over recent windows (dashed line = your threshold).'),
@@ -170,6 +171,8 @@ export function listenView(ctx: ViewContext): View {
       spectrogram.draw();
       timeline.draw();
       dirty = false;
+      const label = `Waveform (last 3 s), auto-scaled to the loudest recent sample: gain ×${waveform.gain}`;
+      if (waveLabel.textContent !== label) waveLabel.textContent = label;
     }
     raf = requestAnimationFrame(loop);
   };
