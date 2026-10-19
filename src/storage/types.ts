@@ -49,7 +49,7 @@ export interface DetectionRecord {
 
 /**
  * A sighting: consecutive detections of one species merged into one event.
- * A new sighting starts after `sightingGapSeconds` without that species.
+ * A new sighting starts after `LUMP_GAP_SECONDS` (30 s) without that species.
  * Position, recording and offset are those of the peak-confidence window.
  */
 export interface SightingRecord {

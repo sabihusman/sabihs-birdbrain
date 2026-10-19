@@ -1,5 +1,6 @@
 import type { Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
+import { heardLabel } from '../../species/recent';
 import { getSpeciesSummary } from '../../species/wiki';
 import { getClip } from '../../storage/db';
 import type { ViewContext } from '../app';
@@ -35,6 +36,12 @@ export interface ResultCardOptions {
   /** Large variant for Focus mode (bigger photo and name). */
   large?: boolean;
   conditions?: string | null;
+  /**
+   * Number of lumped detections behind the card (Listen groups repeat hits of a
+   * species; see src/species/recent.ts). When set, the confidence is the best
+   * one and is labelled so, and "Heard N times" is shown.
+   */
+  heardTimes?: number;
 }
 
 /**
@@ -54,12 +61,20 @@ export function resultCard(ctx: ViewContext, species: Species, opts: ResultCardO
     thumb.style.display = 'none';
   });
   const when = el('span', { class: 'result-time tabular', 'data-testid': 'result-time' }, timeAgo(opts.time));
+  const grouped = opts.heardTimes != null;
+  const conf = el(
+    'span',
+    { class: 'result-conf tabular', 'aria-label': `${grouped ? 'best ' : ''}confidence ${pct(opts.confidence)}` },
+    grouped ? el('span', { class: 'muted result-best-label' }, 'best ') : null,
+    pct(opts.confidence),
+  );
+  const heard = grouped ? el('span', { class: 'result-heard', 'data-testid': 'result-heard' }, heardLabel(opts.heardTimes as number)) : null;
   const body = el(
     'span',
     { class: 'result-body' },
     el('span', { class: 'result-name' }, el('span', { class: 'swatch', style: `background:${color.css}`, 'aria-hidden': 'true' }), el('span', { class: 'result-common' }, species.common)),
     el('span', { class: 'result-sci' }, species.scientific),
-    el('span', { class: 'result-meta' }, el('span', { class: 'result-conf tabular', 'aria-label': `confidence ${pct(opts.confidence)}` }, pct(opts.confidence)), ' · ', when, opts.conditions ? el('span', { class: 'muted' }, ` · ${opts.conditions}`) : null),
+    el('span', { class: 'result-meta' }, conf, heard ? ' · ' : null, heard, ' · ', when, opts.conditions ? el('span', { class: 'muted' }, ` · ${opts.conditions}`) : null),
   );
   const link = el('a', { class: `result-card${opts.large ? ' large' : ''}`, href: speciesHref(species.scientific), 'data-testid': 'result-card' }, thumb, img, body);
   const root = el('div', { class: 'result-wrap' }, link);

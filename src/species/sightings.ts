@@ -1,8 +1,14 @@
 import { newId } from '../storage/db';
 import type { DetectionRecord, SightingRecord } from '../storage/types';
+import { LUMP_GAP_SECONDS } from './recent';
 
-/** Seconds without a species after which its next detection starts a new sighting. */
-export const DEFAULT_SIGHTING_GAP_SECONDS = 60;
+/**
+ * Seconds without a species after which its next detection starts a new
+ * sighting. One rule for the whole app: the same 30 s rolling gap that lumps
+ * hits on the Listen screen (src/species/recent.ts), so stored sightings and
+ * what Listen shows agree. Stored per-window hits stay individual.
+ */
+export const DEFAULT_SIGHTING_GAP_SECONDS = LUMP_GAP_SECONDS;
 
 /**
  * Sightings merge only within one stream of audio: live listening is one

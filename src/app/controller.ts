@@ -406,7 +406,7 @@ export class AppController extends Emitter<ControllerEvents> {
         sessionId: this.sessionId,
       };
     });
-    await recordDetections(records, s.sightingGapSeconds * 1000);
+    await recordDetections(records);
     this.emit('detections-changed', undefined);
     if (this.clipsEnabled) {
       const offsetSamples = Math.round(result.offsetSec * SAMPLE_RATE);
