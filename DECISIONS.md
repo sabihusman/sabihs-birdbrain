@@ -688,9 +688,91 @@ Sabih's approval and a baseline check of the other sites after every reload.
   microphone states); the "paused" state needs a real backgrounding.
 
 
-## 46. `/v1/ask` reads Gemini's finish reason; no half sentences
+## 41. Species ticks: on-device "spotted" marks and the "Spotted by me" chip
 
-(Numbered after the entries open on other branches; renumber at merge.)
+- **Decision:** on the Species tab every species with at least one sighting
+  on this device shows a tick (`✓`, accent colour, a 48 px button beside the
+  chip with the words "spotted by you" in its label). Tapping the tick opens
+  that species' ID card for members (the species page, scrolled to and
+  focused on the card: the card is where the ID card lives today, and tapping
+  it still opens the sighting history) and, for everyone else, shows the
+  same one-line "Sign in to unlock the species ID card." note under the row
+  (`lockedNoteEl`, split out of `member-gate.ts` so both places render it
+  the same way). A pressable "✓ Spotted by me · N" chip above the list keeps
+  only spotted species; the choice is remembered on the device
+  (`speciesSpottedOnly`).
+- **Where the set comes from:** `listSightedSpecies()` walks the unique keys
+  of the sightings store's `by-scientific` index (`openKeyCursor(null,
+  'nextunique')`), so no sighting rows are loaded however many there are.
+  `src/species/spotted.ts` turns that into a `Set` and holds the pure filter;
+  the view rebuilds the set on `detections-changed` (new detections, deleted
+  recordings, "clear all data") and re-renders on session changes. Nothing is
+  fetched: the ticks are decided from IndexedDB and the cached session only.
+- **Scope of the chip:** while it is on, the local / "Show all species" scope
+  is bypassed and the line reads "N species spotted by you · M total" with a
+  note saying so. A bird you heard on a trip is still one you spotted; hiding
+  it because it is not expected at home would make the list lie.
+- **Alternatives:** a tick inside the chip link (`<a>`) would nest a button in
+  a link, which is invalid and would make the chip tap ambiguous; a separate
+  "my species" route would duplicate the list, search and local toggle; a
+  persisted "spotted" flag on the species would drift from the sightings
+  when recordings are deleted. Counting per species (`by-scientific` count)
+  was not needed: the tick is binary and the species page has the numbers.
+- **Tests:** `tests/spotted.test.ts` (fake-indexeddb: unique keys across
+  repeated and separate sightings; the filter on/off, count, empty names).
+  Playwright: the free-user import test checks the tick, the chip narrowing
+  the list to ticked rows only, the count line and the inline sign-in note;
+  the member test opens the ID card from the tick and checks it is focused.
+- **Not verified:** on a phone; the tick row beside a long name at 320 px is
+  not covered by the width test, which runs with no sightings (the CSS keeps
+  the row from wrapping: the chip shrinks, the 48 px tick does not).
+
+## 42. ID clips: 10 s context, identifying windows, spectrogram and tap-to-run "Why this ID"
+
+- **Decision:** the per-species ID clip (#28) keeps its 10 s cap and its
+  replace-if-higher rule, and now records *which* 3 s analysis windows
+  triggered the ID: `ClipRecord.windows`, a list of `{ offsetSec, confidence }`
+  relative to the clip start (DB version 4). Live, the controller remembers
+  every window that detected the species while it is still inside the 24 s
+  raw ring and stores the ones that fall in the clip (`windowsInClip`); for
+  recordings and imports the per-window detections give the same list. A
+  window cut at a clip edge keeps its true offset (it may be slightly
+  negative) and is clamped when drawn. The surrounding audio is kept on
+  purpose: other birds may be audible, and the user should hear the context
+  the model heard.
+- **Card:** the species ID card draws a spectrogram of the clip from the
+  stored samples with our own FFT (`computeStaticSpectrogram`, shared with the
+  recording view and DOM-free so the frames, outlines and cursor are
+  unit-tested), outlines each identifying window in the species colour with
+  its confidence as the label, shows a playback cursor (tap the spectrogram
+  to seek) and a line listing the windows. "Why this ID" is a button: it runs
+  the existing occlusion job on the most confident identifying window and
+  shades the heat map over that window. It is 25–97 model passes, so it never
+  runs on its own (as in the recording view).
+- **Wording, in the card and here:** BirdNET marks *when* a species is heard,
+  not which of the overlapping sounds it is. An outlined window means the
+  model's confidence for that species crossed the threshold in those 3 s; the
+  sound it reacted to may sit under another bird, wind or a voice. The
+  occlusion heat map is the honest way to narrow it down, and it is still an
+  approximation.
+- **Migration:** version 4 adds no store; clips saved before it have no
+  `windows` and are read as "unknown windows" (`clipWindows()` returns null):
+  the card says the windows were not recorded, draws no outlines and runs
+  "Why this ID" on the clip centre (live clips were always centred on their
+  window). A later, more confident detection replaces such a clip the normal
+  way. Tested with `fake-indexeddb` from a hand-built version-3 database.
+- **Setting renamed:** the older option that saves each detection's 3 s
+  window into Recordings is now "Auto-save 3-second detection windows as
+  recordings" (hint: separate from the species ID clip), and those
+  recordings are named "Detection window: <species>" instead of "Auto clip".
+  The storage keys (`autoSaveClips`, `autoSaveMinConfidence`, source
+  `'autoclip'`) are unchanged: nothing to migrate.
+- **Not verified:** on a phone; the playback cursor follows
+  `audio.currentTime` in a `requestAnimationFrame` loop, whose timing against
+  the sound on iOS Safari has not been checked. Playwright exercises the card
+  with the bundled sample (one window, the occlusion run) in Chromium.
+
+## 43. `/v1/ask` reads Gemini's finish reason; no half sentences
 
 - **Problem:** live answers ended mid-sentence ("…though it notes that the").
   The call asked for 400 output tokens and the model's own thinking counts
