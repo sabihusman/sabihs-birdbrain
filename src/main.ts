@@ -8,6 +8,10 @@ import { registerPwa } from './pwa';
 import { ApiClient } from './api/client';
 import { API_BASE_URL } from './api/config';
 import { isMember } from './app/access';
+import { applyTheme, readStoredTheme } from './theme/theme';
+
+// The inline script in index.html already set data-theme before first paint; this keeps the meta colour in step.
+applyTheme(readStoredTheme());
 
 const baseUrl = import.meta.env.BASE_URL;
 const controller = new AppController(baseUrl);
