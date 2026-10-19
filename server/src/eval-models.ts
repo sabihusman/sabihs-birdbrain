@@ -5,7 +5,7 @@
  * `scripts/eval-models.ts` at the repository root is the command.
  */
 import { ANSWER_MAX_OUTPUT_TOKENS, answerQuestion, SYSTEM_INSTRUCTION, type AnswerModel, type AskOutcome } from './ask.js';
-import type { AskCostStore } from './ask-cost.js';
+import type { AskCostStore, MonthStatus } from './ask-cost.js';
 import { CONTEXT_TOKEN_BUDGET, estimateTokens } from './context-select.js';
 import type { UsageStore } from './db.js';
 import { flagAnswer, formatFlags, type AdversarialCase, type EvalFlag, type RawReply } from './eval-adversarial.js';
@@ -118,8 +118,9 @@ export interface EvalRow {
 export class UsageCollector implements AskCostStore {
   calls = 0;
   usage: TokenUsage = { promptTokens: 0, answerTokens: 0, thinkingTokens: 0, cachedTokens: 0 };
+  /** Null once any call went to a model outside the Gemini price table (an Ollama model: "plan allowance" in the table). */
   costMicros: number | null = 0;
-  record(model: string, usage: TokenUsage): number | null {
+  record(model: string, usage: TokenUsage): number {
     this.calls++;
     this.usage.promptTokens += usage.promptTokens;
     this.usage.answerTokens += usage.answerTokens;
@@ -127,11 +128,22 @@ export class UsageCollector implements AskCostStore {
     this.usage.cachedTokens += usage.cachedTokens;
     const cost = costMicros(model, usage);
     this.costMicros = cost === null || this.costMicros === null ? null : this.costMicros + cost;
-    return cost;
+    return cost ?? 0;
   }
   recordCacheHit(): void {}
   summary(): never[] {
     return [];
+  }
+  // The eval has no month or cap: the collector's running total stands in, and no alert is ever recorded.
+  monthSpendMicros(): number {
+    return this.costMicros ?? 0;
+  }
+  monthStatus(capMicros: number): MonthStatus {
+    const spentMicros = this.costMicros ?? 0;
+    return { month: new Date().toISOString().slice(0, 7), spentMicros, capMicros, percent: capMicros > 0 ? Math.floor((spentMicros * 100) / capMicros) : 100, alertsSent: [] };
+  }
+  markAlert(): boolean {
+    return false;
   }
   reset(): void {
     this.calls = 0;

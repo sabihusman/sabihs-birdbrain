@@ -8,6 +8,7 @@ export function adminView(ctx: ViewContext): View {
   const list = el('div', { class: 'list', 'data-testid': 'admin-users' });
   const status = el('div', { class: 'small muted' }, '');
   const costStatus = el('div', { class: 'small muted' }, '');
+  const capLine = el('p', { class: 'cap-line', 'data-testid': 'admin-gemini-cap' }, '');
   const costTable = el('div', { class: 'table-wrap', 'data-testid': 'admin-ask-costs' });
   const providerTable = el('div', { class: 'table-wrap', 'data-testid': 'admin-ask-providers' });
 
@@ -20,7 +21,7 @@ export function adminView(ctx: ViewContext): View {
     root.replaceChildren(
       el('section', { class: 'card' }, el('h2', null, 'Members'), el('p', { class: 'small muted' }, 'Approve people you know. Rejecting or disabling signs them out everywhere.'), status),
       list,
-      el('section', { class: 'card' }, el('h2', null, 'Ask costs'), el('p', { class: 'small muted' }, 'Which service answered over the last 30 days, then the estimated Gemini spend per UTC day from token counts and list prices. Ollama Cloud usage counts against its plan allowance, not a price. Cache hits cost nothing.'), providerTable, costStatus, costTable),
+      el('section', { class: 'card' }, el('h2', null, 'Ask costs'), el('p', { class: 'small muted' }, 'Which service answered over the last 30 days, then the estimated Gemini spend per UTC day from token counts and list prices. Ollama Cloud usage counts against its plan allowance, not a price. Cache hits cost nothing.'), providerTable, capLine, costStatus, costTable),
     );
     status.textContent = 'Loading…';
     costStatus.textContent = 'Loading…';
@@ -32,10 +33,21 @@ export function adminView(ctx: ViewContext): View {
     if (costsResult.status === 'fulfilled') {
       renderProviders(costsResult.value);
       renderCosts(costsResult.value.model, costsResult.value.days);
+      renderCap(costsResult.value.month);
     } else costStatus.textContent = describeApiError(costsResult.reason);
   };
 
   /** One row per provider: answers given, how many came after a fallback, tokens. */
+  const renderCap = (m: AskCostSummary['month']) => {
+    if (!m) {
+      capLine.textContent = '';
+      return;
+    }
+    const cap = m.capMicros > 0 ? fmtUsd(m.capMicros) : 'off (Gemini disabled)';
+    const alerts = m.alertsSent.length ? ` · alerts sent: ${m.alertsSent.map((a) => `${a}%`).join(', ')}` : '';
+    capLine.textContent = m.capMicros > 0 && m.spentMicros >= m.capMicros ? `Gemini this month (${m.month}): ${fmtUsd(m.spentMicros)} of the ${cap} cap · cap reached, Gemini is skipped until next month${alerts}` : `Gemini this month (${m.month}): ${fmtUsd(m.spentMicros)} of the ${cap} cap (${m.percent}%)${alerts}`;
+  };
+
   const renderProviders = (summary: AskCostSummary) => {
     providerTable.replaceChildren();
     const rows = providerRows(summary);

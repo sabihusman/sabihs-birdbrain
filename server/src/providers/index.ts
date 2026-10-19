@@ -1,5 +1,7 @@
 import { finishCutAnswer, type AnswerModel, type GenAiClient, type GeneratedAnswer, type Generator } from '../ask.js';
-import type { AskCostStore } from '../ask-cost.js';
+import type { AskCostStore, CapAlertLevel } from '../ask-cost.js';
+import { capAlertMail, createGeminiCapGuard } from '../gemini-cap.js';
+import type { Mailer } from '../mailer.js';
 import type { Config, ProviderName } from '../config.js';
 import type { ProviderUsageStore } from '../provider-usage.js';
 import { createGeminiProvider } from './gemini.js';
@@ -67,12 +69,17 @@ export interface ChainDeps {
   fetch?: FetchLike;
   geminiClient?: GenAiClient;
   log?: (line: string) => void;
-  /** Gemini's billed calls and estimated spend (#48). */
+  /** Gemini's billed calls and estimated spend (#48); with it the monthly cap (#53) is enforced. */
   costs?: AskCostStore;
   providerUsage?: ProviderUsageStore;
+  /** For the 50 % / 100 % cap alerts to the admin; without a mailer the alerts are only logged. */
+  mailer?: Mailer;
+  adminEmail?: string;
+  /** Test hook for the cap's clock. */
+  now?: () => Date;
 }
 
-export type ChainConfig = Pick<Config, 'providerOrder' | 'OLLAMA_API_KEY' | 'OLLAMA_MODEL' | 'OLLAMA_TIMEOUT_MS' | 'GEMINI_API_KEY' | 'GEMINI_MODEL'>;
+export type ChainConfig = Pick<Config, 'providerOrder' | 'OLLAMA_API_KEY' | 'OLLAMA_MODEL' | 'OLLAMA_TIMEOUT_MS' | 'GEMINI_API_KEY' | 'GEMINI_MODEL' | 'GEMINI_MONTHLY_CAP_USD'>;
 
 /** The providers the configuration enables, in order; a provider without its key is skipped with one startup line. */
 export function configuredProviders(config: ChainConfig, deps: ChainDeps = {}): AnswerProvider[] {
@@ -90,7 +97,17 @@ export function configuredProviders(config: ChainConfig, deps: ChainDeps = {}): 
         log('[startup] GEMINI_API_KEY not set: Gemini provider skipped');
         continue;
       }
-      providers.push({ name, generate: createGeminiProvider(config.GEMINI_API_KEY, config.GEMINI_MODEL, deps.geminiClient, log, deps.costs) });
+      let generate = createGeminiProvider(config.GEMINI_API_KEY, config.GEMINI_MODEL, deps.geminiClient, log, deps.costs);
+      if (deps.costs) {
+        const { costs, mailer, adminEmail } = deps;
+        const sendAlert = mailer && adminEmail ? async (level: CapAlertLevel, status: { month: string; spentMicros: number; capMicros: number }) => {
+          const m = capAlertMail(level, status);
+          await mailer.send({ to: adminEmail, subject: `[Birdbrain] ${m.subject}`, text: m.body });
+        } : undefined;
+        generate = createGeminiCapGuard(generate, { costs, capUsd: config.GEMINI_MONTHLY_CAP_USD, sendAlert, log, now: deps.now });
+        log(`[startup] gemini monthly cap: $${config.GEMINI_MONTHLY_CAP_USD.toFixed(2)} (GEMINI_MONTHLY_CAP_USD)`);
+      }
+      providers.push({ name, generate });
     }
   }
   return providers;

@@ -61,18 +61,19 @@ describe('pricing', () => {
 });
 
 describe('ask_cost daily totals', () => {
-  it('sums tokens and cost per UTC day, counts cache hits and unpriced calls, and lists the last 30 days newest first', () => {
+  it('sums tokens and cost per UTC day, prices unknown models at the most expensive known price (#53), counts cache hits, and lists the last 30 days newest first', () => {
     const costs = createAskCostStore(openDatabase(':memory:'));
     const d1 = new Date('2026-10-01T23:59:00Z');
     const d2 = new Date('2026-10-02T00:01:00Z');
     expect(costs.record('gemini-3.8-flash', { promptTokens: 1000, answerTokens: 100, thinkingTokens: 200, cachedTokens: 0 }, d1)).toBe(1875);
     expect(costs.record('gemini-3.8-flash', { promptTokens: 1000, answerTokens: 100, thinkingTokens: 200, cachedTokens: 0 }, d1)).toBe(1875);
-    expect(costs.record('nope', { promptTokens: 10, answerTokens: 1, thinkingTokens: 0, cachedTokens: 0 }, d2)).toBeNull();
+    // 'nope' is not in the table: billed at gemini-3.8-flash's rates (0.75 in, 3.75 out) -> 7.5 + 3.75 = 11.25 -> 11 micro-dollars.
+    expect(costs.record('nope', { promptTokens: 10, answerTokens: 1, thinkingTokens: 0, cachedTokens: 0 }, d2)).toBe(11);
     costs.recordCacheHit(d2);
     costs.recordCacheHit(d2);
     const days = costs.summary(30, d2);
     expect(days).toEqual([
-      { day: '2026-10-02', requests: 1, promptTokens: 10, answerTokens: 1, thinkingTokens: 0, cachedTokens: 0, costMicros: 0, unpricedRequests: 1, cacheHits: 2 },
+      { day: '2026-10-02', requests: 1, promptTokens: 10, answerTokens: 1, thinkingTokens: 0, cachedTokens: 0, costMicros: 11, unpricedRequests: 0, cacheHits: 2 },
       { day: '2026-10-01', requests: 2, promptTokens: 2000, answerTokens: 200, thinkingTokens: 400, cachedTokens: 0, costMicros: 3750, unpricedRequests: 0, cacheHits: 0 },
     ]);
     // a day outside the window drops out
