@@ -23,6 +23,39 @@ export interface AskAnswer {
   citations?: Array<{ section: string; url: string }>;
   /** Whether the full article sections or only the summary were available. */
   context?: 'article' | 'summary';
+  /** True when the server reused an earlier answer to the same question (no model call). */
+  cached?: boolean;
+}
+
+/** One UTC day of /v1/ask spend as the admin endpoint reports it (counts only, no questions). */
+export interface AskCostDay {
+  day: string;
+  requests: number;
+  promptTokens: number;
+  answerTokens: number;
+  thinkingTokens: number;
+  cachedTokens: number;
+  /** Estimated cost in micro-dollars (1,000,000 = $1). */
+  costMicros: number;
+  unpricedRequests: number;
+  cacheHits: number;
+}
+
+/** One provider's totals over the admin window: which service answered, how often it was reached by fallback, its tokens. */
+export interface AskProviderTotals {
+  provider: 'ollama' | 'gemini';
+  requests: number;
+  promptTokens: number;
+  answerTokens: number;
+  fallbacks: number;
+}
+
+export interface AskCostSummary {
+  model: string;
+  days: AskCostDay[];
+  providerOrder?: Array<'ollama' | 'gemini'>;
+  models?: { ollama: string; gemini: string };
+  providers?: AskProviderTotals[];
 }
 
 /** A friend as the server lists it: id, display name, since when. */
@@ -266,5 +299,10 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
 
   adminSetStatus(id: string, action: 'approve' | 'reject' | 'disable'): Promise<{ ok: boolean; user: AuthUser }> {
     return this.call(`/v1/admin/users/${encodeURIComponent(id)}/${action}`, {});
+  }
+
+  /** The last 30 days of /v1/ask token and cost totals, newest first. */
+  adminAskCosts(): Promise<AskCostSummary> {
+    return this.call('/v1/admin/ask-costs');
   }
 }

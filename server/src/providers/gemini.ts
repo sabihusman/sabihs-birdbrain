@@ -1,4 +1,5 @@
-import { createGeminiGenerator, type GenAiClient, type GeneratedAnswer } from '../ask.js';
+import { createGeminiGenerator, type GenAiClient, type Generator } from '../ask.js';
+import type { AskCostStore } from '../ask-cost.js';
 import { ProviderError } from './ollama.js';
 
 /**
@@ -7,8 +8,8 @@ import { ProviderError } from './ollama.js';
  * provider interface. SDK errors become `ProviderError`s so the chain logs a
  * kind, never a message that could carry request details.
  */
-export function createGeminiProvider(apiKey: string, model: string, client?: GenAiClient, log?: (line: string) => void): (input: { systemInstruction: string; prompt: string }) => Promise<GeneratedAnswer> {
-  const generate = createGeminiGenerator(apiKey, model, client, log);
+export function createGeminiProvider(apiKey: string, model: string, client?: GenAiClient, log?: (line: string) => void, costs?: AskCostStore): Generator {
+  const generate = createGeminiGenerator(apiKey, model, client, log, costs);
   return async (input) => {
     try {
       return await generate(input);

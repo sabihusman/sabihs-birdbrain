@@ -1,5 +1,9 @@
 import { FinishReason, GoogleGenAI, HarmBlockThreshold, HarmCategory, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { z } from 'zod';
+import type { AnswerCache } from './answer-cache.js';
+import { CACHE_HIT_LOG_LINE, describeCost, type AskCostStore } from './ask-cost.js';
+import { selectRelevantSections } from './context-select.js';
+import { costMicros, thinkingLevelFor, usageFromMetadata } from './pricing.js';
 import type { UsageStore } from './db.js';
 import type { SpeciesLabels } from './labels.js';
 import type { WikiFetcher } from './wiki.js';
@@ -143,6 +147,7 @@ export const ANSWER_RETRY_OUTPUT_TOKENS = 1400;
  * Thinking level so reasoning cannot eat the answer allowance. Gemini 3 models take
  * `thinkingConfig.thinkingLevel` (gemini-3.8-flash: low, medium, high; default medium);
  * `thinkingBudget` is the legacy field and the two cannot be combined (ai.google.dev, "Thinking").
+ * The level is the lowest each model accepts (`thinkingLevelFor` in pricing.ts); this is the default.
  */
 export const ANSWER_THINKING_LEVEL = ThinkingLevel.LOW;
 export const CUT_SHORT_SUFFIX = '(answer cut short)';
@@ -151,7 +156,7 @@ export const CUT_SHORT_SUFFIX = '(answer cut short)';
 export interface GenAiResponse {
   text: string | undefined;
   candidates?: Array<{ finishReason?: string }>;
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; cachedContentTokenCount?: number; totalTokenCount?: number };
 }
 
 /** The part of the Gemini SDK the server uses; tests inject a fake that records calls. */
@@ -178,21 +183,26 @@ export interface ProviderUsage {
   totalTokens?: number;
 }
 
-/** What a provider produced before the chain's output rules: the text, whether it was cut at the output limit, and token counts. */
+/** What a provider produced before the chain's output rules: the text, whether it was cut at the output limit, token counts, model and wall time. */
 export interface GeneratedAnswer {
   text: string;
   cut: boolean;
   usage: ProviderUsage;
+  model: string;
+  durationMs: number;
 }
 
+export type Generator = (input: { systemInstruction: string; prompt: string }) => Promise<GeneratedAnswer>;
+
 /**
- * Gemini generation with the finish-reason retry (#43). Returns the raw text
- * and whether the retry was cut too; `createGeminiModel` turns that into the
- * "(answer cut short)" text, and the provider chain (`providers/index.ts`)
- * uses it to fall back to the next provider instead.
+ * Gemini generation with the finish-reason retry (#43) and cost logging (#48).
+ * Returns the raw text and whether the retry was cut too; `createGeminiModel`
+ * turns that into the "(answer cut short)" text, and the provider chain
+ * (`providers/index.ts`, #49) uses it to fall back to the next provider instead.
  */
-export function createGeminiGenerator(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line)): (input: { systemInstruction: string; prompt: string }) => Promise<GeneratedAnswer> {
+export function createGeminiGenerator(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line), costs?: AskCostStore): Generator {
   const ai = client;
+  const thinkingLevel = thinkingLevelFor(model);
   const generate = (systemInstruction: string, prompt: string, maxOutputTokens: number) =>
     ai.models.generateContent({
       model,
@@ -201,7 +211,7 @@ export function createGeminiGenerator(apiKey: string, model: string, client: Gen
         systemInstruction,
         temperature: 0.2,
         maxOutputTokens,
-        thinkingConfig: { thinkingLevel: ANSWER_THINKING_LEVEL },
+        thinkingConfig: { thinkingLevel },
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
           { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -213,24 +223,27 @@ export function createGeminiGenerator(apiKey: string, model: string, client: Gen
   const describe = (res: GenAiResponse, attempt: number, limit: number) => {
     const u = res.usageMetadata ?? {};
     const finish = res.candidates?.[0]?.finishReason ?? 'unknown';
-    // Finish reason and token counts only; never the question or the answer.
-    return `[ask] attempt=${attempt} limit=${limit} finish=${finish} prompt_tokens=${u.promptTokenCount ?? '-'} answer_tokens=${u.candidatesTokenCount ?? '-'} thinking_tokens=${u.thoughtsTokenCount ?? '-'} total_tokens=${u.totalTokenCount ?? '-'}`;
+    const usage = usageFromMetadata(u);
+    const cost = costs ? costs.record(model, usage) : costMicros(model, usage);
+    // Finish reason, token counts and estimated cost only; never the question or the answer.
+    return `[ask] attempt=${attempt} limit=${limit} finish=${finish} prompt_tokens=${u.promptTokenCount ?? '-'} answer_tokens=${u.candidatesTokenCount ?? '-'} thinking_tokens=${u.thoughtsTokenCount ?? '-'} total_tokens=${u.totalTokenCount ?? '-'} ${describeCost(cost)}`;
   };
   const hitLimit = (res: GenAiResponse) => res.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS;
   const usageOf = (res: GenAiResponse): ProviderUsage => ({ promptTokens: res.usageMetadata?.promptTokenCount, answerTokens: res.usageMetadata?.candidatesTokenCount, totalTokens: res.usageMetadata?.totalTokenCount });
   return async ({ systemInstruction, prompt }) => {
+    const started = Date.now();
     let res = await generate(systemInstruction, prompt, ANSWER_MAX_OUTPUT_TOKENS);
     log(describe(res, 1, ANSWER_MAX_OUTPUT_TOKENS));
     if (hitLimit(res)) {
       res = await generate(systemInstruction, prompt, ANSWER_RETRY_OUTPUT_TOKENS);
       log(describe(res, 2, ANSWER_RETRY_OUTPUT_TOKENS));
     }
-    return { text: res.text ?? '', cut: hitLimit(res), usage: usageOf(res) };
+    return { text: res.text ?? '', cut: hitLimit(res), usage: usageOf(res), model, durationMs: Date.now() - started };
   };
 }
 
-export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line)): AnswerModel {
-  const generate = createGeminiGenerator(apiKey, model, client, log);
+export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line), costs?: AskCostStore): AnswerModel {
+  const generate = createGeminiGenerator(apiKey, model, client, log, costs);
   return async (input) => {
     const r = await generate(input);
     return r.cut ? finishCutAnswer(r.text) : r.text;
@@ -247,10 +260,15 @@ export interface AskDeps {
   usage: UsageStore;
   caps: CapConfig;
   maxQuestionChars: number;
+  /** Answer cache (DECISIONS.md #48); optional so older call sites and tests keep working. */
+  answers?: AnswerCache;
+  /** Daily cost totals; cache hits are counted here, model calls in createGeminiModel. */
+  costs?: AskCostStore;
+  log?: (line: string) => void;
 }
 
 export type AskOutcome =
-  | { status: 200; body: { answer: string; source: { title: string; url: string }; citations: Citation[]; context: 'article' | 'summary' } }
+  | { status: 200; body: { answer: string; source: { title: string; url: string }; citations: Citation[]; context: 'article' | 'summary'; cached?: true } }
   | { status: 400 | 403 | 404 | 429 | 502; body: { error: string } };
 
 /** Full pipeline for POST /v1/ask, independent of HTTP framing. */
@@ -261,6 +279,13 @@ export async function answerQuestion(deps: AskDeps, user: { id: string; status?:
   const { species, question } = parsed.data;
   const common = deps.labels.byScientific.get(species);
   if (!common) return { status: 400, body: { error: 'unknown_species' } };
+  // A cached answer costs nothing, so it is served before the caps are checked or counted.
+  const cached = deps.answers?.get(species, question, now);
+  if (cached) {
+    deps.costs?.recordCacheHit(now);
+    deps.log?.(CACHE_HIT_LOG_LINE);
+    return { status: 200, body: { ...cached, cached: true } };
+  }
   const cap = checkCaps(deps.usage, user.id, deps.caps, now);
   if (!cap.ok) return { status: 429, body: { error: cap.reason } };
   // Context: the relevant sections of the full article; the summary when the article is unavailable.
@@ -292,14 +317,19 @@ export async function answerQuestion(deps: AskDeps, user: { id: string; status?:
     context = 'summary';
   }
   deps.usage.record(user.id, now);
+  // Only the sections the question needs, within the token budget (context-select.ts).
+  // Citations still resolve against every article section: the links are the same anchors either way.
+  const chosen = selectRelevantSections(sections, question);
   let text: string;
   try {
-    text = await deps.model({ systemInstruction: SYSTEM_INSTRUCTION, prompt: buildPrompt({ scientific: species, common }, buildSource(sections), question) });
+    text = await deps.model({ systemInstruction: SYSTEM_INSTRUCTION, prompt: buildPrompt({ scientific: species, common }, buildSource(chosen), question) });
   } catch {
     return { status: 502, body: { error: 'model_unavailable' } };
   }
   const answer = toPlainText(text);
   if (!answer) return { status: 502, body: { error: 'empty_answer' } };
   if (leaksSystemPrompt(answer)) return { status: 502, body: { error: 'answer_rejected' } };
-  return { status: 200, body: { answer, source: { title, url }, citations: extractCitations(answer, sections), context } };
+  const body = { answer, source: { title, url }, citations: extractCitations(answer, sections), context };
+  deps.answers?.put(species, question, body, now);
+  return { status: 200, body };
 }

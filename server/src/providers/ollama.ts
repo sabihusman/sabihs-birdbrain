@@ -1,4 +1,4 @@
-import { ANSWER_RETRY_OUTPUT_TOKENS, type GeneratedAnswer } from '../ask.js';
+import { ANSWER_RETRY_OUTPUT_TOKENS, type Generator } from '../ask.js';
 
 /**
  * Ollama Cloud provider for /v1/ask (DECISIONS.md #49).
@@ -58,7 +58,6 @@ export interface OllamaOptions {
   model: string;
   timeoutMs?: number;
   fetch?: FetchLike;
-  log?: (line: string) => void;
 }
 
 /**
@@ -67,10 +66,9 @@ export interface OllamaOptions {
  * 8 s timeout already bounds the wait. A reply that stops for any reason other
  * than "stop" is reported as cut so the chain can fall back.
  */
-export function createOllamaGenerator(opts: OllamaOptions): (input: { systemInstruction: string; prompt: string }) => Promise<GeneratedAnswer> {
+export function createOllamaGenerator(opts: OllamaOptions): Generator {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_OLLAMA_TIMEOUT_MS;
   const doFetch: FetchLike = opts.fetch ?? ((url, init) => fetch(url, init));
-  const log = opts.log ?? ((line: string) => console.info(line));
   return async ({ systemInstruction, prompt }) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -109,12 +107,13 @@ export function createOllamaGenerator(opts: OllamaOptions): (input: { systemInst
     if (!res.ok) throw new ProviderError(classifyHttpFailure(res.status, body?.error), res.status);
     if (typeof body !== 'object' || body === null || typeof body.error === 'string') throw new ProviderError('server', res.status);
     const finish = body.done_reason ?? (body.done ? 'stop' : 'unknown');
-    // Finish reason, token counts and duration only; never the question or the answer.
-    log(`[ask] provider=ollama model=${opts.model} finish=${finish} prompt_tokens=${body.prompt_eval_count ?? '-'} answer_tokens=${body.eval_count ?? '-'} total_tokens=${body.prompt_eval_count !== undefined && body.eval_count !== undefined ? body.prompt_eval_count + body.eval_count : '-'} ms=${Date.now() - started}`);
+    const total = body.prompt_eval_count !== undefined && body.eval_count !== undefined ? body.prompt_eval_count + body.eval_count : undefined;
     return {
       text: body.message?.content ?? '',
       cut: finish !== 'stop',
-      usage: { promptTokens: body.prompt_eval_count, answerTokens: body.eval_count, totalTokens: body.prompt_eval_count !== undefined && body.eval_count !== undefined ? body.prompt_eval_count + body.eval_count : undefined },
+      usage: { promptTokens: body.prompt_eval_count, answerTokens: body.eval_count, totalTokens: total },
+      model: body.model ?? opts.model,
+      durationMs: Date.now() - started,
     };
   };
 }

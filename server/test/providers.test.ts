@@ -40,10 +40,10 @@ describe('AI_PROVIDER_ORDER', () => {
     expect(lines).toEqual(['[startup] OLLAMA_API_KEY not set: Ollama provider skipped', '[startup] GEMINI_API_KEY not set: Gemini provider skipped']);
     lines.length = 0;
     expect(createProviderChain(testConfig({ GEMINI_API_KEY: 'g' }), { log, geminiClient: new FakeGemini() })).not.toBeNull();
-    expect(lines).toEqual(['[startup] OLLAMA_API_KEY not set: Ollama provider skipped', '[startup] /v1/ask providers: gemini']);
+    expect(lines).toEqual(['[startup] OLLAMA_API_KEY not set: Ollama provider skipped', '[startup] /v1/ask providers: gemini (gemini-3.8-flash)']);
     lines.length = 0;
     expect(createProviderChain(testConfig({ OLLAMA_API_KEY: 'o', GEMINI_API_KEY: 'g', AI_PROVIDER_ORDER: 'gemini,ollama' }), { log, geminiClient: new FakeGemini() })).not.toBeNull();
-    expect(lines).toEqual(['[startup] /v1/ask providers: gemini -> ollama']);
+    expect(lines).toEqual(['[startup] /v1/ask providers: gemini (gemini-3.8-flash) -> ollama (gemma4:31b)']);
     for (const l of lines) expect(l).not.toMatch(/[og]-key|ollama-test|gemini-test/);
   });
 });
@@ -51,11 +51,13 @@ describe('AI_PROVIDER_ORDER', () => {
 describe('Ollama Cloud request and response handling', () => {
   it('posts the documented chat request: bearer header, system + user messages, stream false, options', async () => {
     const ollama = new FakeOllama();
-    const gen = createOllamaGenerator({ apiKey: 'secret-key', model: 'gpt-oss:20b', fetch: ollama.fetch, log: () => undefined });
+    const gen = createOllamaGenerator({ apiKey: 'secret-key', model: 'gpt-oss:20b', fetch: ollama.fetch });
     const r = await gen(input('What does it eat?'));
     expect(r.text).toBe('The Eurasian Blackbird eats seeds, according to the summary.');
     expect(r.cut).toBe(false);
     expect(r.usage).toEqual({ promptTokens: 1700, answerTokens: 110, totalTokens: 1810 });
+    expect(r.model).toBe('fake-model'); // the name the response reports
+    expect(r.durationMs).toBeGreaterThanOrEqual(0);
     const call = ollama.last;
     expect(call.url).toBe(OLLAMA_CHAT_URL);
     expect(call.url).toBe('https://ollama.com/api/chat');
@@ -70,19 +72,9 @@ describe('Ollama Cloud request and response handling', () => {
     expect(call.body.options).toEqual({ temperature: 0.2, num_predict: ANSWER_RETRY_OUTPUT_TOKENS });
   });
 
-  it('logs provider, finish reason and token counts, never the question, answer or key', async () => {
-    const ollama = new FakeOllama();
-    const lines: string[] = [];
-    const gen = createOllamaGenerator({ apiKey: 'secret-key', model: 'gpt-oss:20b', fetch: ollama.fetch, log: (l) => lines.push(l) });
-    await gen(input('What does it eat?'));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^\[ask\] provider=ollama model=gpt-oss:20b finish=stop prompt_tokens=1700 answer_tokens=110 total_tokens=1810 ms=\d+$/);
-    expect(lines[0]).not.toMatch(/secret-key|What does it eat|seeds/);
-  });
-
   it('turns each HTTP failure into a ProviderError with the right kind', async () => {
     const ollama = new FakeOllama();
-    const gen = createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: ollama.fetch, log: () => undefined });
+    const gen = createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: ollama.fetch });
     const kinds: Array<[string, string, number | undefined]> = [
       ['rate_limit', 'rate_limit', 429],
       ['queue_full', 'queue_full', 429],
@@ -110,7 +102,7 @@ describe('Ollama Cloud request and response handling', () => {
   it('aborts after the timeout and reports it as a timeout', async () => {
     const ollama = new FakeOllama();
     ollama.force = 'timeout';
-    const gen = createOllamaGenerator({ apiKey: 'k', model: 'm', timeoutMs: 30, fetch: ollama.fetch, log: () => undefined });
+    const gen = createOllamaGenerator({ apiKey: 'k', model: 'm', timeoutMs: 30, fetch: ollama.fetch });
     const started = Date.now();
     const err = await gen(input('x')).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderError);
@@ -120,7 +112,7 @@ describe('Ollama Cloud request and response handling', () => {
 
   it('reports an empty reply as empty text and a done_reason other than "stop" as cut', async () => {
     const ollama = new FakeOllama();
-    const gen = createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: ollama.fetch, log: () => undefined });
+    const gen = createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: ollama.fetch });
     ollama.force = 'empty';
     expect((await gen(input('x'))).text).toBe('');
     ollama.force = 'length';
@@ -139,7 +131,8 @@ describe('provider chain fallback', () => {
     expect(text).toBe('The Eurasian Blackbird eats seeds, according to the summary.');
     expect(c.ollama.calls).toHaveLength(1);
     expect(c.gemini.calls).toHaveLength(0);
-    expect(c.lines.at(-1)).toBe('[ask] provider=ollama fallback_from=- fallback_reason=- finish=stop prompt_tokens=1700 answer_tokens=110 total_tokens=1810');
+    expect(c.lines.at(-1)).toMatch(/^\[ask\] provider=ollama model=fake-model fallback_from=- fallback_reason=- finish=stop prompt_tokens=1700 answer_tokens=110 total_tokens=1810 duration_ms=\d+$/);
+    for (const l of c.lines) expect(l).not.toMatch(/What does it eat|seeds|test-key/);
   });
 
   it.each([
@@ -160,7 +153,7 @@ describe('provider chain fallback', () => {
     expect(c.ollama.calls).toHaveLength(1);
     expect(c.gemini.calls).toHaveLength(1);
     expect(c.lines).toContain(`[ask] provider=ollama failed reason=${reason} (falling back)`);
-    expect(c.lines.at(-1)).toBe(`[ask] provider=gemini fallback_from=ollama fallback_reason=${reason} finish=stop prompt_tokens=1800 answer_tokens=120 total_tokens=2120`);
+    expect(c.lines.at(-1)).toMatch(new RegExp(`^\\[ask\\] provider=gemini model=gemini-test fallback_from=ollama fallback_reason=${reason} finish=stop prompt_tokens=1800 answer_tokens=120 total_tokens=2120 duration_ms=\\d+$`));
     for (const l of c.lines) expect(l).not.toMatch(/What does it eat|seeds|test-key/);
   });
 
@@ -171,7 +164,7 @@ describe('provider chain fallback', () => {
     expect(text).toBe('The Eurasian Blackbird eats seeds, according to the summary.');
     expect(c.gemini.calls).toHaveLength(1);
     expect(c.ollama.calls).toHaveLength(1);
-    expect(c.lines.at(-1)).toMatch(/^\[ask\] provider=ollama fallback_from=gemini fallback_reason=(server|unknown) /);
+    expect(c.lines.at(-1)).toMatch(/^\[ask\] provider=ollama model=fake-model fallback_from=gemini fallback_reason=(server|unknown) /);
   });
 
   it("the last provider's cut answer is kept and marked, as before", async () => {
@@ -180,8 +173,8 @@ describe('provider chain fallback', () => {
     const text = await ask(c, 'where does it live? [scenario:truncated_twice]');
     expect(text).toBe(`The Wikipedia article does not mention Des Moines, though it notes that the species breeds across the northern forests. [Range] ${CUT_SHORT_SUFFIX}`);
     expect(c.gemini.calls).toHaveLength(2); // Gemini's own retry (#43)
-    expect(c.lines.at(-1)).toMatch(/provider=gemini fallback_from=ollama fallback_reason=rate_limit finish=cut/);
-    const only = createChain([{ name: 'ollama', generate: createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: c.ollama.fetch, log: () => undefined }) }], { log: () => undefined });
+    expect(c.lines.at(-1)).toMatch(/provider=gemini model=gemini-test fallback_from=ollama fallback_reason=rate_limit finish=cut/);
+    const only = createChain([{ name: 'ollama', generate: createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: c.ollama.fetch }) }], { log: () => undefined });
     c.ollama.force = 'length';
     expect(await only(input('x'))).toBe(`The Wikipedia article does not mention Des Moines, though it notes that the species breeds across the northern forests. [Range] ${CUT_SHORT_SUFFIX}`);
   });
@@ -193,7 +186,7 @@ describe('provider chain fallback', () => {
     expect(err).toBeInstanceOf(ProviderError);
     expect(String(err)).not.toMatch(/What does it eat|503|fake/);
     expect(c.lines.at(-1)).toMatch(/^\[ask\] provider=gemini failed reason=\w+ \(no provider left\)$/);
-    const empty = createChain([{ name: 'gemini', generate: async () => ({ text: '   ', cut: false, usage: {} }) }], { log: () => undefined });
+    const empty = createChain([{ name: 'gemini', generate: async () => ({ text: '   ', cut: false, usage: {}, model: 'g', durationMs: 1 }) }], { log: () => undefined });
     await expect(empty(input('x'))).rejects.toBeInstanceOf(ProviderError);
     expect(() => createChain([])).toThrow();
   });
@@ -203,10 +196,10 @@ describe('provider chain fallback', () => {
     const c = fullChain();
     const chain = createChain(
       [
-        { name: 'ollama', generate: createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: c.ollama.fetch, log: () => undefined }) },
-        { name: 'gemini', generate: async () => ({ text: 'ok', cut: false, usage: { totalTokens: 5 } }) },
+        { name: 'ollama', generate: createOllamaGenerator({ apiKey: 'k', model: 'm', fetch: c.ollama.fetch }) },
+        { name: 'gemini', generate: async () => ({ text: 'ok', cut: false, usage: { totalTokens: 5 }, model: 'g', durationMs: 1 }) },
       ] satisfies AnswerProvider[],
-      { log: () => undefined, recorder: { record: (provider, fallbackFrom) => recorded.push({ provider, fallbackFrom: [...fallbackFrom] }) } },
+      { log: () => undefined, providerUsage: { record: (provider, fallbackFrom) => (recorded.push({ provider, fallbackFrom: [...fallbackFrom] }), { provider, requests: 1, promptTokens: 0, answerTokens: 0, fallbacks: 0 }), days: () => [], totals: () => [] } },
     );
     await chain(input('What does it eat?'));
     c.ollama.force = 'timeout';

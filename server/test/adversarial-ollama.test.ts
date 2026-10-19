@@ -18,7 +18,7 @@ const SPECIES = 'Turdus merula';
 
 async function memberApp(opts: { wiki?: WikiFetcher; env?: Partial<NodeJS.ProcessEnv> } = {}): Promise<{ t: TestApp; token: string; ollama: FakeOllama }> {
   const ollama = new FakeOllama();
-  const model = createChain([{ name: 'ollama', generate: createOllamaGenerator({ apiKey: 'fake-key', model: 'gpt-oss:20b', fetch: ollama.fetch, log: () => undefined }) }], { log: () => undefined });
+  const model = createChain([{ name: 'ollama', generate: createOllamaGenerator({ apiKey: 'fake-key', model: 'gpt-oss:20b', fetch: ollama.fetch }) }], { log: () => undefined });
   const t = await buildTestApp({ model, wiki: opts.wiki, env: opts.env, limits: { askPerMinute: 1000 } });
   const admin = await signUpAndLogin(t, ADMIN);
   const { token } = await approvedMember(t, admin, 'member@example.com');
