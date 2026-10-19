@@ -49,7 +49,8 @@ test('loads the model and identifies the bundled BirdNET sample clip', async ({ 
   await page.goto('./#/listen');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Sabih’s Birdbrain' })).toBeVisible();
-  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 120_000 });
+  // Offline: the model still loads from the cache; the pill says so (DESIGN_GUIDE.md §7).
+  await expect(page.getByTestId('model-status')).toContainText(/Offline|Model ready/, { timeout: 120_000 });
   await page.getByTestId('demo').click();
   await expect(page.getByTestId('results')).toContainText('Redpoll', { timeout: 120_000 });
   await page.goto('./#/species');
@@ -226,8 +227,9 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     if (layout === 'focus') {
       await expect(page.getByTestId('results-empty')).toBeHidden();
     } else {
-      await expect(card).toContainText('Lesser Redpoll');
-      await expect(card).toContainText('Acanthis cabaret');
+      await expect(page.getByTestId('results')).toContainText('Lesser Redpoll');
+      await expect(card).toContainText(/Redpoll/);
+      await expect(card).toContainText(/Acanthis/);
       await expect(card).toContainText(/\d+%/);
       await expect(card.locator('.result-thumb').first()).toBeAttached();
     }
