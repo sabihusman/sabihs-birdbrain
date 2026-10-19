@@ -178,10 +178,11 @@ step7_deploy_user() {
   # In a dry run the user does not exist yet (getent fails under pipefail): assume the default home.
   local home; home="$(getent passwd "$DEPLOY_USER" 2>/dev/null | cut -d: -f6)" || true; home="${home:-/home/$DEPLOY_USER}"
   refuse_if_exists "$home/.ssh/authorized_keys"
-  run install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 "$home/.ssh"
+  # Root owns .ssh and authorized_keys (sshd StrictModes accepts root ownership) so the deploy
+  # user cannot loosen its own forced-command restrictions.
+  run install -d -o root -g root -m 0755 "$home/.ssh"
   local key; key="$(tr -d '\n' < "$DEPLOY_PUBKEY_FILE")"
-  printf 'restrict,command="sudo %s",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty %s\n' "$DEPLOY_SCRIPT" "$key" | write_file "$home/.ssh/authorized_keys" 0600
-  [ "$DRY_RUN" = 1 ] || chown "$DEPLOY_USER:$DEPLOY_USER" "$home/.ssh/authorized_keys"
+  printf 'restrict,command="sudo %s",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty %s\n' "$DEPLOY_SCRIPT" "$key" | write_file "$home/.ssh/authorized_keys" 0644
   echo "   rollback: userdel -r $DEPLOY_USER; rm $DEPLOY_SCRIPT $SUDOERS_FILE"
 }
 

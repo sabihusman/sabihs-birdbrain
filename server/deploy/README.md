@@ -26,7 +26,7 @@ Suggested order: `verify.sh baseline` → `setup.sh --dry-run` → `setup.sh` �
 | Create the user, no password, no shell login beyond the forced command | `useradd --system --create-home --shell /bin/sh birdbrain-deploy` | `userdel -r birdbrain-deploy` |
 | Install the script | `install -o root -g root -m 0750 server/deploy/birdbrain-deploy.sh /usr/local/sbin/birdbrain-deploy.sh` | `rm /usr/local/sbin/birdbrain-deploy.sh` |
 | Let the deploy user run exactly that script via sudo, no arguments | `visudo -cf server/deploy/sudoers-birdbrain-deploy && install -o root -g root -m 0440 server/deploy/sudoers-birdbrain-deploy /etc/sudoers.d/birdbrain-deploy` | `rm /etc/sudoers.d/birdbrain-deploy` |
-| Authorise the CI key with a forced command | copy `server/deploy/authorized_keys.example` to `~birdbrain-deploy/.ssh/authorized_keys` with the real public key; `chmod 700 ~birdbrain-deploy/.ssh; chmod 600 .../authorized_keys; chown -R birdbrain-deploy:` | delete the file |
+| Authorise the CI key with a forced command | copy `server/deploy/authorized_keys.example` to `~birdbrain-deploy/.ssh/authorized_keys` with the real public key; `~/.ssh` and the file are owned by **root** (dir 0755, file 0644) so the deploy user cannot loosen its own restrictions | delete the file |
 | Compose file and env | `install -o root -g root -m 0644 server/compose.yml /opt/birdbrain/compose.yml`; `/opt/birdbrain/.env` already exists (root, 0600) | remove the compose file |
 
 The script runs `docker compose pull` and `up -d` for the `api` service in

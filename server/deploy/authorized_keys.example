@@ -1,4 +1,5 @@
-# ~birdbrain-deploy/.ssh/authorized_keys  (owner birdbrain-deploy, mode 0600; ~/.ssh mode 0700)
+# ~birdbrain-deploy/.ssh/authorized_keys  (owner root, mode 0644; ~/.ssh owner root, mode 0755:
+# the deploy user must not be able to edit its own restrictions; sshd StrictModes accepts root ownership)
 # One line. "restrict" disables port/agent/X11 forwarding and the pty on modern OpenSSH;
 # the explicit options are repeated for clarity and for older servers. The forced command
 # ignores whatever the client asks to run, so this key can only trigger a deploy.
