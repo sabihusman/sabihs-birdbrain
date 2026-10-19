@@ -697,9 +697,12 @@ Sabih's approval and a baseline check of the other sites after every reload.
   against the same allowance on thinking models, so the visible answer was
   cut without any sign of it.
 - **Decision:** `createGeminiModel` sends `maxOutputTokens: 700` (room for 2–4
-  short paragraphs with citations) and `thinkingConfig.thinkingBudget: 512`
-  (`ThinkingConfig.thinkingBudget` in `@google/genai` 2.30; 0 disables and −1
-  is automatic, the range is model-dependent). It reads
+  short paragraphs with citations) and `thinkingConfig.thinkingLevel: LOW`
+  (`ThinkingConfig.thinkingLevel` / `ThinkingLevel.LOW` in `@google/genai`
+  2.30). The Gemini API "Thinking" page lists `gemini-3.8-flash` with levels
+  low, medium and high (default medium); `thinking_budget` is kept only for
+  backward compatibility and cannot be combined with `thinking_level` (400),
+  so the legacy field is not sent. It reads
   `candidates[0].finishReason`; on `MAX_TOKENS` it retries once with 1400,
   and if that is cut too it returns the complete sentences (citations kept)
   followed by "(answer cut short)". The system instruction already asked for
@@ -711,6 +714,6 @@ Sabih's approval and a baseline check of the other sites after every reload.
   (another call, same risk).
 - **Tests:** `server/test/ask-truncation.test.ts` with `FakeGemini` returning
   `finishReason: 'MAX_TOKENS'` once and twice.
-- **Not verified:** the thinking budget against the real `gemini-3.8-flash`
-  (if the model rejects the value the API returns an error that the existing
-  502 path reports; adjust `ANSWER_THINKING_BUDGET` in `server/src/ask.ts`).
+- **Not verified:** a live call with the level set (a rejected value surfaces
+  through the existing 502 path; adjust `ANSWER_THINKING_LEVEL` in
+  `server/src/ask.ts`).

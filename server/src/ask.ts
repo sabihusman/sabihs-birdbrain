@@ -1,4 +1,4 @@
-import { FinishReason, GoogleGenAI, HarmBlockThreshold, HarmCategory, type GenerateContentParameters } from '@google/genai';
+import { FinishReason, GoogleGenAI, HarmBlockThreshold, HarmCategory, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { z } from 'zod';
 import type { UsageStore } from './db.js';
 import type { SpeciesLabels } from './labels.js';
@@ -139,8 +139,12 @@ export function toPlainText(s: string): string {
 export const ANSWER_MAX_OUTPUT_TOKENS = 700;
 /** The one retry after the model hit the limit. */
 export const ANSWER_RETRY_OUTPUT_TOKENS = 1400;
-/** Thinking budget in tokens so reasoning cannot eat the answer allowance (@google/genai ThinkingConfig.thinkingBudget). */
-export const ANSWER_THINKING_BUDGET = 512;
+/**
+ * Thinking level so reasoning cannot eat the answer allowance. Gemini 3 models take
+ * `thinkingConfig.thinkingLevel` (gemini-3.8-flash: low, medium, high; default medium);
+ * `thinkingBudget` is the legacy field and the two cannot be combined (ai.google.dev, "Thinking").
+ */
+export const ANSWER_THINKING_LEVEL = ThinkingLevel.LOW;
 export const CUT_SHORT_SUFFIX = '(answer cut short)';
 
 /** The parts of a Gemini response the server reads (GenerateContentResponse in @google/genai). */
@@ -177,7 +181,7 @@ export function createGeminiModel(apiKey: string, model: string, client: GenAiCl
         systemInstruction,
         temperature: 0.2,
         maxOutputTokens,
-        thinkingConfig: { thinkingBudget: ANSWER_THINKING_BUDGET },
+        thinkingConfig: { thinkingLevel: ANSWER_THINKING_LEVEL },
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
           { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },

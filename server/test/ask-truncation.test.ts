@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { ANSWER_MAX_OUTPUT_TOKENS, ANSWER_RETRY_OUTPUT_TOKENS, ANSWER_THINKING_BUDGET, CUT_SHORT_SUFFIX, createGeminiModel, finishCutAnswer, SYSTEM_INSTRUCTION } from '../src/ask.js';
+import { ANSWER_MAX_OUTPUT_TOKENS, ANSWER_RETRY_OUTPUT_TOKENS, ANSWER_THINKING_LEVEL, CUT_SHORT_SUFFIX, createGeminiModel, finishCutAnswer, SYSTEM_INSTRUCTION } from '../src/ask.js';
 import { FakeGemini } from './fake-gemini.js';
 
 const input = (scenario: string) => ({ systemInstruction: SYSTEM_INSTRUCTION, prompt: `<source>[Section: Range]\nBreeds in the north.</source>\nQUESTION: where does it live? [scenario:${scenario}]` });
 
 describe('answers cut at the output limit', () => {
-  it('sends the output and thinking budgets on every call and asks for at most 120 words', async () => {
+  it('sends the output budget and a low thinking level on every call and asks for at most 120 words', async () => {
     const gemini = new FakeGemini();
     const model = createGeminiModel('fake-key', 'gemini-test', gemini, () => undefined);
     await model(input('answer'));
     expect(gemini.calls).toHaveLength(1);
     expect(gemini.last.config?.maxOutputTokens).toBe(ANSWER_MAX_OUTPUT_TOKENS);
-    expect(gemini.last.config?.thinkingConfig?.thinkingBudget).toBe(ANSWER_THINKING_BUDGET);
-    expect(ANSWER_THINKING_BUDGET).toBeLessThan(ANSWER_MAX_OUTPUT_TOKENS);
+    // Gemini 3 models take thinkingLevel; the legacy thinkingBudget must not be sent alongside it (400 from the API).
+    expect(gemini.last.config?.thinkingConfig?.thinkingLevel).toBe(ANSWER_THINKING_LEVEL);
+    expect(['MINIMAL', 'LOW']).toContain(ANSWER_THINKING_LEVEL);
+    expect(gemini.last.config?.thinkingConfig?.thinkingBudget).toBeUndefined();
     expect(SYSTEM_INSTRUCTION).toContain('at most 120 words');
   });
 
