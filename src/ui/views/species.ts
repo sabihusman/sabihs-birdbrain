@@ -158,7 +158,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     }
     const color = speciesColor(sp.scientific);
     const wikiBox = el('div', { 'data-testid': 'wiki' }, el('p', { class: 'muted' }, 'Loading Wikipedia summary…'));
-    const ask = askBox(ctx.api, sp);
+    const ask = askBox(ctx.api, sp, () => controller.location.get().location);
     disposers.push(ask.dispose);
     const idCard = speciesIdCard(ctx, sp);
     disposers.push(idCard.dispose);

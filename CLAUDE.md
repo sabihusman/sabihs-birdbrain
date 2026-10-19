@@ -61,6 +61,8 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 - `src/app.ts` routes; `src/auth.ts` Better Auth options (bearer plugin,
   `status`/`role` user fields, admin via `ADMIN_EMAIL`); `src/login-codes.ts`
   the email second factor; `src/ask.ts` the Gemini pipeline and caps;
+  `src/wiki-article.ts`, `src/natureserve.ts`, `src/ebird.ts` the three
+  fetched, cached sources (`EBIRD_API_KEY` optional; DECISIONS #47);
   `src/users.ts` admin SQL; `src/backup.ts` `VACUUM INTO` backups.
 - Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or
   Better Auth logs a schema mismatch.

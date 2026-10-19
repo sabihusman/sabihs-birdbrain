@@ -1,0 +1,132 @@
+{
+  "results": [
+    {
+      "recordType": "SPECIES",
+      "elementGlobalId": 102179,
+      "uniqueId": "ELEMENT_GLOBAL.2.102179",
+      "nsxUrl": "/Taxon/ELEMENT_GLOBAL.2.102179/Turdus_migratorius",
+      "elcode": "ABPBJ20170",
+      "scientificName": "Turdus migratorius",
+      "formattedScientificName": "<i>Turdus migratorius</i>",
+      "primaryCommonName": "American Robin",
+      "primaryCommonNameLanguage": "EN",
+      "roundedGRank": "G5",
+      "nations": [
+        {
+          "nationCode": "CA",
+          "roundedNRank": "N5B,N5N",
+          "subnations": [
+            {
+              "subnationCode": "QC",
+              "roundedSRank": "S5B",
+              "exotic": false,
+              "native": true
+            },
+            {
+              "subnationCode": "AB",
+              "roundedSRank": "S5B,SUN",
+              "exotic": false,
+              "native": true
+            },
+            {
+              "subnationCode": "BC",
+              "roundedSRank": "S5",
+              "exotic": false,
+              "native": true
+            },
+            {
+              "subnationCode": "ON",
+              "roundedSRank": "S5",
+              "exotic": false,
+              "native": true
+            }
+          ],
+          "exotic": false,
+          "native": true
+        },
+        {
+          "nationCode": "US",
+          "roundedNRank": "N5",
+          "subnations": [
+            {
+              "subnationCode": "GA",
+              "roundedSRank": "S5",
+              "exotic": false,
+              "native": true
+            },
+            {
+              "subnationCode": "WA",
+              "roundedSRank": "S5B,S5N",
+              "exotic": false,
+              "native": true
+            },
+            {
+              "subnationCode": "IL",
+              "roundedSRank": "S5",
+              "exotic": false,
+              "native": true
+            },
+            {
+              "subnationCode": "NY",
+              "roundedSRank": "S5B",
+              "exotic": false,
+              "native": true
+            },
+            {
+              "subnationCode": "IA",
+              "roundedSRank": "S5B,S5N",
+              "exotic": false,
+              "native": true
+            }
+          ],
+          "exotic": false,
+          "native": true
+        }
+      ],
+      "lastModified": "2026-10-02T21:38:19.547891Z",
+      "classificationStatus": "Standard",
+      "speciesGlobal": {
+        "usesaCode": null,
+        "cosewicCode": null,
+        "saraCode": null,
+        "kingdom": "Animalia",
+        "family": "Turdidae",
+        "genus": "Turdus",
+        "informalTaxonomy": "Animals | Vertebrates | Birds"
+      },
+      "gRank": "G5"
+    }
+  ],
+  "resultsSummary": {
+    "page": 0,
+    "recordsPerPage": 5,
+    "totalPages": 1,
+    "totalResults": 1,
+    "speciesResults": {
+      "total": 1
+    }
+  },
+  "searchCriteria": {
+    "criteriaType": "species",
+    "textCriteria": [
+      {
+        "paramType": "textSearch",
+        "searchToken": "Turdus migratorius",
+        "matchAgainst": "scientificName",
+        "operator": "equals"
+      }
+    ],
+    "statusCriteria": null,
+    "locationCriteria": null,
+    "pagingOptions": {
+      "page": 0,
+      "recordsPerPage": 5
+    },
+    "recordSubtypeCriteria": null,
+    "modifiedSince": null,
+    "locationOptions": null,
+    "classificationOptions": null,
+    "speciesTaxonomyCriteria": null
+  },
+  "_fixture": "Recorded live on 2026-10-19 from POST https://explorer.natureserve.org/api/data/speciesSearch (textSearch scientificName equals \"Turdus migratorius\"); subnations trimmed to a handful and speciesGlobal shortened."
+}

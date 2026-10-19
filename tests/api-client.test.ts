@@ -44,6 +44,11 @@ describe('ApiClient', () => {
     await expect(api.ask('Turdus merula', 'why?')).rejects.toBeInstanceOf(ApiError);
     expect(seen[2].auth).toBe('Bearer tok');
     expect(seen[2].body).toEqual({ species: 'Turdus merula', question: 'why?' });
+    // region and the rounded point travel only when given; nothing else from the options is copied
+    await expect(api.ask('Turdus merula', 'near me?', { region: 'US-IA', near: { lat: 41.7, lon: -91.5 } })).rejects.toBeInstanceOf(ApiError);
+    expect(seen[3].body).toEqual({ species: 'Turdus merula', question: 'near me?', region: 'US-IA', near: { lat: 41.7, lon: -91.5 } });
+    await expect(api.ask('Turdus merula', 'why?', { region: 'none' })).rejects.toBeInstanceOf(ApiError);
+    expect(seen[4].body).toEqual({ species: 'Turdus merula', question: 'why?', region: 'none' });
   });
 
   it('drops the session on 401 and maps error codes to text', async () => {

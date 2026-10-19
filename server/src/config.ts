@@ -16,6 +16,8 @@ const envSchema = z.object({
   MAIL_FROM: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
+  /** eBird API 2.0 key (optional): without it /v1/ask answers without eBird sightings. Never logged. */
+  EBIRD_API_KEY: z.string().trim().min(1).optional(),
   ASK_DAILY_PER_USER: z.coerce.number().int().min(0).default(20),
   ASK_DAILY_GLOBAL: z.coerce.number().int().min(0).default(200),
   ASK_MAX_QUESTION_CHARS: z.coerce.number().int().min(1).max(500).default(500),

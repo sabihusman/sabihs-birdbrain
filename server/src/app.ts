@@ -18,6 +18,8 @@ import { SignupNotifier } from './signup-notify.js';
 import { Users } from './users.js';
 import type { WikiFetcher } from './wiki.js';
 import type { ArticleFetcher } from './wiki-article.js';
+import type { EbirdSource } from './ebird.js';
+import type { NatureServeFetcher } from './natureserve.js';
 
 export interface AppDeps {
   config: Config;
@@ -28,6 +30,10 @@ export interface AppDeps {
   wiki: WikiFetcher;
   /** Full-article context (cached); the summary is the fallback. */
   article?: ArticleFetcher;
+  /** NatureServe status (cached); optional. */
+  natureserve?: NatureServeFetcher;
+  /** eBird sightings (cached); null when EBIRD_API_KEY is not set. */
+  ebird?: EbirdSource | null;
   model: AnswerModel | null;
   /** Override limits in tests. */
   limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number; signupNotifyWindowMs?: number; invitesPerDay?: number };
@@ -399,7 +405,7 @@ export function createApp(deps: AppDeps) {
       raw = null;
     }
     if (raw === null) return json(c, 400, { error: 'invalid_request' });
-    const out = await answerQuestion({ labels, wiki: deps.wiki, article: deps.article, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS }, s.user, raw);
+    const out = await answerQuestion({ labels, wiki: deps.wiki, article: deps.article, natureserve: deps.natureserve, ebird: deps.ebird ?? null, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS }, s.user, raw);
     return json(c, out.status, out.body);
   });
 
