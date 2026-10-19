@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { DetectionRecord, RecordingRecord, WikiCacheEntry } from './types';
+import type { ClipRecord, DetectionRecord, RecordingRecord, WikiCacheEntry } from './types';
 
 interface BirdbrainDB extends DBSchema {
   recordings: {
@@ -16,24 +16,33 @@ interface BirdbrainDB extends DBSchema {
     key: string;
     value: WikiCacheEntry;
   };
+  clips: {
+    key: string;
+    value: ClipRecord;
+  };
 }
 
 const DB_NAME = 'sabihs-birdbrain';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<BirdbrainDB>> | null = null;
 
 export function getDB(): Promise<IDBPDatabase<BirdbrainDB>> {
   if (!dbPromise) {
     dbPromise = openDB<BirdbrainDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const rec = db.createObjectStore('recordings', { keyPath: 'id' });
-        rec.createIndex('by-created', 'createdAt');
-        const det = db.createObjectStore('detections', { keyPath: 'id' });
-        det.createIndex('by-time', 'time');
-        det.createIndex('by-scientific', 'scientific');
-        det.createIndex('by-recording', 'recordingId');
-        db.createObjectStore('wiki', { keyPath: 'key' });
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const rec = db.createObjectStore('recordings', { keyPath: 'id' });
+          rec.createIndex('by-created', 'createdAt');
+          const det = db.createObjectStore('detections', { keyPath: 'id' });
+          det.createIndex('by-time', 'time');
+          det.createIndex('by-scientific', 'scientific');
+          det.createIndex('by-recording', 'recordingId');
+          db.createObjectStore('wiki', { keyPath: 'key' });
+        }
+        if (oldVersion < 2) {
+          db.createObjectStore('clips', { keyPath: 'scientific' });
+        }
       },
     });
   }
@@ -120,9 +129,30 @@ export async function putWikiCache(entry: WikiCacheEntry): Promise<void> {
   await db.put('wiki', entry);
 }
 
+// Species clips (one per species)
+export async function getClip(scientific: string): Promise<ClipRecord | undefined> {
+  const db = await getDB();
+  return db.get('clips', scientific);
+}
+
+export async function putClip(clip: ClipRecord): Promise<void> {
+  const db = await getDB();
+  await db.put('clips', clip);
+}
+
+export async function deleteClip(scientific: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('clips', scientific);
+}
+
+export async function listClips(): Promise<ClipRecord[]> {
+  const db = await getDB();
+  return db.getAll('clips');
+}
+
 export async function clearAllData(): Promise<void> {
   const db = await getDB();
-  const tx = db.transaction(['recordings', 'detections', 'wiki'], 'readwrite');
-  await Promise.all([tx.objectStore('recordings').clear(), tx.objectStore('detections').clear(), tx.objectStore('wiki').clear()]);
+  const tx = db.transaction(['recordings', 'detections', 'wiki', 'clips'], 'readwrite');
+  await Promise.all([tx.objectStore('recordings').clear(), tx.objectStore('detections').clear(), tx.objectStore('wiki').clear(), tx.objectStore('clips').clear()]);
   await tx.done;
 }

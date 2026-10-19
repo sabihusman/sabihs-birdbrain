@@ -5,7 +5,7 @@ import { createAuth, migrateAuth } from './auth.js';
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
 import { loadLabels } from './labels.js';
-import { createConsoleMailer, createSmtpMailer } from './mailer.js';
+import { createConsoleMailer, createSmtpMailer, withSendTimeout } from './mailer.js';
 import { fetchWikipediaSummary } from './wiki.js';
 
 async function main() {
@@ -14,7 +14,7 @@ async function main() {
   await migrateAuth(db, config);
   const auth = createAuth(db, config);
   const labels = loadLabels(config.LABELS_PATH);
-  const mailer = config.MAIL_TRANSPORT === 'smtp' ? createSmtpMailer(config.SMTP_USER!, config.SMTP_APP_PASSWORD!, config.MAIL_FROM ?? `Sabih's Birdbrain <${config.SMTP_USER}>`) : createConsoleMailer();
+  const mailer = withSendTimeout(config.MAIL_TRANSPORT === 'smtp' ? createSmtpMailer(config.SMTP_USER!, config.SMTP_APP_PASSWORD!, config.MAIL_FROM ?? `Sabih's Birdbrain <${config.SMTP_USER}>`) : createConsoleMailer());
   const model = config.GEMINI_API_KEY ? createGeminiModel(config.GEMINI_API_KEY, config.GEMINI_MODEL) : null;
   if (!model) console.warn('[startup] GEMINI_API_KEY not set: /v1/ask will answer 502');
   const app = createApp({ config, db, auth, mailer, labels, wiki: fetchWikipediaSummary, model });

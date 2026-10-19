@@ -14,6 +14,7 @@ import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { formatBytes } from '../../storage/quota';
 import { capImportedAudio, MAX_IMPORT_SECONDS } from '../../audio/import-cap';
 import { locationBlock } from '../components/location-block';
+import { bestByConfidence, clipFocus, clipRange, sliceClip } from '../../species/clips';
 
 export function recordingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -200,7 +201,8 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       spectrogram.renderStatic(audio);
       const s = controller.settings.get();
       const hop = Math.round((WINDOW_SECONDS - s.overlapSeconds) * SAMPLE_RATE);
-      const job = controller.inference.analyzeFile(audio.slice(), hop, (w) => {
+      // The stored clip stays raw; only the copy sent to the model gets the low-cut.
+      const job = controller.inference.analyzeFile(await controller.prepareForAnalysis(audio.slice()), hop, (w) => {
         const offsetSec = w.offsetSamples / SAMPLE_RATE;
         windows.push({ offsetSec, scores: w.scores });
         const dets = selectDetections(w.scores, controller.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird });
@@ -239,6 +241,23 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       rec.analyzedAt = Date.now();
       await putRecording(rec);
       controller.emit('detections-changed', undefined);
+      await offerClips(records);
+    };
+
+    /** One raw clip per detected species, centred on its windows, capped at 10 s (member feature). */
+    const offerClips = async (records: DetectionRecord[]) => {
+      if (!controller.clipsCollected) return;
+      const bySpecies = new Map<string, DetectionRecord[]>();
+      for (const r of records) bySpecies.set(r.scientific, [...(bySpecies.get(r.scientific) ?? []), r]);
+      for (const dets of bySpecies.values()) {
+        const best = bestByConfidence(dets);
+        if (!best) continue; // cannot happen (groups are non-empty), but keeps the call total
+        const focus = clipFocus(dets.map((d) => ({ offsetSec: d.offsetSec ?? 0, confidence: d.confidence })));
+        const range = clipRange(focus, { start: 0, end: audio.length / SAMPLE_RATE });
+        await controller
+          .offerClip({ scientific: best.scientific, common: best.common, confidence: best.confidence, time: best.time, lat: best.lat, lon: best.lon, accuracy: best.accuracy, source: best.source, recordingId: id }, sliceClip(audio, range))
+          .catch((e: Error) => ctx.notify({ kind: 'warn', text: `Could not save the species clip: ${e.message}` }));
+      }
     };
 
     const runWhy = async (index: number, offsetSec: number, btn: HTMLButtonElement) => {
@@ -253,7 +272,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       const cancel = el('button', { class: 'btn small' }, 'Cancel');
       const box = el('div', { class: 'stack' }, text, bar, cancel);
       btn.replaceWith(box);
-      const job = controller.inference.occlusion(window, index, grid.timeSteps, grid.freqBands, (done, total) => {
+      const job = controller.inference.occlusion(await controller.prepareForAnalysis(window), index, grid.timeSteps, grid.freqBands, (done, total) => {
         (bar.firstElementChild as HTMLElement).style.width = `${Math.round((done / total) * 100)}%`;
         text.textContent = `Model pass ${done} of ${total}…`;
       });

@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from '../../app/settings';
 import type { Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
 import { fitCanvas } from '../dom';
@@ -11,7 +12,7 @@ export interface TimelinePoint {
 /** Per-species confidence over recent analysis windows: one coloured line per species. */
 export class TimelineView {
   private points: TimelinePoint[] = [];
-  private threshold = 0.25;
+  private threshold = DEFAULT_SETTINGS.threshold;
 
   constructor(
     private canvas: HTMLCanvasElement,

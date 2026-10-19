@@ -273,3 +273,201 @@ Sabih's approval and a baseline check of the other sites after every reload.
   real signup, which Sabih does from the live app. Also the ACME renewal path
   itself (the timer's first run logged "Skip renewal", as expected for a fresh
   certificate; the first real renewal is due around 2026-12-18).
+
+## 23. GitHub Pages switched off (2026-10-19)
+
+- **Decision:** remove `.github/workflows/deploy.yml` and unpublish the Pages
+  site once Vercel production was verified; Vercel is the only front-end host.
+  Dev and preview now serve at `/`; `VITE_BASE_PATH` stays as a generic
+  override, and `ci.yml` is unchanged.
+- **Alternative:** keep Pages as a permanent mirror at `/sabihs-birdbrain/`.
+- **Reason:** two live copies with different base paths meant two service
+  worker scopes, two model caches and a CSP that only one host enforced; the
+  Wikipedia User-Agent and docs also pointed at the old URL. The model files
+  stay in the repo (decision 1) because Vercel serves them the same way.
+
+## 24. Microphone: ask for raw audio, then show what was applied
+
+- **Decision:** `getUserMedia` asks for `echoCancellation: false`,
+  `noiseSuppression: false`, `autoGainControl: false` (as before), and the
+  engine now reads `MediaStreamTrack.getSettings()` on the opened track and
+  classifies the answer (`src/audio/mic-constraints.ts`): all three reported
+  `false` = "off"; any `true` = "partly on" / "on"; none of the three keys
+  present = "not controllable". Settings › Microphone shows the headline and
+  the per-key detail for the last session.
+- **Browser support (MDN browser-compat-data 8.1.6, read from the package,
+  not verified on a device):** `getSettings()` exists on Safari iOS since 11.
+  The `echoCancellation` constraint is supported on Safari iOS (13.4 in
+  `getSupportedConstraints`), **`noiseSuppression` and `autoGainControl` are
+  not** (no Safari iOS version listed for the constraint, for
+  `applyConstraints`, or for the settings key). Chrome for Android supports all
+  three (since 53/67). Expectation on iPhone: the report reads "off" with
+  "noise suppression and automatic gain not controllable", or "not
+  controllable" if WebKit also omits `echoCancellation` from the settings.
+  Whether iOS still applies its own voice processing to a web-page microphone
+  regardless of the request cannot be determined from a web page; it must be
+  judged by ear on a device.
+- **Before this change:** the constraints were requested the same way but the
+  applied settings were never read or shown.
+
+## 25. 150 Hz low-cut on the analysis path only
+
+- **Decision:** the engine has two AudioWorklet taps on the microphone: a raw
+  tap (recording, waveform/spectrogram, conditions indicator) and an analysis
+  tap behind a `BiquadFilterNode` (`type: 'highpass'`, `frequency: 150`,
+  `Q: 1` dB, the node default) feeding the Windower. Imported, re-analysed,
+  demo and "Why this ID" audio goes through the same node type in an
+  `OfflineAudioContext` (`renderLowCut`), with a plain-JS biquad using the
+  Web Audio coefficient formula as the fallback. Saved recordings and
+  auto-save clips always come from the raw tap (a sample ring aligned by
+  absolute offset) so they can be re-analysed later with other settings.
+  Settings toggle `lowCut`, default on.
+- **Alternative:** filter in the Worker before the mel layer. Rejected: the
+  user asked for a Web Audio node, and a node keeps the filter out of the
+  model code and identical for live and offline paths.
+- **Reason for 150 Hz:** wind, handling and traffic rumble sit below it, and
+  BirdNET's first mel spectrogram starts at 0 Hz (the second at 500 Hz), so
+  rumble does reach the model.
+  Very few bird sounds lie below 150 Hz; the exceptions are low booms and
+  drumming (bitterns, some grouse, large owls), which is why it is a toggle
+  rather than always on.
+- **Caveat:** both taps run in the same render quanta but their messages
+  can arrive in either order, so the engine holds a window until the raw ring
+  has caught up. The alignment relies on both taps seeing the same sample
+  count, which holds for one shared `AudioContext`; it is tested with fakes,
+  not on a device.
+
+## 26. Conditions indicator thresholds
+
+- **Decision:** once per second of raw audio (`src/audio/conditions.ts`):
+  "Too quiet" when RMS < -50 dBFS; otherwise "Windy" when at least 60 % of
+  the spectral energy (Hann-windowed 2048-point FFT, bins up to 15 kHz) lies
+  below 150 Hz; otherwise "Good". The level test comes first so faint rumble
+  reads as "Too quiet". The label is text ("Conditions: Windy · guidance
+  only") plus one line of advice, with the colour as a secondary cue, and it
+  never stops or pauses listening.
+- **Alternative:** calibrate thresholds per device from the first seconds.
+  Rejected for now: phone microphones differ widely in gain and the numbers
+  here are meant to be readable and adjustable, not exact. Expect to tune
+  -50 dBFS once real iPhone levels are known.
+
+## 27. Member features are gated from the cached session
+
+- **Decision:** the species ID card, sighting history and species clips are
+  unlocked when the session the `ApiClient` loads from localStorage has
+  `status: 'approved'` (`src/app/access.ts`). No server call is made for the
+  decision, so approved members keep the features offline. Signing out clears
+  the cached session, which hides the features; IndexedDB is not touched, so
+  the clips and detections are still there after the next sign-in.
+- **Consequence:** the cached session carries the server's `expiresAt`
+  (`SESSION_TTL_SECONDS`, default 24 h, extended on use by `updateAge`). An
+  expired cached session counts as signed out, so a member who stays offline
+  longer than the token lifetime loses the features until they sign in again.
+  Raise `SESSION_TTL_SECONDS` on the server if that is too short.
+- **Alternative:** a separate "member until" flag persisted on the device.
+  Rejected: it would outlive a revoked or disabled account.
+- **Collection is also gated:** clips are only cut and stored while a member is
+  signed in (`controller.setClipsEnabled`), so free users do not accumulate
+  ~1 MB WAVs they cannot play.
+
+## 28. One raw clip per species, replace-if-higher, 10 s cap
+
+- **Decision:** IndexedDB store `clips` (DB version 2) keyed by scientific
+  name. A clip is at most 10 s of raw, unfiltered 16-bit WAV at 48 kHz, cut by
+  `clipRange()` so it is centred on the detection window (or on the span of
+  the species' windows in a recording when that fits in 10 s, else on the best
+  window), shifted at the edges to keep its length. A new clip replaces the
+  stored one only when its confidence is strictly higher.
+- **Live listening:** the controller keeps a 24 s raw rolling buffer
+  (`SampleRing`) and a pending entry per species; the clip is cut once 3.5 s of
+  audio after the window has arrived, or with what exists when listening stops.
+  A more confident detection of the same species replaces the pending entry.
+- **Recordings and imports:** cut from the decoded (raw) recording after each
+  analysis, one offer per species.
+- **Reason for raw:** the clip is for listening and for later re-analysis, and
+  the low-cut filter (#23) belongs to the analysis path only.
+
+## 29. Heat map plugin: `leaflet.heat` 0.2.0, pinned
+
+- **Decision:** `leaflet.heat` 0.2.0 (BSD-2-Clause, Vladimir Agafonkin; bundles
+  `simpleheat`) with `@types/leaflet.heat` 0.2.5, pinned exactly. Pins
+  (`leaflet.markercluster`) by default below 10 located sightings, heat above,
+  with a toggle; both draw over the same single OSM tile layer that is never
+  cached (#9 tile policy).
+- **Honest caveat on "maintained":** no Leaflet heat-map plugin has had a
+  release in years; `leaflet.heat`'s last release is from 2015 (the npm
+  `time.modified` of 2022 is a metadata touch). It is the smallest and most
+  widely used one, has no dependencies, and works unchanged with Leaflet 1.9.
+  Alternatives checked: `heatmap.js` 2.0.5 (MIT, also dormant, larger). If the
+  plugin ever breaks, a canvas heat layer is about 80 lines.
+- **Privacy:** the heat map is built only from the user's own detections in
+  IndexedDB and is a member feature; it reveals where someone walks, so it is
+  never exported or sent anywhere (README › Privacy).
+
+## 30. Front-end `Referrer-Policy: strict-origin-when-cross-origin` (tiles need a Referer)
+
+- **Symptom:** map tiles answered `403 Access blocked` on the live site.
+  OpenStreetMap's tile usage policy requires browser apps to send a valid
+  `Referer`; `vercel.json` sent `Referrer-Policy: no-referrer` for every
+  page, so tile requests carried none.
+- **Decision:** `strict-origin-when-cross-origin` for the front end. Cross-
+  origin requests (tiles, Wikipedia images and REST calls, the API) now carry
+  the origin only, `https://sabihs-birdbrain.vercel.app/`, never a path or the
+  hash route; same-origin requests carry the full URL, which is ours anyway.
+  Nothing in a Birdbrain URL is secret (hash routes name species, not
+  people), so the origin is all that leaks.
+- **Checked:** `index.html` has no `<meta name="referrer">`; the Leaflet tile
+  layer uses the default `referrerPolicy: false` (Leaflet 1.9.4 adds the
+  attribute to tile images only when the option is set, per the option's
+  source documentation), and `crossOrigin: true` does not affect the
+  referrer. The API's Nginx `Referrer-Policy no-referrer` stays: it serves
+  JSON only and loads nothing third-party.
+- **Guard:** `tests/headers.test.ts` reads `vercel.json`, `index.html` and the
+  map module and fails if any of them reintroduces `no-referrer`; the map
+  e2e test checks that tile images carry no `referrerpolicy` attribute.
+- **Not verified here:** the 403 disappearing on the live site (needs the
+  Vercel deploy); the tiles loaded only in Chromium against the preview
+  server, which sends no headers.
+
+## 31. Default confidence threshold 60 %, migrated once from 25 %
+
+- **Decision:** `DEFAULT_SETTINGS.threshold` is 0.6 (was 0.25) and the
+  auto-save bar defaults to 0.6 as well. Stored settings carry a `version`;
+  loading a store without one (or < 2) replaces a saved threshold that
+  equals the old default with the new default and stamps version 2. Any
+  other saved value is a user's choice and stays, and after the stamp a
+  threshold of 25 % stays too.
+- **Auto-save clamp:** `sanitize()` raises `autoSaveMinConfidence` to the
+  detection threshold whenever it would be lower, because a clip is only
+  saved for a detection; the Settings sliders re-read the store after each
+  change so the clamped value is what they show.
+- **Reason:** at 25 % BirdNET lists many weak candidates on a phone; 60 %
+  matches what the sample clip and field use produced as reliable. The
+  Listen screen's help line already says what lowering does.
+- **Not verified:** field behaviour at 60 % on a phone; the e2e tests still
+  detect the sample clip at the new default.
+
+## 32. Live waveform and spectrogram auto-scale to the recent peak
+
+- **Symptom:** after #22 (no automatic gain on the microphone) raw phone
+  input peaks at roughly 0.01–0.06 of full scale. The waveform drew samples
+  on a fixed ±1 axis into a 56 px canvas, so a 0.02 peak was 0.6 px: a flat
+  line. The spectrogram mapped a fixed 0…−80 dBFS window, so the same input
+  sat in the dark purple end of the colour map. The data path was intact
+  (the level bar and the conditions indicator read the same raw tap); the
+  scale was the bug, case (b).
+- **Decision:** `src/ui/viz/autoscale.ts`. The waveform follows the loudest
+  sample in its 3 s ring with a fast-attack, slow-release follower and
+  applies a gain capped at ×100, rounded to readable steps (×1, ×2…×9, ×10,
+  ×15…), shown on the canvas and in the caption. The spectrogram's colour
+  window is 60 dB wide and its top follows the loudest bin of recent columns
+  (instant attack, 0.25 dB per column release, never below −70 dBFS so
+  digital silence is not blown up into a bright noise floor); the window is
+  printed bottom right. Static spectrograms of recordings use one window set
+  from the clip's loudest bin.
+- **Alternative:** remove the panel. Rejected: the scaled trace is useful
+  (the gain number itself tells how quiet the mic is) and the test suite now
+  proves a −40 dBFS sine fills more than 80 % of the canvas height.
+- **Not verified:** on a phone; the thresholds (×100 cap, 60 dB span,
+  −70 dBFS top floor) are first guesses for real microphone levels.
+
