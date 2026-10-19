@@ -1,0 +1,11 @@
+# /etc/systemd/system/lego-renew-birdbrain.timer
+[Unit]
+Description=Daily certificate renewal check for bird-brain.duckdns.org
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

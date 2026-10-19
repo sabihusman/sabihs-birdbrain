@@ -15,7 +15,7 @@ const envSchema = z.object({
   SMTP_APP_PASSWORD: z.string().optional(),
   MAIL_FROM: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
   ASK_DAILY_PER_USER: z.coerce.number().int().min(0).default(20),
   ASK_DAILY_GLOBAL: z.coerce.number().int().min(0).default(200),
   ASK_MAX_QUESTION_CHARS: z.coerce.number().int().min(1).max(500).default(500),

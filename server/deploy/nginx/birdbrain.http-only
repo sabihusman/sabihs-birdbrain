@@ -1,0 +1,17 @@
+# /etc/nginx/sites-available/birdbrain  -- STAGE 1 (port 80 only, until the certificate exists)
+# birdbrain-stage: http-only
+# Birdbrain API only. Never merge with the mba-vault or sentinel files.
+server {
+    listen 80;
+    server_name bird-brain.duckdns.org;
+
+    # ACME HTTP-01 challenges: same webroot as Sentinel (/var/www/acme).
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type "text/plain";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

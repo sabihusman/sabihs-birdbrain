@@ -56,8 +56,11 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 - Image: `server/Dockerfile` (context = repo root, copies `labels.json`),
   built by `.github/workflows/server-image.yml` to
   `ghcr.io/sabihusman/birdbrain-api`; `server/compose.yml` is the hardened
-  production compose file; `server/deploy/` holds the forced-command deploy
-  user files. Env variable names: `server/.env.example`.
+  production compose file; `server/deploy/` holds the server install kit
+  (`setup.sh` numbered steps with `--dry-run`, `rollback.sh`, `verify.sh`,
+  Nginx site files, lego renew units, forced-command deploy user files; see
+  `server/deploy/README.md`). Env variable names: `server/.env.example`.
+  Default Gemini model: `gemini-3.8-flash` (`GEMINI_MODEL`).
 
 Folder map:
 

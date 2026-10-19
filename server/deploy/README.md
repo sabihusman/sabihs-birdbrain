@@ -4,6 +4,21 @@ Everything here is installed by Sabih on 95.216.159.93 after approval; nothing
 in this repository touches the server by itself. Rollback for every step is the
 reverse action listed next to it.
 
+## 0. Scripts in this folder
+
+| File | Purpose |
+| --- | --- |
+| `setup.sh` | Numbered steps 1-8 (preflight, /opt/birdbrain + .env, Nginx port-80 block, lego certificate, renew service/timer, Nginx port-443 block, deploy user, container). `--dry-run` prints every command and writes nothing; `--only N` / `--from N` to resume. Refuses to overwrite any target file it did not create (the stage-1 Nginx file is the one exception, recognised by its `# birdbrain-stage: http-only` marker). Only ever `nginx -t` then `systemctl reload nginx`. |
+| `setup.conf.example` | Copy to `setup.conf`; fill `LEGO_BIN`, `LEGO_PATH`, `ACME_EMAIL` from `systemctl cat lego-renew-sentinel.service`, and `DEPLOY_PUBKEY_FILE`. The script refuses steps 4-7 without them. |
+| `rollback.sh` | Reverse order: container, deploy user, Nginx site (checked for our marker), renewal units. Keeps `.env`, the data volumes and the certificate unless `--purge`. |
+| `verify.sh` | `baseline` records the status codes of `/`, `/vault`, `/wellmark/` and `sabih-sentinel.duckdns.org`; `check` diffs them, checks Birdbrain's `/health`, the HTTP→HTTPS redirect and security headers, and that port 8010 is **not** reachable on the public address (curl to `95.216.159.93:8010` must get no response; `ss -tln` must show only `127.0.0.1:8010`). Run `baseline` before step 1 and `check` after step 8. |
+| `nginx/birdbrain.http-only`, `nginx/birdbrain` | Stage-1 (ACME + redirect) and final (proxy to `127.0.0.1:8010`, `limit_req` 6 r/min burst 5 → 429, `limit_conn` 3, 16 KB bodies, HSTS/nosniff/no-referrer, no CORS) site files. `__LEGO_PATH__` is substituted from `setup.conf`. |
+| `systemd/lego-renew-birdbrain.service`, `.timer` | Copy of Sentinel's renewal pattern with only the domain changed; placeholders filled from `setup.conf`. Compare the generated `ExecStart` with Sentinel's before step 5 (`lego` flags may differ by version). |
+| `birdbrain-deploy.sh`, `sudoers-birdbrain-deploy`, `authorized_keys.example` | The forced-command deploy user (section 1). |
+
+Suggested order: `verify.sh baseline` → `setup.sh --dry-run` → `setup.sh` → add
+`.env` values → `setup.sh --only 8` → `verify.sh check`.
+
 ## 1. Deploy user and files
 
 | Step | Command (as root) | Rollback |
@@ -34,13 +49,45 @@ The `deploy` job runs only after the image is pushed on `main`. The SSH client
 command it sends is ignored by the forced command; it only needs the connection
 to succeed and the script's exit code.
 
-## 3. Daily backup
+## 3. How the server pulls `ghcr.io/sabihusman/birdbrain-api`
+
+The image is pushed by `.github/workflows/server-image.yml` with the workflow's
+`GITHUB_TOKEN`. On its first push GitHub creates the package **private** and
+links it to the repository.
+
+**Plan: make the package public.** The image contains only the compiled server,
+its npm dependencies and the public BirdNET label list; no secrets are baked in
+(they come from `/opt/birdbrain/.env` at run time), so a public package is
+acceptable and needs no credentials on the server:
+
+1. GitHub → your profile → Packages → `birdbrain-api` → Package settings →
+   Danger zone → Change visibility → Public.
+2. On the server, `docker compose pull api` then works anonymously; `setup.sh`
+   step 8 and `birdbrain-deploy.sh` assume this.
+
+**Alternative: keep it private and log the server in.** Create a fine-grained
+or classic personal access token with only `read:packages`, then as root:
+
+```
+echo "<token>" | docker login ghcr.io -u sabihusman --password-stdin
+```
+
+Docker stores it in `/root/.docker/config.json` (make sure it is mode 600 and
+not in any backup you share). Rotate the token when it expires and never put it
+in `.env` or the repository. Everything else is unchanged.
+
+**Pinning.** `compose.yml` tracks `:latest`; every push also tags
+`sha-<commit>`, so to roll back or pin, edit the `image:` line to a `sha-` tag
+and run the deploy script. Digest pinning (`@sha256:...`) is the stricter
+option once the image is stable.
+
+## 4. Daily backup
 
 `server/scripts/backup.sh` wraps `docker exec birdbrain-api node dist/backup.js`
 (SQLite `VACUUM INTO` plus retention pruning into the `birdbrain-backups`
 volume). Install it as a root cron job; see the comment in the script.
 
-## 4. Manual deploy / rollback of the app itself
+## 5. Manual deploy / rollback of the app itself
 
 - Manual deploy: `sudo /usr/local/sbin/birdbrain-deploy.sh` as root.
 - Roll back to a previous image: edit `/opt/birdbrain/compose.yml` to pin

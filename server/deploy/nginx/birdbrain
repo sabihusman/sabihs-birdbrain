@@ -1,0 +1,53 @@
+# /etc/nginx/sites-available/birdbrain  -- STAGE 2 (final)
+# birdbrain-stage: full
+# Birdbrain API only. Never merge with the mba-vault or sentinel files.
+# Zones must be declared at http level; sites-enabled files are included inside http {}.
+limit_req_zone  $binary_remote_addr zone=birdbrain:10m      rate=6r/m;
+limit_conn_zone $binary_remote_addr zone=birdbrain_conn:10m;
+
+server {
+    listen 80;
+    server_name bird-brain.duckdns.org;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type "text/plain";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name bird-brain.duckdns.org;
+
+    # Paths are substituted by setup.sh from setup.conf (LEGO_PATH), matching Sentinel's layout.
+    ssl_certificate     __LEGO_PATH__/certificates/bird-brain.duckdns.org.crt;
+    ssl_certificate_key __LEGO_PATH__/certificates/bird-brain.duckdns.org.key;
+
+    # Abuse limits (the app has its own on top).
+    limit_req zone=birdbrain burst=5 nodelay;
+    limit_req_status 429;
+    limit_conn birdbrain_conn 3;
+    limit_conn_status 429;
+    client_max_body_size 16k;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    # No CORS headers here: the app sets them for the exact allowed origin.
+
+    location / {
+        proxy_pass http://127.0.0.1:8010;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+        proxy_send_timeout 30s;
+    }
+}
