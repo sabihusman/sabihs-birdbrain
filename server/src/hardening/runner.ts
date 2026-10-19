@@ -97,6 +97,68 @@ function injectingSources(config: Config, db: ReturnType<typeof openDatabase>, c
   return { wiki: fetchWikipediaSummary, article, natureserve, ebird };
 }
 
+interface CaseContext {
+  config: Config;
+  db: ReturnType<typeof openDatabase>;
+  costs: ReturnType<typeof createAskCostStore>;
+  sources: Pick<AskDeps, 'wiki' | 'article' | 'natureserve' | 'ebird'>;
+  chain: AnswerModel;
+  labels: SpeciesLabels;
+  lines: string[];
+  log: (line: string) => void;
+  setCurrent: (c: HardeningCase | null) => void;
+}
+
+/** True (and logged) when the next case could push the run's Gemini spend over the budget. */
+function overBudget(opts: RunOptions, spentMicros: number, caseId: string, log: (l: string) => void): boolean {
+  if (opts.provider === 'ollama') return false;
+  const projected = (spentMicros + PER_CASE_GEMINI_ESTIMATE_USD * 1_000_000) / 1_000_000;
+  if (projected <= opts.budgetUsd) return false;
+  log(`[harden] stopping before ${caseId}: estimated Gemini spend $${(spentMicros / 1_000_000).toFixed(4)} + $${PER_CASE_GEMINI_ESTIMATE_USD} would exceed the $${opts.budgetUsd.toFixed(2)} budget`);
+  return true;
+}
+
+function describeResult(r: CaseResult): string {
+  const error = r.error ? ` ${r.error}` : '';
+  const raw = r.rawFlags.join(',') || '-';
+  const misbehaved = r.modelMisbehaved ? ' model-misbehaved' : '';
+  const reason = r.reason ? ` · ${r.reason}` : '';
+  return `[harden] ${r.id} ${r.pass ? 'PASS' : 'FAIL'} ${r.title} · HTTP ${r.status}${error} · provider=${r.provider ?? '-'} · raw=${raw}${misbehaved}${reason}`;
+}
+
+/** Run one case: inject its text, ask through the real pipeline, capture the raw reply, judge. */
+async function runOneCase(ctx: CaseContext, c: HardeningCase): Promise<CaseResult> {
+  ctx.setCurrent(c);
+  let rawText = '';
+  let rawFlags: OutputFlag[] = [];
+  const capturing: AnswerModel = async (input) => {
+    const text = await ctx.chain(input);
+    rawText = text;
+    rawFlags = filterAnswer(text, toPlainText(text)).flags;
+    return text;
+  };
+  const deps: AskDeps = {
+    labels: ctx.labels,
+    ...ctx.sources,
+    model: capturing,
+    usage: createUsageStore(ctx.db),
+    caps: { perUserDaily: 1_000, globalDaily: 10_000 },
+    maxQuestionChars: ctx.config.ASK_MAX_QUESTION_CHARS,
+    costs: ctx.costs,
+    log: ctx.log,
+  };
+  const started = Date.now();
+  const before = ctx.lines.length;
+  const out = await answerQuestion(deps, { id: 'harden-member', status: 'approved' }, { species: c.species, question: c.question, ...(c.region ? { region: c.region } : {}) });
+  const askLine = ctx.lines.slice(before).find((l) => /^\[ask\] provider=\S+ model=/.test(l));
+  const provider = askLine?.match(/provider=(\S+)/)?.[1];
+  const model = askLine?.match(/model=(\S+)/)?.[1];
+  const r = judgeCase(c, out, { text: rawText, flags: rawFlags }, { provider, model, durationMs: Date.now() - started });
+  ctx.log(describeResult(r));
+  ctx.setCurrent(null);
+  return r;
+}
+
 /** The chain for the chosen provider; `ollama`/`gemini` force a single provider (the other is left out of the order). */
 function chainFor(config: Config, choice: ProviderChoice, costs: ReturnType<typeof createAskCostStore>, log: (l: string) => void): AnswerModel | null {
   const order = choice === 'chain' ? config.providerOrder : [choice];
@@ -126,42 +188,14 @@ export async function runHardening(config: Config, opts: RunOptions): Promise<Ru
   }
   if (!chain) throw new Error(`no provider available for --provider ${opts.provider} (missing key?)`);
   const labels = opts.labels ?? loadLabels(config.LABELS_PATH);
+  const ctx: CaseContext = { config, db, costs, sources, chain, labels, lines, log, setCurrent: (c) => void (current = c) };
+  // Sequential on purpose: the injected text is per case and the budget is checked before each one.
   for (const c of cases) {
-    const spentBefore = costs.monthSpendMicros(now());
-    if (opts.provider !== 'ollama' && (spentBefore + PER_CASE_GEMINI_ESTIMATE_USD * 1_000_000) / 1_000_000 > opts.budgetUsd) {
-      log(`[harden] stopping before ${c.id}: estimated Gemini spend $${(spentBefore / 1_000_000).toFixed(4)} + $${PER_CASE_GEMINI_ESTIMATE_USD} would exceed the $${opts.budgetUsd.toFixed(2)} budget`);
+    if (overBudget(opts, costs.monthSpendMicros(now()), c.id, log)) {
       stoppedForBudget = true;
       break;
     }
-    current = c;
-    let rawText = '';
-    let rawFlags: OutputFlag[] = [];
-    const capturing: AnswerModel = async (input) => {
-      const text = await chain(input);
-      rawText = text;
-      rawFlags = filterAnswer(text, toPlainText(text)).flags;
-      return text;
-    };
-    const deps: AskDeps = {
-      labels,
-      ...sources,
-      model: capturing,
-      usage: createUsageStore(db),
-      caps: { perUserDaily: 1_000, globalDaily: 10_000 },
-      maxQuestionChars: config.ASK_MAX_QUESTION_CHARS,
-      costs,
-      log,
-    };
-    const started = Date.now();
-    const before = lines.length;
-    const out = await answerQuestion(deps, { id: 'harden-member', status: 'approved' }, { species: c.species, question: c.question, ...(c.region ? { region: c.region } : {}) });
-    const askLine = lines.slice(before).find((l) => /^\[ask\] provider=\S+ model=/.test(l));
-    const provider = askLine?.match(/provider=(\S+)/)?.[1];
-    const model = askLine?.match(/model=(\S+)/)?.[1];
-    const r = judgeCase(c, out, { text: rawText, flags: rawFlags }, { provider, model, durationMs: Date.now() - started });
-    results.push(r);
-    log(`[harden] ${r.id} ${r.pass ? 'PASS' : 'FAIL'} ${r.title} · HTTP ${r.status}${r.error ? ' ' + r.error : ''} · provider=${r.provider ?? '-'} · raw=${r.rawFlags.join(',') || '-'}${r.modelMisbehaved ? ' model-misbehaved' : ''}${r.reason ? ' · ' + r.reason : ''}`);
-    current = null;
+    results.push(await runOneCase(ctx, c));
   }
   const passed = results.filter((r) => r.pass).length;
   const report: RunReport = {

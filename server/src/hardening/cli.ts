@@ -16,6 +16,9 @@ function arg(name: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
+/** Reports go next to the working directory by default (never a world-writable temp folder); the container invocation passes --out /reports. */
+const DEFAULT_OUT_DIR = 'hardening-reports';
+
 async function main(): Promise<number> {
   const provider = (arg('--provider') ?? 'chain') as ProviderChoice;
   if (!['chain', 'ollama', 'gemini'].includes(provider)) {
@@ -28,7 +31,7 @@ async function main(): Promise<number> {
     return 2;
   }
   const only = arg('--only')?.split(',').map((s) => s.trim()).filter(Boolean);
-  const outDir = arg('--out') ?? process.env.HARDEN_OUT_DIR ?? '/tmp/hardening';
+  const outDir = arg('--out') ?? process.env.HARDEN_OUT_DIR ?? DEFAULT_OUT_DIR;
   const dryRun = process.argv.includes('--dry-run');
   const config = loadConfig();
   const report = await runHardening(config, { provider, budgetUsd, only, outDir, dryRun });
@@ -38,9 +41,9 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main()
-  .then((code) => process.exit(code))
-  .catch((err: unknown) => {
-    console.error(`[harden] failed: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  });
+try {
+  process.exitCode = await main();
+} catch (err) {
+  console.error(`[harden] failed: ${err instanceof Error ? err.message : String(err)}`);
+  process.exitCode = 1;
+}
