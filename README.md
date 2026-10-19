@@ -6,9 +6,7 @@ the device, using the BirdNET V2.4 neural network running in TensorFlow.js
 inside a Web Worker. It records, re-analyses, explains its own identifications,
 looks species up, maps where you heard them, and works offline once installed.
 
-Live app: Vercel (`*.vercel.app`, connected by Sabih) with GitHub Pages at
-**https://sabihusman.github.io/sabihs-birdbrain/** kept as a fallback until the
-Vercel deployment is verified. API: `https://bird-brain.duckdns.org` (`server/`).
+Live app: **https://sabihs-birdbrain.vercel.app**. API: `https://bird-brain.duckdns.org` (`server/`).
 
 | Listen (light) | Listen (dark) | Species | Map |
 | --- | --- | --- | --- |
@@ -183,10 +181,10 @@ both apps agree.
 
 ```
 npm install
-npm run dev            # http://localhost:5173/sabihs-birdbrain/
+npm run dev            # http://localhost:5173/
 npm run lint && npm run typecheck && npm test
 npm run build          # typecheck + vite build → dist/
-npm run preview        # serve the build at http://localhost:4173/sabihs-birdbrain/
+npm run preview        # serve the build at http://localhost:4173/
 npm run test:e2e       # Playwright: loads the model, analyses the bundled sample, goes offline
 cd server && npm install && npm test   # API unit + integration tests (fake mailer, in-memory SQLite)
 ```
@@ -202,8 +200,8 @@ and decoding, occlusion masking, and CSV/GeoJSON export. The Playwright test
 runs the built app in Chromium at iPhone size, waits for the models to load in
 the worker, identifies the sample clip that ships with the official BirdNET
 TF.js export (a redpoll), checks the WebAssembly fallback, then reloads offline
-and does it again from the caches. GitHub Actions runs all of it on every push
-and deploys `dist/` to GitHub Pages on every push to `main`.
+and does it again from the caches. GitHub Actions runs all of it on every push;
+Vercel builds and deploys the front end from `main`.
 
 Architecture notes for contributors are in [CLAUDE.md](CLAUDE.md); the build
 decisions and their alternatives are in [DECISIONS.md](DECISIONS.md); sources,

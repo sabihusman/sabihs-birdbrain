@@ -2,9 +2,9 @@
 
 Sabih’s Birdbrain is a mobile-first PWA that identifies bird sounds on-device
 with BirdNET V2.4 running in TensorFlow.js inside a Web Worker. Audio never
-leaves the phone. Front end on Vercel (base path `/`), with GitHub Pages
-(`https://sabihusman.github.io/sabihs-birdbrain/`, base `/sabihs-birdbrain/`)
-kept until Vercel is verified. Optional back end (`server/`) at
+leaves the phone. Front end on Vercel at `https://sabihs-birdbrain.vercel.app`
+(base path `/`; verified live with the strict CSP on 2026-10-19; the former
+GitHub Pages site was switched off the same day). Optional back end (`server/`) at
 `https://bird-brain.duckdns.org`: accounts with an emailed login code, admin
 approval, and member-only "Ask about this bird" answered by Gemini from the
 Wikipedia summary.
@@ -39,7 +39,7 @@ Key modules:
   Saved audio is always raw. `src/audio/mic-constraints.ts` classifies
   `track.getSettings()` into the "Voice processing" status; `highpass.ts`,
   `conditions.ts`, `ring-buffer.ts` hold the filter, the indicator thresholds
-  and the raw sample ring (see DECISIONS.md #22–24).
+  and the raw sample ring (see DECISIONS.md #24–26).
 - `src/app/settings.ts` — localStorage settings; `src/app/location.ts` — GPS /
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.
@@ -68,6 +68,16 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   Nginx site files, lego renew units, forced-command deploy user files; see
   `server/deploy/README.md`). Env variable names: `server/.env.example`.
   Default Gemini model: `gemini-3.8-flash` (`GEMINI_MODEL`).
+- Server state (installed 2026-10-19 with `setup.sh` steps 1-8 on 95.216.159.93,
+  which also hosts other projects that must never be touched; see
+  `server/deploy/README.md`): `/opt/birdbrain/.env` sets `BIRDBRAIN_IMAGE_TAG=latest`,
+  so every push to `main` that touches `server/` rebuilds the image and the CI
+  deploy job redeploys it through the forced command; pin a `sha-<commit>` tag
+  there to roll back. The Nginx vhost has **no** `http2` listen flag (nginx 1.24
+  sets HTTP/2 per socket and the mba-vault catch-all already enables it; the
+  flag only made `nginx -t` warn). `~birdbrain-deploy/.ssh` and its
+  `authorized_keys` are root-owned. `server/deploy/verify.sh check` is the
+  acceptance test: other sites unchanged, `/health` 200, 8010 loopback-only.
 
 Folder map:
 
@@ -89,19 +99,19 @@ docs/                         BUILD_SPEC.md (original brief), SOURCES.md, screen
 
 ```
 npm install
-npm run dev          # http://localhost:5173/sabihs-birdbrain/
+npm run dev          # http://localhost:5173/
 npm run typecheck    # tsconfig.json (DOM) + tsconfig.worker.json (WebWorker lib)
 npm run lint
 npm test             # vitest
 npm run build        # typecheck + vite build → dist/ (includes sw.js)
-npm run preview      # serve dist/ at http://localhost:4173/sabihs-birdbrain/
+npm run preview      # serve dist/ at http://localhost:4173/
 npm run test:e2e     # playwright (starts preview itself); needs Chromium installed
 npx tsx scripts/validate-model.ts <modelDir> real <file.wav> [windows]   # Node sanity check
 ```
 
-Deploy: Vercel builds from the repo with base `/` (Sabih connected it);
-`.github/workflows/deploy.yml` still publishes to GitHub Pages with
-`VITE_BASE_PATH=/sabihs-birdbrain/`. `ci.yml` runs lint, typecheck, unit tests,
+Deploy: Vercel builds from the repo with base `/` (Sabih connected it); the
+GitHub Pages workflow is gone (Pages switched off 2026-10-19). `VITE_BASE_PATH`
+remains as a generic override for serving under a sub-path. `ci.yml` runs lint, typecheck, unit tests,
 build and the e2e test on every push. `server-image.yml` tests the API, pushes
 the image to GHCR, and on `main` triggers the server's forced-command deploy
 over SSH (secrets `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`). The CSP in

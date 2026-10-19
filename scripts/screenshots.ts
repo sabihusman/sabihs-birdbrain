@@ -6,7 +6,7 @@ import { chromium, devices } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const BASE = process.env.BASE ?? 'http://localhost:4173/sabihs-birdbrain/';
+const BASE = process.env.BASE ?? 'http://localhost:4173/';
 const out = path.resolve(import.meta.dirname, '../docs/screenshots');
 fs.mkdirSync(out, { recursive: true });
 

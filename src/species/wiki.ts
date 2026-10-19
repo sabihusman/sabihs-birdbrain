@@ -1,7 +1,7 @@
 import { getWikiCache, putWikiCache } from '../storage/db';
 import type { Species } from '../model/labels';
 
-export const WIKI_USER_AGENT = 'SabihsBirdbrain/1.0 (https://sabihusman.github.io/sabihs-birdbrain/; on-device bird ID PWA)';
+export const WIKI_USER_AGENT = 'SabihsBirdbrain/1.0 (https://sabihs-birdbrain.vercel.app/; on-device bird ID PWA)';
 const SUMMARY_BASE = 'https://en.wikipedia.org/api/rest_v1/page/summary/';
 const ACTION_API = 'https://en.wikipedia.org/w/api.php';
 
