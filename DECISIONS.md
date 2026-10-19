@@ -635,7 +635,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
   microphone. The headless "mic blocked" shot shows "No microphone was found"
   (no device in the container) rather than a denied permission.
 
-## 38. Listen layouts and states per docs/DESIGN_GUIDE.md §5–7
+## 40. Listen layouts and states per docs/DESIGN_GUIDE.md §5–7
 
 - **Decision:** the Listen view is one set of pieces (status row with icon
   and words, 140 px mic button, listening panel with timer, "screen stays
