@@ -11,6 +11,7 @@ export function helpView(_ctx: ViewContext): View {
       el('h2', null, 'How it works'),
       el('p', null, 'Your phone records sound, resamples it to 48 kHz mono and cuts it into overlapping 3-second windows. Each window goes through BirdNET V2.4, a neural network from the Cornell Lab of Ornithology and Chemnitz University of Technology, running entirely in your browser with TensorFlow.js. A second, tiny model uses your location and the week of the year to drop species that are not expected there.'),
       el('p', null, 'Nothing is uploaded. Audio, recordings and detections stay in this browser’s storage.'),
+      el('p', null, 'On the Species tab a tick marks every species you have a sighting of, and the “Spotted by me” chip lists only those. Tapping a tick opens the species ID card for members; everyone else sees “Sign in to unlock”. The ticks are worked out from the sightings on this device and never leave it.'),
     ),
     el(
       'section',
