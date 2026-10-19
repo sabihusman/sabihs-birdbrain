@@ -14,7 +14,7 @@ export const WHAT_WE_STORE_TEXT =
   'When you ask about a bird, the species name, your question and your state or province code go to the server, which looks the species up on Wikipedia and NatureServe Explorer and, with that region code, on eBird; for questions about birds near you, your position rounded to about 10 km goes to eBird too. ' +
   'The question and the fetched text are then sent to Ollama Cloud and, if it is busy or fails, to Google’s Gemini model; neither ever sees your name, email or exact location. ' +
   'Answers are kept on the server for seven days so the same question is not asked again, without your name or email. ' +
-  'Deleting your account removes all of it from the server at once. The server keeps no backups of this data at the moment, so nothing lingers.';
+  'Deleting your account removes all of it from the server at once. Copies in the nightly server backup are removed within 14 days.';
 
 export function whatWeStore(): HTMLParagraphElement {
   return el('p', { class: 'small muted', 'data-testid': 'what-we-store' }, WHAT_WE_STORE_TEXT);
