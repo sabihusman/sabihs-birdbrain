@@ -142,7 +142,7 @@ describe('LLM10 output handling and LLM06 consumption (Ollama)', () => {
     expect((await ask(t, token, 'a'.repeat(501))).status).toBe(400);
     expect((await ask(t, token, '🐦'.repeat(501))).status).toBe(400);
     expect(ollama.calls).toHaveLength(0);
-    const odd = 'What\u0000 does‮ it​ eat?\u0007 Ünïcödé ok 🐦';
+    const odd = 'What\u0000 does\u202e it\u200b eat?\u0007 Ünïcödé ok 🐦';
     expect((await ask(t, token, odd)).status).toBe(200);
     const contents = userContent(ollama);
     expect(contents).not.toMatch(/[\u0000\u0007]/);
