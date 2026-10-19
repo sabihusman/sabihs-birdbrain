@@ -20,6 +20,8 @@ export interface Settings {
   occlusionResolution: OcclusionResolution;
   includeNonBird: boolean;
   showAdvancedViz: boolean;
+  /** 150 Hz high-pass on the analysis path (live and imported clips). Saved audio is never filtered. */
+  lowCut: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   occlusionResolution: 'coarse',
   includeNonBird: false,
   showAdvancedViz: true,
+  lowCut: true,
 };
 
 const KEY = 'birdbrain.settings.v1';

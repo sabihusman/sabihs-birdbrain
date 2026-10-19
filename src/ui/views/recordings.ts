@@ -200,7 +200,8 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       spectrogram.renderStatic(audio);
       const s = controller.settings.get();
       const hop = Math.round((WINDOW_SECONDS - s.overlapSeconds) * SAMPLE_RATE);
-      const job = controller.inference.analyzeFile(audio.slice(), hop, (w) => {
+      // The stored clip stays raw; only the copy sent to the model gets the low-cut.
+      const job = controller.inference.analyzeFile(await controller.prepareForAnalysis(audio.slice()), hop, (w) => {
         const offsetSec = w.offsetSamples / SAMPLE_RATE;
         windows.push({ offsetSec, scores: w.scores });
         const dets = selectDetections(w.scores, controller.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird });
@@ -253,7 +254,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       const cancel = el('button', { class: 'btn small' }, 'Cancel');
       const box = el('div', { class: 'stack' }, text, bar, cancel);
       btn.replaceWith(box);
-      const job = controller.inference.occlusion(window, index, grid.timeSteps, grid.freqBands, (done, total) => {
+      const job = controller.inference.occlusion(await controller.prepareForAnalysis(window), index, grid.timeSteps, grid.freqBands, (done, total) => {
         (bar.firstElementChild as HTMLElement).style.width = `${Math.round((done / total) * 100)}%`;
         text.textContent = `Model pass ${done} of ${total}…`;
       });

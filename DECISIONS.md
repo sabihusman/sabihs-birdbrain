@@ -285,3 +285,69 @@ Sabih's approval and a baseline check of the other sites after every reload.
   worker scopes, two model caches and a CSP that only one host enforced; the
   Wikipedia User-Agent and docs also pointed at the old URL. The model files
   stay in the repo (decision 1) because Vercel serves them the same way.
+
+## 24. Microphone: ask for raw audio, then show what was applied
+
+- **Decision:** `getUserMedia` asks for `echoCancellation: false`,
+  `noiseSuppression: false`, `autoGainControl: false` (as before), and the
+  engine now reads `MediaStreamTrack.getSettings()` on the opened track and
+  classifies the answer (`src/audio/mic-constraints.ts`): all three reported
+  `false` = "off"; any `true` = "partly on" / "on"; none of the three keys
+  present = "not controllable". Settings › Microphone shows the headline and
+  the per-key detail for the last session.
+- **Browser support (MDN browser-compat-data 8.1.6, read from the package,
+  not verified on a device):** `getSettings()` exists on Safari iOS since 11.
+  The `echoCancellation` constraint is supported on Safari iOS (13.4 in
+  `getSupportedConstraints`), **`noiseSuppression` and `autoGainControl` are
+  not** (no Safari iOS version listed for the constraint, for
+  `applyConstraints`, or for the settings key). Chrome for Android supports all
+  three (since 53/67). Expectation on iPhone: the report reads "off" with
+  "noise suppression and automatic gain not controllable", or "not
+  controllable" if WebKit also omits `echoCancellation` from the settings.
+  Whether iOS still applies its own voice processing to a web-page microphone
+  regardless of the request cannot be determined from a web page; it must be
+  judged by ear on a device.
+- **Before this change:** the constraints were requested the same way but the
+  applied settings were never read or shown.
+
+## 25. 150 Hz low-cut on the analysis path only
+
+- **Decision:** the engine has two AudioWorklet taps on the microphone: a raw
+  tap (recording, waveform/spectrogram, conditions indicator) and an analysis
+  tap behind a `BiquadFilterNode` (`type: 'highpass'`, `frequency: 150`,
+  `Q: 1` dB, the node default) feeding the Windower. Imported, re-analysed,
+  demo and "Why this ID" audio goes through the same node type in an
+  `OfflineAudioContext` (`renderLowCut`), with a plain-JS biquad using the
+  Web Audio coefficient formula as the fallback. Saved recordings and
+  auto-save clips always come from the raw tap (a sample ring aligned by
+  absolute offset) so they can be re-analysed later with other settings.
+  Settings toggle `lowCut`, default on.
+- **Alternative:** filter in the Worker before the mel layer. Rejected: the
+  user asked for a Web Audio node, and a node keeps the filter out of the
+  model code and identical for live and offline paths.
+- **Reason for 150 Hz:** wind, handling and traffic rumble sit below it, and
+  BirdNET's first mel spectrogram starts at 0 Hz (the second at 500 Hz), so
+  rumble does reach the model.
+  Very few bird sounds lie below 150 Hz; the exceptions are low booms and
+  drumming (bitterns, some grouse, large owls), which is why it is a toggle
+  rather than always on.
+- **Caveat:** both taps run in the same render quanta but their messages
+  can arrive in either order, so the engine holds a window until the raw ring
+  has caught up. The alignment relies on both taps seeing the same sample
+  count, which holds for one shared `AudioContext`; it is tested with fakes,
+  not on a device.
+
+## 26. Conditions indicator thresholds
+
+- **Decision:** once per second of raw audio (`src/audio/conditions.ts`):
+  "Too quiet" when RMS < -50 dBFS; otherwise "Windy" when at least 60 % of
+  the spectral energy (Hann-windowed 2048-point FFT, bins up to 15 kHz) lies
+  below 150 Hz; otherwise "Good". The level test comes first so faint rumble
+  reads as "Too quiet". The label is text ("Conditions: Windy · guidance
+  only") plus one line of advice, with the colour as a secondary cue, and it
+  never stops or pauses listening.
+- **Alternative:** calibrate thresholds per device from the first seconds.
+  Rejected for now: phone microphones differ widely in gain and the numbers
+  here are meant to be readable and adjustable, not exact. Expect to tune
+  -50 dBFS once real iPhone levels are known.
+

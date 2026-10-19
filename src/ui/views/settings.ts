@@ -7,6 +7,7 @@ import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../s
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
 import { accountSection } from './account';
+import { describeVoiceProcessing } from '../../audio/mic-constraints';
 
 export function settingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -24,7 +25,7 @@ export function settingsView(ctx: ViewContext): View {
     return el('div', { class: 'slider' }, el('div', { class: 'row' }, el('span', null, label), value), input);
   };
 
-  const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek', hint?: string) => {
+  const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut', hint?: string) => {
     const input = el('input', { type: 'checkbox', checked: s[key] });
     input.addEventListener('change', () => settings.update({ [key]: input.checked }));
     return el('label', { class: 'switch' }, el('span', null, label, hint ? el('div', { class: 'small muted' }, hint) : null), input);
@@ -95,11 +96,37 @@ export function settingsView(ctx: ViewContext): View {
   const modelStatus = controller.inference.getStatus();
   const account = accountSection(ctx.api);
 
+  // Microphone
+  const micHeadline = el('div', { 'data-testid': 'voice-processing' }, '');
+  const micDetail = el('div', { class: 'small muted' }, '');
+  const renderMic = () => {
+    const d = describeVoiceProcessing(controller.getMicReport());
+    micHeadline.textContent = d.headline;
+    micDetail.textContent = d.detail;
+  };
+  renderMic();
+  const unsubMic = controller.on('mic', renderMic);
+
   const root = el(
     'div',
     null,
     account.el,
-    el('section', { class: 'card' }, el('h2', null, 'Detection'), slider('Confidence threshold', 'threshold', 0.05, 0.95, 0.05, pct), slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`), toggle('Show non-bird classes', 'includeNonBird', 'Dog, engine, siren, human voice and similar.')),
+    el(
+      'section',
+      { class: 'card' },
+      el('h2', null, 'Detection'),
+      slider('Confidence threshold', 'threshold', 0.05, 0.95, 0.05, pct),
+      el('div', { class: 'small muted' }, 'Lower catches faint or distant birds but adds false IDs.'),
+      slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
+      toggle('Show non-bird classes', 'includeNonBird', 'Dog, engine, siren, human voice and similar.'),
+    ),
+    el(
+      'section',
+      { class: 'card' },
+      el('h2', null, 'Microphone'),
+      toggle('Low-cut filter (150 Hz)', 'lowCut', 'Removes wind and handling rumble from what the model hears, live and for imported clips. Saved recordings stay unfiltered.'),
+      el('div', { class: 'field' }, micHeadline, micDetail, el('div', { class: 'small muted' }, 'The app asks the browser to turn off echo cancellation, noise suppression and automatic gain, which are tuned for speech and can erase bird sound. Browsers may ignore the request; this shows what was applied to the last microphone session.')),
+    ),
     el(
       'section',
       { class: 'card' },
@@ -151,6 +178,7 @@ export function settingsView(ctx: ViewContext): View {
     el: root,
     dispose() {
       unsubLoc();
+      unsubMic();
       account.dispose();
     },
   };

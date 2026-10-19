@@ -61,6 +61,11 @@ test('loads the model and identifies the bundled BirdNET sample clip', async ({ 
 test('tabs, settings and map render', async ({ page }) => {
   await page.goto('./#/settings');
   await expect(page.getByText('Location & season filter')).toBeVisible();
+  await expect(page.getByTestId('voice-processing')).toContainText('Voice processing: unknown');
+  await expect(page.getByLabel('Low-cut filter (150 Hz)')).toBeChecked();
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('conditions')).toContainText('Conditions:');
+  await expect(page.getByTestId('threshold-help')).toContainText('Lower catches faint or distant birds but adds false IDs.');
   await page.goto('./#/map');
   await expect(page.getByTestId('map')).toBeVisible();
   await expect(page.locator('.leaflet-control-attribution')).toContainText('OpenStreetMap');

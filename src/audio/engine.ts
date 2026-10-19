@@ -1,15 +1,24 @@
 import { Emitter } from '../shared/emitter';
 import { SAMPLE_RATE, WINDOW_SAMPLES } from '../model/constants';
+import { configureLowCut } from './highpass';
+import { classifyVoiceProcessing, MIC_AUDIO_CONSTRAINTS, type VoiceProcessingReport } from './mic-constraints';
 import { StreamingResampler } from './resample';
+import { SampleRing } from './ring-buffer';
 import { Windower } from './windowing';
 
 export type MicPermission = 'unknown' | 'prompt' | 'granted' | 'denied' | 'unsupported';
 
 export interface EngineEvents extends Record<string, unknown> {
-  /** Mono audio at 48 kHz as it arrives. */
+  /** Raw (unfiltered) mono audio at 48 kHz as it arrives. */
   chunk: Float32Array;
-  /** A complete analysis window. */
-  window: { audio: Float32Array; offsetSamples: number };
+  /**
+   * A complete analysis window. `audio` is the analysis path (low-cut filtered
+   * when enabled); `raw` is the same span of unfiltered audio for saving, or
+   * null if it is no longer in the raw ring.
+   */
+  window: { audio: Float32Array; raw: Float32Array | null; offsetSamples: number };
+  /** What the browser applied to our "all voice processing off" request. */
+  mic: VoiceProcessingReport;
   /** RMS level of the latest chunk, 0..1. */
   level: number;
   state: EngineState;
@@ -57,29 +66,79 @@ export async function queryMicPermission(): Promise<MicPermission> {
   }
 }
 
+/** Seconds of raw audio kept so a window analysed from the filtered path can be saved unfiltered. */
+const RAW_RING_SECONDS = 8;
+
 /**
- * Microphone -> AudioWorklet -> mono 48 kHz chunks -> overlapping windows.
- * start() must be called from a user gesture (iOS requirement).
+ * Microphone -> two AudioWorklet taps -> mono 48 kHz chunks -> overlapping windows.
+ *
+ *   source ─────────────────► raw tap      → 'chunk' / 'level' (recording, visualisation, conditions)
+ *   source ─► BiquadFilter ─► analysis tap → Windower → 'window' (inference)
+ *
+ * The analysis tap reads through a 150 Hz high-pass BiquadFilterNode when the
+ * low-cut setting is on, or straight from the source when it is off. Saved
+ * audio always comes from the raw tap. start() must be called from a user
+ * gesture (iOS requirement).
  */
 export class AudioEngine extends Emitter<EngineEvents> {
   private ctx: AudioContext | null = null;
   private stream: MediaStream | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
-  private node: AudioWorkletNode | null = null;
+  private rawNode: AudioWorkletNode | null = null;
+  private analysisNode: AudioWorkletNode | null = null;
+  private filter: BiquadFilterNode | null = null;
+  private analysisInput: AudioNode | null = null;
   private sink: GainNode | null = null;
-  private resampler: StreamingResampler | null = null;
+  private rawResampler: StreamingResampler | null = null;
+  private analysisResampler: StreamingResampler | null = null;
+  private readonly rawRing = new SampleRing(SAMPLE_RATE * RAW_RING_SECONDS);
+  private pendingWindows: Array<{ audio: Float32Array; offsetSamples: number }> = [];
   private windower: Windower;
   private state: EngineState = 'stopped';
   private samplesSeen = 0;
   private hopSamples: number;
+  private lowCut: boolean;
+  private micReport: VoiceProcessingReport = classifyVoiceProcessing(null);
 
   constructor(
     private workletUrl: string,
     overlapSeconds: number,
+    lowCut = true,
   ) {
     super();
     this.hopSamples = AudioEngine.hopFor(overlapSeconds);
     this.windower = new Windower(WINDOW_SAMPLES, this.hopSamples);
+    this.lowCut = lowCut;
+  }
+
+  /** The last report from MediaStreamTrack.getSettings(); 'unknown' before the first session. */
+  getMicReport(): VoiceProcessingReport {
+    return this.micReport;
+  }
+
+  get lowCutEnabled(): boolean {
+    return this.lowCut;
+  }
+
+  /** Switch the 150 Hz low-cut on the analysis path; takes effect immediately while running. */
+  setLowCut(on: boolean): void {
+    if (on === this.lowCut) return;
+    this.lowCut = on;
+    this.wireAnalysisInput();
+  }
+
+  private wireAnalysisInput(): void {
+    const { source, filter, analysisNode } = this;
+    if (!source || !filter || !analysisNode) return;
+    const next: AudioNode = this.lowCut ? filter : source;
+    if (this.analysisInput === next) return;
+    try {
+      this.analysisInput?.disconnect(analysisNode);
+    } catch {
+      /* not connected */
+    }
+    next.connect(analysisNode);
+    this.analysisInput = next;
   }
 
   static hopFor(overlapSeconds: number): number {
@@ -127,24 +186,44 @@ export class AudioEngine extends Emitter<EngineEvents> {
       }
       this.ctx = ctx;
       if (ctx.state === 'suspended') await ctx.resume();
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-        video: false,
-      });
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { ...MIC_AUDIO_CONSTRAINTS }, video: false });
+      const track = this.stream.getAudioTracks()[0];
+      // Constraints are "ideal", not required: read back what the browser actually applied.
+      let applied: MediaTrackSettings | null = null;
+      try {
+        applied = typeof track?.getSettings === 'function' ? track.getSettings() : null;
+      } catch {
+        applied = null;
+      }
+      this.micReport = classifyVoiceProcessing(applied ?? {});
+      this.emit('mic', this.micReport);
       await ctx.audioWorklet.addModule(this.workletUrl);
       this.source = ctx.createMediaStreamSource(this.stream);
-      this.node = new AudioWorkletNode(ctx, 'capture-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { batchSize: 2048 } });
+      const tap = () => new AudioWorkletNode(ctx, 'capture-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { batchSize: 2048 } });
+      this.rawNode = tap();
+      this.analysisNode = tap();
+      this.filter = ctx.createBiquadFilter();
+      configureLowCut(this.filter);
       // Keep the graph alive without producing sound.
       this.sink = ctx.createGain();
       this.sink.gain.value = 0;
-      this.source.connect(this.node);
-      this.node.connect(this.sink);
+      this.source.connect(this.rawNode);
+      this.source.connect(this.filter);
+      this.analysisInput = null;
+      this.wireAnalysisInput();
+      this.rawNode.connect(this.sink);
+      this.analysisNode.connect(this.sink);
       this.sink.connect(ctx.destination);
-      this.resampler = ctx.sampleRate === SAMPLE_RATE ? null : new StreamingResampler(ctx.sampleRate, SAMPLE_RATE);
+      const needsResample = ctx.sampleRate !== SAMPLE_RATE;
+      this.rawResampler = needsResample ? new StreamingResampler(ctx.sampleRate, SAMPLE_RATE) : null;
+      this.analysisResampler = needsResample ? new StreamingResampler(ctx.sampleRate, SAMPLE_RATE) : null;
       this.windower.reset();
+      this.rawRing.reset();
+      this.pendingWindows = [];
       this.samplesSeen = 0;
-      this.node.port.onmessage = (e: MessageEvent<Float32Array>) => this.onChunk(e.data);
-      this.stream.getAudioTracks()[0]?.addEventListener('ended', () => {
+      this.rawNode.port.onmessage = (e: MessageEvent<Float32Array>) => this.onRawChunk(e.data);
+      this.analysisNode.port.onmessage = (e: MessageEvent<Float32Array>) => this.onAnalysisChunk(e.data);
+      track?.addEventListener('ended', () => {
         this.emit('error', 'The microphone was disconnected.');
         void this.stop();
       });
@@ -156,15 +235,37 @@ export class AudioEngine extends Emitter<EngineEvents> {
     }
   }
 
-  private onChunk(raw: Float32Array): void {
+  private onRawChunk(input: Float32Array): void {
     if (this.state !== 'running') return;
-    const chunk = this.resampler ? this.resampler.process(raw) : raw;
+    const chunk = this.rawResampler ? this.rawResampler.process(input) : input;
     this.samplesSeen += chunk.length;
     let sum = 0;
     for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
     this.emit('level', Math.sqrt(sum / Math.max(1, chunk.length)));
+    this.rawRing.push(chunk);
     this.emit('chunk', chunk);
-    for (const w of this.windower.push(chunk)) this.emit('window', { audio: w.window, offsetSamples: w.offsetSamples });
+    this.flushPendingWindows();
+  }
+
+  private onAnalysisChunk(input: Float32Array): void {
+    if (this.state !== 'running') return;
+    const chunk = this.analysisResampler ? this.analysisResampler.process(input) : input;
+    for (const w of this.windower.push(chunk)) this.pendingWindows.push({ audio: w.window, offsetSamples: w.offsetSamples });
+    this.flushPendingWindows();
+  }
+
+  /**
+   * Both taps run in the same render quanta, but their messages may arrive in
+   * either order, so a window waits until the raw ring has caught up with it.
+   */
+  private flushPendingWindows(): void {
+    while (this.pendingWindows.length) {
+      const w = this.pendingWindows[0];
+      const end = w.offsetSamples + w.audio.length;
+      if (end > this.rawRing.end) return; // raw tap has not delivered these samples yet
+      this.pendingWindows.shift();
+      this.emit('window', { audio: w.audio, raw: this.rawRing.slice(w.offsetSamples, w.audio.length), offsetSamples: w.offsetSamples });
+    }
   }
 
   /** Resume the AudioContext after the app returns to the foreground. */
@@ -181,18 +282,26 @@ export class AudioEngine extends Emitter<EngineEvents> {
   }
 
   private async teardown(): Promise<void> {
-    this.node?.port.postMessage('stop');
-    this.node?.disconnect();
+    for (const n of [this.rawNode, this.analysisNode]) {
+      n?.port.postMessage('stop');
+      n?.disconnect();
+    }
+    this.filter?.disconnect();
     this.source?.disconnect();
     this.sink?.disconnect();
     this.stream?.getTracks().forEach((t) => t.stop());
     const ctx = this.ctx;
-    this.node = null;
+    this.rawNode = null;
+    this.analysisNode = null;
+    this.filter = null;
+    this.analysisInput = null;
     this.source = null;
     this.sink = null;
     this.stream = null;
     this.ctx = null;
-    this.resampler = null;
+    this.rawResampler = null;
+    this.analysisResampler = null;
+    this.pendingWindows = [];
     if (ctx && ctx.state !== 'closed') {
       try {
         await ctx.close();

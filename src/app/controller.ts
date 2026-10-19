@@ -1,5 +1,8 @@
 import { AudioEngine, describeMicError, type EngineState } from '../audio/engine';
 import { Recorder } from '../audio/recorder';
+import { ConditionsMeter, type ConditionsAssessment } from '../audio/conditions';
+import { renderLowCut } from '../audio/highpass';
+import type { VoiceProcessingReport } from '../audio/mic-constraints';
 import { decodeWav, encodeWav, toMono } from '../audio/wav';
 import { resampleLinear } from '../audio/resample';
 import { LABELS_JSON, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
@@ -65,6 +68,10 @@ interface ControllerEvents extends Record<string, unknown> {
   stage: PipelineStage;
   'species-loaded': Species[];
   'detections-changed': undefined;
+  /** Listening conditions from the raw microphone audio, about once a second. */
+  conditions: ConditionsAssessment;
+  /** Voice-processing settings the browser applied to the microphone track. */
+  mic: VoiceProcessingReport;
 }
 
 /** Orchestrates microphone capture, inference, persistence and device APIs. */
@@ -85,11 +92,12 @@ export class AppController extends Emitter<ControllerEvents> {
   private lastAutoClip = new Map<string, number>();
   private geoCount = 0;
   private modelReady = false;
+  private conditions = new ConditionsMeter(SAMPLE_RATE, (a) => this.emit('conditions', a));
 
   constructor(readonly baseUrl: string) {
     super();
     this.location = new LocationManager(this.settings);
-    this.engine = new AudioEngine(`${baseUrl}worklet/capture-processor.js`, this.settings.get().overlapSeconds);
+    this.engine = new AudioEngine(`${baseUrl}worklet/capture-processor.js`, this.settings.get().overlapSeconds, this.settings.get().lowCut);
     this.inference.on('status', (s) => {
       this.modelReady = s.state === 'ready';
       this.emit('model', s);
@@ -98,7 +106,8 @@ export class AppController extends Emitter<ControllerEvents> {
     this.engine.on('state', (s) => this.emit('engine', s));
     this.engine.on('chunk', (c) => this.onChunk(c));
     this.engine.on('level', (l) => this.emit('level', l));
-    this.engine.on('window', (w) => void this.onWindow(w.audio, w.offsetSamples));
+    this.engine.on('window', (w) => void this.onWindow(w.audio, w.raw, w.offsetSamples));
+    this.engine.on('mic', (r) => this.emit('mic', r));
     this.engine.on('error', (text) => this.emit('notice', { kind: 'error', text }));
     this.location.on('change', (l) => {
       this.emit('location', l);
@@ -152,7 +161,27 @@ export class AppController extends Emitter<ControllerEvents> {
 
   private onSettings(s: Settings): void {
     this.engine.setOverlap(s.overlapSeconds);
+    this.engine.setLowCut(s.lowCut);
     void this.pushGeo();
+  }
+
+  /** Last known microphone voice-processing report ('unknown' until a session has started). */
+  getMicReport(): VoiceProcessingReport {
+    return this.engine.getMicReport();
+  }
+
+  /** Latest conditions assessment of the current session, if any. */
+  getConditions(): ConditionsAssessment | null {
+    return this.conditions.current;
+  }
+
+  /**
+   * Apply the same low-cut the live path uses to a clip that is about to be
+   * analysed (import, re-analyse, demo, "Why this ID"). Returns the input
+   * untouched when the setting is off. Never used for audio that gets saved.
+   */
+  async prepareForAnalysis(audio: Float32Array): Promise<Float32Array> {
+    return this.settings.get().lowCut ? renderLowCut(audio, SAMPLE_RATE) : audio;
   }
 
   private async pushGeo(): Promise<void> {
@@ -182,6 +211,7 @@ export class AppController extends Emitter<ControllerEvents> {
     this.sessionId = newId();
     this.sessionStartedAt = Date.now();
     this.windowCounter = 0;
+    this.conditions.reset();
     this.stats = { listening: true, startedAt: this.sessionStartedAt, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: this.engine.contextSampleRate };
     this.emit('stats', this.stats);
     this.timer = window.setInterval(() => {
@@ -212,6 +242,7 @@ export class AppController extends Emitter<ControllerEvents> {
     this.emit('stage', 'mic');
     if (this.engine.contextSampleRate !== SAMPLE_RATE) this.emit('stage', 'resample');
     this.emit('chunk', chunk);
+    this.conditions.push(chunk);
     this.recorder?.push(chunk);
     if (this.recorder?.full) {
       this.emit('notice', { kind: 'warn', text: 'Recording reached the 10 minute limit and was saved.' });
@@ -219,14 +250,15 @@ export class AppController extends Emitter<ControllerEvents> {
     }
   }
 
-  private async onWindow(audio: Float32Array, offsetSamples: number): Promise<void> {
+  private async onWindow(audio: Float32Array, raw: Float32Array | null, offsetSamples: number): Promise<void> {
     this.emit('stage', 'window');
     if (!this.modelReady || this.inference.busy) {
       this.stats = { ...this.stats, dropped: this.stats.dropped + 1 };
       return;
     }
     const s = this.settings.get();
-    const copy = s.autoSaveClips ? audio.slice() : null;
+    // Auto-save clips keep the raw (unfiltered) audio so they can be re-analysed later.
+    const copy = s.autoSaveClips ? raw : null;
     const windowId = ++this.windowCounter;
     const offsetSec = offsetSamples / SAMPLE_RATE;
     const time = (this.sessionStartedAt ?? Date.now()) + offsetSec * 1000;
@@ -366,7 +398,7 @@ export class AppController extends Emitter<ControllerEvents> {
     for (const c of chunksOf(padded, 2048)) this.emit('chunk', c);
     this.emit('stage', 'window');
     const s = this.settings.get();
-    const out = await this.inference.analyze(padded);
+    const out = await this.inference.analyze(await this.prepareForAnalysis(padded));
     const detections = selectDetections(out.scores, this.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird });
     this.emit('stage', 'result');
     const result: WindowResult = { windowId: ++this.windowCounter, time: Date.now(), offsetSec: 0, scores: out.scores, detections, inferMs: out.inferMs, geoApplied: false, ephemeral: true };
