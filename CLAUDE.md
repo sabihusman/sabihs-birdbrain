@@ -46,6 +46,11 @@ Key modules:
 - `src/species/colors.ts` — deterministic OKLCH species colours;
   `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache.
 - `src/export/` — CSV / GeoJSON.
+- Member-only, on-device: `src/app/access.ts` (gating from the cached
+  session), `src/species/clips.ts` (one raw clip per species, replace-if-higher,
+  10 s cap), `src/ui/components/{member-gate,species-id-card,clip-player}.ts`,
+  `src/ui/views/species-history.ts` (list + `leaflet.heat` / pins map). DB
+  version 2 adds the `clips` store. See DECISIONS.md #25–27.
 - `src/api/client.ts` — bearer-token client for the API (`src/api/config.ts`
   holds the base URL from `VITE_API_BASE_URL`); `src/ui/views/account.ts`,
   `admin.ts`, `src/ui/components/ask-box.ts`, `location-block.ts`,

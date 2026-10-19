@@ -298,3 +298,56 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
   here are meant to be readable and adjustable, not exact. Expect to tune
   -50 dBFS once real iPhone levels are known.
 
+## 25. Member features are gated from the cached session
+
+- **Decision:** the species ID card, sighting history and species clips are
+  unlocked when the session the `ApiClient` loads from localStorage has
+  `status: 'approved'` (`src/app/access.ts`). No server call is made for the
+  decision, so approved members keep the features offline. Signing out clears
+  the cached session, which hides the features; IndexedDB is not touched, so
+  the clips and detections are still there after the next sign-in.
+- **Consequence:** the cached session carries the server's `expiresAt`
+  (`SESSION_TTL_SECONDS`, default 24 h, extended on use by `updateAge`). An
+  expired cached session counts as signed out, so a member who stays offline
+  longer than the token lifetime loses the features until they sign in again.
+  Raise `SESSION_TTL_SECONDS` on the server if that is too short.
+- **Alternative:** a separate "member until" flag persisted on the device.
+  Rejected: it would outlive a revoked or disabled account.
+- **Collection is also gated:** clips are only cut and stored while a member is
+  signed in (`controller.setClipsEnabled`), so free users do not accumulate
+  ~1 MB WAVs they cannot play.
+
+## 26. One raw clip per species, replace-if-higher, 10 s cap
+
+- **Decision:** IndexedDB store `clips` (DB version 2) keyed by scientific
+  name. A clip is at most 10 s of raw, unfiltered 16-bit WAV at 48 kHz, cut by
+  `clipRange()` so it is centred on the detection window (or on the span of
+  the species' windows in a recording when that fits in 10 s, else on the best
+  window), shifted at the edges to keep its length. A new clip replaces the
+  stored one only when its confidence is strictly higher.
+- **Live listening:** the controller keeps a 24 s raw rolling buffer
+  (`SampleRing`) and a pending entry per species; the clip is cut once 3.5 s of
+  audio after the window has arrived, or with what exists when listening stops.
+  A more confident detection of the same species replaces the pending entry.
+- **Recordings and imports:** cut from the decoded (raw) recording after each
+  analysis, one offer per species.
+- **Reason for raw:** the clip is for listening and for later re-analysis, and
+  the low-cut filter (#23) belongs to the analysis path only.
+
+## 27. Heat map plugin: `leaflet.heat` 0.2.0, pinned
+
+- **Decision:** `leaflet.heat` 0.2.0 (BSD-2-Clause, Vladimir Agafonkin; bundles
+  `simpleheat`) with `@types/leaflet.heat` 0.2.5, pinned exactly. Pins
+  (`leaflet.markercluster`) by default below 10 located sightings, heat above,
+  with a toggle; both draw over the same single OSM tile layer that is never
+  cached (#9 tile policy).
+- **Honest caveat on "maintained":** no Leaflet heat-map plugin has had a
+  release in years; `leaflet.heat`'s last release is from 2015 (the npm
+  `time.modified` of 2022 is a metadata touch). It is the smallest and most
+  widely used one, has no dependencies, and works unchanged with Leaflet 1.9.
+  Alternatives checked: `heatmap.js` 2.0.5 (MIT, also dormant, larger). If the
+  plugin ever breaks, a canvas heat layer is about 80 lines.
+- **Privacy:** the heat map is built only from the user's own detections in
+  IndexedDB and is a member feature; it reveals where someone walks, so it is
+  never exported or sent anywhere (README › Privacy).
+

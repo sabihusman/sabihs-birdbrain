@@ -14,6 +14,7 @@ import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { formatBytes } from '../../storage/quota';
 import { capImportedAudio, MAX_IMPORT_SECONDS } from '../../audio/import-cap';
 import { locationBlock } from '../components/location-block';
+import { clipFocus, clipRange, sliceClip } from '../../species/clips';
 
 export function recordingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -240,6 +241,22 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       rec.analyzedAt = Date.now();
       await putRecording(rec);
       controller.emit('detections-changed', undefined);
+      await offerClips(records);
+    };
+
+    /** One raw clip per detected species, centred on its windows, capped at 10 s (member feature). */
+    const offerClips = async (records: DetectionRecord[]) => {
+      if (!controller.clipsCollected) return;
+      const bySpecies = new Map<string, DetectionRecord[]>();
+      for (const r of records) bySpecies.set(r.scientific, [...(bySpecies.get(r.scientific) ?? []), r]);
+      for (const dets of bySpecies.values()) {
+        const best = dets.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+        const focus = clipFocus(dets.map((d) => ({ offsetSec: d.offsetSec ?? 0, confidence: d.confidence })));
+        const range = clipRange(focus, { start: 0, end: audio.length / SAMPLE_RATE });
+        await controller
+          .offerClip({ scientific: best.scientific, common: best.common, confidence: best.confidence, time: best.time, lat: best.lat, lon: best.lon, accuracy: best.accuracy, source: best.source, recordingId: id }, sliceClip(audio, range))
+          .catch((e: Error) => ctx.notify({ kind: 'warn', text: `Could not save the species clip: ${e.message}` }));
+      }
     };
 
     const runWhy = async (index: number, offsetSec: number, btn: HTMLButtonElement) => {

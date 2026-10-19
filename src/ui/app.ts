@@ -4,6 +4,7 @@ import { hrefFor, parseHash, type Route } from './router';
 import { listenView } from './views/listen';
 import { recordingsView, recordingDetailView } from './views/recordings';
 import { speciesListView, speciesDetailView } from './views/species';
+import { speciesHistoryView } from './views/species-history';
 import { mapView } from './views/map';
 import { settingsView } from './views/settings';
 import { helpView } from './views/help';
@@ -42,6 +43,7 @@ function tabGroup(route: Route): string {
     case 'recording':
       return 'recordings';
     case 'species-detail':
+    case 'species-history':
       return 'species';
     case 'help':
     case 'admin':
@@ -101,6 +103,9 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
         break;
       case 'species-detail':
         current = speciesDetailView(ctx, route.scientific);
+        break;
+      case 'species-history':
+        current = speciesHistoryView(ctx, route.scientific);
         break;
       case 'map':
         current = mapView(ctx);

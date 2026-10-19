@@ -96,6 +96,10 @@ test('imports a recording, analyses it and explains an identification', async ({
   await why.click();
   await expect(page.getByText(/baseline \d+%/)).toBeVisible({ timeout: 240_000 });
 
+  // Free user: the member-only ID card is replaced by a sign-in note.
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await expect(page.getByTestId('species-id-card-gate')).toContainText('Sign in to unlock the species ID card.');
+
   // The recording shows up in the list with its species summary, and on the species page.
   await page.goto('./#/recordings');
   await expect(page.getByTestId('recordings-list')).toContainText('birdnet-sample');
@@ -104,3 +108,44 @@ test('imports a recording, analyses it and explains an identification', async ({
   await expect(page.locator('.kv')).toContainText('Count', { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
 });
+
+test('approved member (cached session, API unreachable) gets the ID card, a clip and the sighting history', async ({ page }) => {
+  // Gating is decided from the cached session alone; the API is blocked so this also proves it works offline.
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.addInitScript(() => {
+    // Re-runs on every navigation; the flag lets the test simulate a sign-out.
+    if (sessionStorage.getItem('e2e-signed-out')) return;
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'member', status: 'approved', role: 'member' } }));
+  });
+  await page.goto('./#/recordings');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
+  await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
+  await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
+
+  await page.goto('./#/species/Acanthis%20cabaret');
+  const card = page.getByTestId('species-id-card');
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId('clip-play')).toBeVisible({ timeout: 30_000 });
+  await expect(card.getByTestId('clip-meta')).toContainText(/\d+% confidence · imported file/);
+  await expect(card).toContainText('none with a position yet');
+
+  await card.click();
+  await page.waitForURL(/#\/species\/Acanthis%20cabaret\/history/);
+  await expect(page.getByTestId('history-summary')).toContainText(/1 sighting, 0 with a position/);
+  await expect(page.getByTestId('history-list')).toContainText('No position recorded');
+  await expect(page.getByTestId('history-map')).toBeHidden();
+
+  // Sign-out hides the features but keeps the data.
+  await page.evaluate(() => {
+    sessionStorage.setItem('e2e-signed-out', '1');
+    localStorage.removeItem('birdbrain.auth.v1');
+  });
+  await page.reload();
+  await expect(page.getByTestId('history-gate')).toContainText('Sign in to unlock Sighting history.');
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await expect(page.getByTestId('wiki')).toBeVisible();
+  await expect(page.getByText('Your detections')).toBeVisible();
+  await expect(page.locator('dl.kv dd').first()).toHaveText('1'); // count row still shows the detection
+});
+
