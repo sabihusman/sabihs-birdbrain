@@ -471,3 +471,18 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone; the thresholds (×100 cap, 60 dB span,
   −70 dBFS top floor) are first guesses for real microphone levels.
 
+## 33. `/data` and `/backups` are created in the image, owned by uid 1000
+
+- **Decision:** the Dockerfile now runs `mkdir -p /data /backups && chown
+  node:node /data /backups` (the `node` user in the official image is uid
+  1000, the uid `compose.yml` runs as). Docker populates a *new* named volume
+  from the image directory it is mounted over, ownership included, so fresh
+  volumes are writable without any host-side step.
+- **Kept:** `setup.sh` step 8 still chowns both volumes from a throwaway
+  `alpine` container. Existing volumes created by images without these
+  directories stay `root:root` until something chowns them, and the step is a
+  harmless no-op otherwise. This closes the follow-up noted in #22.
+- **Not verified here:** the live server's volumes already exist and were
+  chowned by step 8; the image change only matters for a `--purge` reinstall
+  or a new host. The CI image build is the check that the layer is valid.
+
