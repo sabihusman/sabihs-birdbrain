@@ -44,8 +44,11 @@ export function adminView(ctx: ViewContext): View {
       return;
     }
     const cap = m.capMicros > 0 ? fmtUsd(m.capMicros) : 'off (Gemini disabled)';
-    const alerts = m.alertsSent.length ? ` · alerts sent: ${m.alertsSent.map((a) => `${a}%`).join(', ')}` : '';
-    capLine.textContent = m.capMicros > 0 && m.spentMicros >= m.capMicros ? `Gemini this month (${m.month}): ${fmtUsd(m.spentMicros)} of the ${cap} cap · cap reached, Gemini is skipped until next month${alerts}` : `Gemini this month (${m.month}): ${fmtUsd(m.spentMicros)} of the ${cap} cap (${m.percent}%)${alerts}`;
+    const alertList = m.alertsSent.map((a) => a + '%').join(', ');
+    const alerts = m.alertsSent.length ? ' · alerts sent: ' + alertList : '';
+    const reached = m.capMicros > 0 && m.spentMicros >= m.capMicros;
+    const head = 'Gemini this month (' + m.month + '): ' + fmtUsd(m.spentMicros) + ' of the ' + cap + ' cap';
+    capLine.textContent = reached ? head + ' · cap reached, Gemini is skipped until next month' + alerts : head + ' (' + m.percent + '%)' + alerts;
   };
 
   const renderProviders = (summary: AskCostSummary) => {

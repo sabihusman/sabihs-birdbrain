@@ -76,7 +76,8 @@ export interface PriceOverrides {
 
 /** The most expensive known price (highest output rate, then input): what an unknown model is billed at, so the cap cannot be dodged by a renamed model. */
 export function maxKnownPrice(): ModelPrice {
-  return Object.values(PRICES).reduce((a, b) => (b.outputPerM > a.outputPerM || (b.outputPerM === a.outputPerM && b.inputPerM > a.inputPerM) ? b : a));
+  const [first, ...rest] = Object.values(PRICES);
+  return rest.reduce((a, b) => (b.outputPerM > a.outputPerM || (b.outputPerM === a.outputPerM && b.inputPerM > a.inputPerM) ? b : a), first);
 }
 
 /**

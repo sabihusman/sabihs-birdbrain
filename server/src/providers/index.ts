@@ -97,20 +97,25 @@ export function configuredProviders(config: ChainConfig, deps: ChainDeps = {}): 
         log('[startup] GEMINI_API_KEY not set: Gemini provider skipped');
         continue;
       }
-      let generate = createGeminiProvider(config.GEMINI_API_KEY, config.GEMINI_MODEL, deps.geminiClient, log, deps.costs);
-      if (deps.costs) {
-        const { costs, mailer, adminEmail } = deps;
-        const sendAlert = mailer && adminEmail ? async (level: CapAlertLevel, status: { month: string; spentMicros: number; capMicros: number }) => {
-          const m = capAlertMail(level, status);
-          await mailer.send({ to: adminEmail, subject: `[Birdbrain] ${m.subject}`, text: m.body });
-        } : undefined;
-        generate = createGeminiCapGuard(generate, { costs, capUsd: config.GEMINI_MONTHLY_CAP_USD, sendAlert, log, now: deps.now });
-        log(`[startup] gemini monthly cap: $${config.GEMINI_MONTHLY_CAP_USD.toFixed(2)} (GEMINI_MONTHLY_CAP_USD)`);
-      }
-      providers.push({ name, generate });
+      providers.push({ name, generate: geminiWithCap(config, deps, log) });
     }
   }
   return providers;
+}
+
+/** The Gemini provider behind the monthly cap guard (#53) when a cost store is present; the alert mail goes to the admin when a mailer is wired. */
+function geminiWithCap(config: ChainConfig, deps: ChainDeps, log: (line: string) => void): Generator {
+  const generate = createGeminiProvider(config.GEMINI_API_KEY!, config.GEMINI_MODEL, deps.geminiClient, log, deps.costs);
+  const { costs, mailer, adminEmail } = deps;
+  if (!costs) return generate;
+  const sendAlert = mailer && adminEmail ? (level: CapAlertLevel, status: { month: string; spentMicros: number; capMicros: number }) => sendCapMail(mailer, adminEmail, level, status) : undefined;
+  log(`[startup] gemini monthly cap: $${config.GEMINI_MONTHLY_CAP_USD.toFixed(2)} (GEMINI_MONTHLY_CAP_USD)`);
+  return createGeminiCapGuard(generate, { costs, capUsd: config.GEMINI_MONTHLY_CAP_USD, sendAlert, log, now: deps.now });
+}
+
+async function sendCapMail(mailer: Mailer, adminEmail: string, level: CapAlertLevel, status: { month: string; spentMicros: number; capMicros: number }): Promise<void> {
+  const m = capAlertMail(level, status);
+  await mailer.send({ to: adminEmail, subject: `[Birdbrain] ${m.subject}`, text: m.body });
 }
 
 /** Build the configured chain; null when no provider has a key, so /v1/ask answers 502 as it did without `GEMINI_API_KEY`. */

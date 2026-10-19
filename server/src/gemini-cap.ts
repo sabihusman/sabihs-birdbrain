@@ -34,21 +34,23 @@ export function createGeminiCapGuard(generate: Generator, opts: CapGuardOptions)
   const log = opts.log ?? ((line: string) => console.info(line));
   const now = opts.now ?? (() => new Date());
   const capMicros = capMicrosOf(opts.capUsd);
+  const sendOne = async (level: CapAlertLevel, status: { month: string; spentMicros: number; capMicros: number }): Promise<void> => {
+    log(`[cap] gemini month=${status.month} spent_usd=${formatUsd(status.spentMicros)} cap_usd=${formatUsd(status.capMicros)} alert=${level}%`);
+    try {
+      await opts.sendAlert?.(level, status);
+    } catch (err) {
+      const why = err instanceof Error ? `${err.name}: ${err.message}` : 'unknown error';
+      log(`[cap] alert mail failed: ${why}`);
+    }
+  };
   const checkAlerts = async (): Promise<void> => {
     if (capMicros <= 0) return;
     const at = now();
     const spent = opts.costs.monthSpendMicros(at);
-    for (const level of CAP_ALERT_LEVELS) {
-      if (spent * 100 < capMicros * level) continue;
-      if (!opts.costs.markAlert(level, at)) continue; // already sent this month
-      const status = { month: at.toISOString().slice(0, 7), spentMicros: spent, capMicros };
-      log(`[cap] gemini month=${status.month} spent_usd=${formatUsd(spent)} cap_usd=${formatUsd(capMicros)} alert=${level}%`);
-      try {
-        await opts.sendAlert?.(level, status);
-      } catch (err) {
-        log(`[cap] alert mail failed: ${err instanceof Error ? `${err.name}: ${err.message}` : 'unknown error'}`);
-      }
-    }
+    const status = { month: at.toISOString().slice(0, 7), spentMicros: spent, capMicros };
+    // Levels reached this month and not yet announced (markAlert is the once-per-month gate).
+    const due = CAP_ALERT_LEVELS.filter((level) => spent * 100 >= capMicros * level && opts.costs.markAlert(level, at));
+    await Promise.all(due.map((level) => sendOne(level, status)));
   };
   return async (input) => {
     const at = now();
