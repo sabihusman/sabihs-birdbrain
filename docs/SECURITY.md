@@ -80,6 +80,10 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
   `ALLOWED_ORIGINS`, methods GET/POST/OPTIONS, headers Authorization and
   Content-Type, no credentials, `Vary: Origin` (verified by test).
 - Bodies over 16 KB get 413 (verified by test); non-JSON bodies get 400.
+- Sign-up notifications to the admin carry only the new address and the
+  admin page link, and are capped at one mail per 10 minutes (held sign-ups
+  are summarised), so a spam burst cannot flood the admin's inbox or turn the
+  API into a mail relay (verified by test).
 - Error responses are generic codes; stack traces are never returned; logs
   contain method, path, error name and message only, never bodies.
 - Container: non-root, read-only root filesystem, `cap_drop: ALL`,
