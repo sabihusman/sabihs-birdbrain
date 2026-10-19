@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
-const BASE = `http://localhost:${PORT}/sabihs-birdbrain/`;
+const BASE = `http://localhost:${PORT}${(process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/')}`;
 
 export default defineConfig({
   testDir: './e2e',

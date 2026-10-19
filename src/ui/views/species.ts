@@ -8,6 +8,8 @@ import { speciesChip } from '../components/species-chip';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor } from '../router';
 import { createMiniMap } from './map';
+import { askBox } from '../components/ask-box';
+import { locationBlock } from '../components/location-block';
 
 const PAGE = 60;
 
@@ -58,10 +60,13 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     }
     const color = speciesColor(sp.scientific);
     const wikiBox = el('div', { 'data-testid': 'wiki' }, el('p', { class: 'muted' }, 'Loading Wikipedia summary…'));
+    const ask = askBox(ctx.api, sp);
+    disposers.push(ask.dispose);
     const myBox = el('div', null, el('p', { class: 'muted' }, 'Loading your detections…'));
     root.replaceChildren(
       el('section', { class: 'card' }, el('div', { class: 'row' }, el('span', { class: 'swatch', style: `background:${color.css};width:22px;height:22px`, 'aria-hidden': 'true' }), el('div', null, el('h2', { style: 'margin:0' }, sp.common), el('div', { class: 'muted', style: 'font-style:italic' }, sp.scientific))), el('p', { class: 'small muted' }, 'Colour used for this species everywhere in the app.')),
       el('section', { class: 'card' }, wikiBox),
+      ask.el,
       el('section', { class: 'card' }, el('h2', null, 'Your detections'), myBox),
     );
     void renderWiki(sp, wikiBox);
@@ -135,7 +140,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const mapBox = el('div', { class: 'map mini' });
     box.replaceChildren(el('div', null,
       el('dl', { class: 'kv' }, el('dt', null, 'Count'), el('dd', null, String(dets.length)), el('dt', null, 'First seen'), el('dd', null, fmtDateTime(first.time)), el('dt', null, 'Last seen'), el('dd', null, fmtDateTime(last.time)), el('dt', null, 'Best confidence'), el('dd', null, pct(best.confidence))),
-      located.length ? mapBox : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
+      located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located detection'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
       recIds.length ? el('h3', null, 'Recordings') : null,
       recList,
     ));

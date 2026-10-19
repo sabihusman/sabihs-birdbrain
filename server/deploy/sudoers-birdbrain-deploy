@@ -1,0 +1,4 @@
+# /etc/sudoers.d/birdbrain-deploy  (install with: visudo -cf <file> && install -o root -g root -m 0440 <file> /etc/sudoers.d/birdbrain-deploy)
+# The trailing "" means the command may only be run with NO arguments; no wildcards anywhere.
+Defaults:birdbrain-deploy !requiretty
+birdbrain-deploy ALL=(root:root) NOPASSWD: /usr/local/sbin/birdbrain-deploy.sh ""

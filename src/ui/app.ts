@@ -7,6 +7,8 @@ import { speciesListView, speciesDetailView } from './views/species';
 import { mapView } from './views/map';
 import { settingsView } from './views/settings';
 import { helpView } from './views/help';
+import { adminView } from './views/admin';
+import type { ApiClient } from '../api/client';
 
 export interface View {
   el: HTMLElement;
@@ -15,6 +17,7 @@ export interface View {
 
 export interface ViewContext {
   controller: AppController;
+  api: ApiClient;
   notify: (n: Notice) => void;
 }
 
@@ -41,13 +44,14 @@ function tabGroup(route: Route): string {
     case 'species-detail':
       return 'species';
     case 'help':
+    case 'admin':
       return 'settings';
     default:
       return route.name;
   }
 }
 
-export function mountApp(root: HTMLElement, controller: AppController): void {
+export function mountApp(root: HTMLElement, controller: AppController, api: ApiClient): void {
   const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status' }, 'Loading model…');
   const header = el('header', { class: 'app-header' }, el('img', { src: `${controller.baseUrl}icons/icon-192.png`, alt: '' }), el('h1', null, 'Sabih’s Birdbrain'), modelPill);
   const notices = el('div', { class: 'notices', 'aria-live': 'polite' });
@@ -74,7 +78,7 @@ export function mountApp(root: HTMLElement, controller: AppController): void {
     modelPill.className = `model-pill ${s.state}`;
   });
 
-  const ctx: ViewContext = { controller, notify };
+  const ctx: ViewContext = { controller, api, notify };
   let current: View | null = null;
 
   const render = () => {
@@ -106,6 +110,9 @@ export function mountApp(root: HTMLElement, controller: AppController): void {
         break;
       case 'help':
         current = helpView(ctx);
+        break;
+      case 'admin':
+        current = adminView(ctx);
         break;
     }
     main.appendChild(current.el);

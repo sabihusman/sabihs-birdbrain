@@ -1,0 +1,5 @@
+# Copy to server/deploy/setup.conf (or /opt/birdbrain/setup.conf) before running setup.sh.
+DEPLOY_PUBKEY_FILE=                   # path to the CI public key (ssh-ed25519 ...) for the birdbrain-deploy user
+# Optional overrides (defaults match Sentinel's layout):
+# SENTINEL_LEGO_ENV=/etc/lego/lego-sentinel.env
+# LEGO_BIN=/usr/local/bin/lego

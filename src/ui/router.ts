@@ -6,6 +6,7 @@ export type Route =
   | { name: 'species-detail'; scientific: string }
   | { name: 'map' }
   | { name: 'settings' }
+  | { name: 'admin' }
   | { name: 'help' };
 
 export function parseHash(hash: string): Route {
@@ -21,6 +22,8 @@ export function parseHash(hash: string): Route {
       return { name: 'map' };
     case 'settings':
       return { name: 'settings' };
+    case 'admin':
+      return { name: 'admin' };
     case 'help':
       return { name: 'help' };
     default:
@@ -44,6 +47,8 @@ export function hrefFor(route: Route): string {
       return '#/map';
     case 'settings':
       return '#/settings';
+    case 'admin':
+      return '#/admin';
     case 'help':
       return '#/help';
   }

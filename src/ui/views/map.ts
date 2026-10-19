@@ -7,6 +7,7 @@ import type { DetectionRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { speciesHref } from '../router';
+import { locationBlock } from '../components/location-block';
 
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -21,16 +22,22 @@ function baseMap(container: HTMLElement): L.Map {
 function markerFor(d: DetectionRecord, controller: AppController): L.CircleMarker {
   const color = speciesColor(d.scientific);
   const m = L.circleMarker([d.lat!, d.lon!], { radius: 8, color: '#fff', weight: 1.5, fillColor: color.css, fillOpacity: 0.9 });
+  m.bindPopup(popupFor(d, controller, color.css), { maxWidth: 300 });
+  return m;
+}
+
+function popupFor(d: DetectionRecord, controller: AppController, colorCss: string): HTMLElement {
+  const color = { css: colorCss };
   const sp = controller.speciesByScientific(d.scientific);
   const popup = el(
     'div',
     null,
     el('div', { class: 'chip', style: 'margin-bottom:6px' }, el('span', { class: 'swatch', style: `background:${color.css}` }), el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, sp?.common ?? d.common), el('span', { class: 'chip-sci' }, d.scientific))),
-    el('div', { class: 'small' }, `${fmtDateTime(d.time)} · ${pct(d.confidence)}${d.accuracy ? ` · ±${Math.round(d.accuracy)} m` : ''}`),
+    el('div', { class: 'small' }, `${fmtDateTime(d.time)} · ${pct(d.confidence)}`),
+    locationBlock(d.lat!, d.lon!, { accuracy: d.accuracy, compact: true }),
     el('div', null, el('a', { href: speciesHref(d.scientific) }, 'Open species page')),
   );
-  m.bindPopup(popup);
-  return m;
+  return popup;
 }
 
 /** Small map for a single species' detections (species detail page). Returns a dispose function. */

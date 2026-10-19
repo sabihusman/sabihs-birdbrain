@@ -175,3 +175,60 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
 - Wikipedia responses beyond the headers (the VM's egress was rate-limited),
   so disambiguation/not-found handling is implemented from the documented API
   shapes and the headers observed, not from a live run.
+
+## 16. Back end: Better Auth for passwords and sessions, own email-code layer
+
+- **Decision:** use Better Auth (email + password, bearer plugin, `node:sqlite`
+  database) for users, hashing and sessions, but do not mount its HTTP handler.
+  The app calls `auth.api.*` server-side and adds the second factor itself: the
+  session token from the password step is parked in `login_challenge` and
+  released only after the emailed 6-digit code is verified.
+- **Alternatives:** Better Auth's `twoFactor` plugin (its OTP flow tracks the
+  pending login with a cookie, which the cross-site, cookie-less iPhone client
+  cannot carry); the `emailOTP` plugin (passwordless, not password + code).
+- **Reason:** keeps the proven parts (scrypt hashing, session store) and the
+  cross-site bearer flow the brief requires. Expired challenges revoke the
+  session they guarded. Schema migrations run from the options object before
+  the instance is created, otherwise Better Auth logs a schema mismatch.
+
+## 17. Rate limits in the app are in-memory
+
+- **Decision:** fixed-window counters in process memory (per IP, per email, per
+  challenge) in addition to Nginx limits.
+- **Alternative:** counters in SQLite.
+- **Reason:** single container; a restart resets the counters, which is
+  acceptable because Nginx keeps its own limit and the code challenge burns
+  after 5 attempts regardless.
+
+## 18. Imported clips are truncated to 60 s, not rejected
+
+- **Decision:** keep the first 60 seconds and tell the user.
+- **Alternative:** refuse files longer than 60 s.
+- **Reason:** friendlier for field recordings; the cap is about on-device
+  memory and time, which truncation satisfies.
+
+## 19. Plus Codes via Google's `open-location-code` package
+
+- **Decision:** full 10-character codes with a hand-written type declaration
+  (the package ships no types).
+- **Reason:** official implementation, Apache-2.0, no network, 14 m cells.
+
+## 20. CSP without `'unsafe-inline'`
+
+- **Decision:** `style-src 'self'`; the DOM helper sets styles via CSSOM, and
+  Leaflet also uses CSSOM, so no inline style attributes exist in the shipped
+  app. `script-src` needs `'wasm-unsafe-eval'` for the TF.js WASM backend.
+- **Verification:** `scripts/csp-check.mts` serves the build with the exact
+  `vercel.json` headers and exercises listen, demo, map, species, settings and
+  import in Chromium; it fails on any `securitypolicyviolation`.
+
+## 21. Image tag and deploy trigger
+
+- **Decision:** the server pulls `ghcr.io/sabihusman/birdbrain-api:latest`; CI
+  triggers the deploy through an SSH key whose forced command is the root-owned
+  `/usr/local/sbin/birdbrain-deploy.sh` (no arguments; sudoers `""`).
+- **Alternative:** pass an image digest to the deploy script.
+- **Reason:** the forced command cannot take arguments by requirement, so the
+  script pulls the tag; `sha-<commit>` tags are also pushed so `compose.yml`
+  can be pinned by hand for a rollback. Recorded as a supply-chain gap in
+  docs/SECURITY.md.
