@@ -273,3 +273,15 @@ Sabih's approval and a baseline check of the other sites after every reload.
   real signup, which Sabih does from the live app. Also the ACME renewal path
   itself (the timer's first run logged "Skip renewal", as expected for a fresh
   certificate; the first real renewal is due around 2026-12-18).
+
+## 23. GitHub Pages switched off (2026-10-19)
+
+- **Decision:** remove `.github/workflows/deploy.yml` and unpublish the Pages
+  site once Vercel production was verified; Vercel is the only front-end host.
+  Dev and preview now serve at `/`; `VITE_BASE_PATH` stays as a generic
+  override, and `ci.yml` is unchanged.
+- **Alternative:** keep Pages as a permanent mirror at `/sabihs-birdbrain/`.
+- **Reason:** two live copies with different base paths meant two service
+  worker scopes, two model caches and a CSP that only one host enforced; the
+  Wikipedia User-Agent and docs also pointed at the old URL. The model files
+  stay in the repo (decision 1) because Vercel serves them the same way.
