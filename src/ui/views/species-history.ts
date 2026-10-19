@@ -1,6 +1,6 @@
 import type { Species } from '../../model/labels';
-import { getClip, listDetectionsForSpecies } from '../../storage/db';
-import type { DetectionRecord } from '../../storage/types';
+import { getClip, listSightingsForSpecies } from '../../storage/db';
+import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { clipPlayer } from '../components/clip-player';
 import { locationBlock } from '../components/location-block';
@@ -8,7 +8,7 @@ import { memberGate } from '../components/member-gate';
 import { speciesChip } from '../components/species-chip';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor } from '../router';
-import { createHistoryMap, type HistoryMapMode } from './map';
+import { createHistoryMap, describeSighting, type HistoryMapMode } from './map';
 
 /** Below this many located sightings the map starts on pins; from here on, heat. */
 export const HEAT_DEFAULT_MIN_SIGHTINGS = 10;
@@ -68,15 +68,18 @@ function historyBody(ctx: ViewContext, sp: Species): { el: HTMLElement; dispose:
   modeBtn.addEventListener('click', () => setMode(mode === 'heat' ? 'pins' : 'heat'));
 
   const render = async () => {
-    let dets: DetectionRecord[];
+    let sightings: SightingRecord[];
     try {
-      dets = await listDetectionsForSpecies(sp.scientific);
+      sightings = await listSightingsForSpecies(sp.scientific);
     } catch {
-      summary.textContent = 'Could not read detections.';
+      summary.textContent = 'Could not read sightings.';
       return;
     }
-    const located = dets.filter((d) => d.lat != null && d.lon != null);
-    summary.textContent = dets.length ? `${dets.length} sighting${dets.length === 1 ? '' : 's'}, ${located.length} with a position · first ${fmtDateTime(dets[0].time)} · last ${fmtDateTime(dets[dets.length - 1].time)}` : 'No sightings of this species yet.';
+    const located = sightings.filter((s) => s.lat != null && s.lon != null);
+    const windows = sightings.reduce((n, s) => n + s.hits, 0);
+    summary.textContent = sightings.length
+      ? `${sightings.length} sighting${sightings.length === 1 ? '' : 's'} (${windows} analysed window${windows === 1 ? '' : 's'}), ${located.length} with a position · first ${fmtDateTime(sightings[0].firstTime)} · last ${fmtDateTime(sightings[sightings.length - 1].lastTime)}`
+      : 'No sightings of this species yet.';
 
     const clip = await getClip(sp.scientific).catch(() => undefined);
     clipBox.replaceChildren();
@@ -87,10 +90,10 @@ function historyBody(ctx: ViewContext, sp: Species): { el: HTMLElement; dispose:
     }
 
     list.replaceChildren();
-    for (const d of dets.slice().reverse()) {
-      const where = d.lat != null && d.lon != null ? locationBlock(d.lat, d.lon, { accuracy: d.accuracy, compact: true }) : el('div', { class: 'small muted' }, 'No position recorded');
-      const link = d.recordingId ? el('a', { class: 'small', href: hrefFor({ name: 'recording', id: d.recordingId }) }, 'Open recording') : null;
-      list.appendChild(el('div', { class: 'list-item' }, el('div', { class: 'row between' }, el('div', { class: 'title' }, fmtDateTime(d.time)), el('div', null, `${pct(d.confidence)} · ${d.source}`)), where, link));
+    for (const s of sightings.slice().reverse()) {
+      const where = s.lat != null && s.lon != null ? locationBlock(s.lat, s.lon, { accuracy: s.accuracy, compact: true }) : el('div', { class: 'small muted' }, 'No position recorded');
+      const link = s.recordingId ? el('a', { class: 'small', href: hrefFor({ name: 'recording', id: s.recordingId }) }, 'Open recording') : null;
+      list.appendChild(el('div', { class: 'list-item' }, el('div', { class: 'row between' }, el('div', { class: 'title' }, fmtDateTime(s.firstTime)), el('div', null, `${pct(s.peakConfidence)} · ${s.source}`)), el('div', { class: 'small muted' }, describeSighting(s)), where, link));
     }
 
     mapCard.style.display = located.length ? '' : 'none';

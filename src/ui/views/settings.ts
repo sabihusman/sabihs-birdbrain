@@ -1,8 +1,8 @@
-import { detectionsToCsv } from '../../export/csv';
+import { sightingsToCsv } from '../../export/csv';
 import { downloadBlob, timestampForFilename } from '../../export/download';
-import { detectionsToGeoJson } from '../../export/geojson';
+import { sightingsToGeoJson } from '../../export/geojson';
 import type { BackendPreference, LocationMode, OcclusionResolution } from '../../app/settings';
-import { clearAllData, countDetections, listDetections } from '../../storage/db';
+import { clearAllData, countDetections, countSightings, listSightings } from '../../storage/db';
 import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
@@ -16,7 +16,7 @@ export function settingsView(ctx: ViewContext): View {
 
   // Sliders re-read the store after every change, so a value the store clamped (auto-save never below the detection threshold) shows its real value.
   const syncs: Array<() => void> = [];
-  const slider = (label: string, key: 'threshold' | 'overlapSeconds' | 'geoThreshold' | 'autoSaveMinConfidence', min: number, max: number, step: number, fmt: (v: number) => string, hint?: string) => {
+  const slider = (label: string, key: 'threshold' | 'overlapSeconds' | 'geoThreshold' | 'autoSaveMinConfidence' | 'sightingGapSeconds', min: number, max: number, step: number, fmt: (v: number) => string, hint?: string) => {
     const value = el('span', null, fmt(s[key]));
     const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(s[key]), 'aria-label': label });
     const sync = () => {
@@ -65,11 +65,12 @@ export function settingsView(ctx: ViewContext): View {
   const refreshStorage = async () => {
     const st = await getStorageStatus();
     const dets = await countDetections().catch(() => 0);
+    const sightings = await countSightings().catch(() => 0);
     if (!st.supported) {
       storageText.textContent = 'Storage estimates are not available in this browser.';
       return;
     }
-    storageText.textContent = `${formatBytes(st.usageBytes)} used of ${formatBytes(st.quotaBytes)} available · ${dets} detections stored`;
+    storageText.textContent = `${formatBytes(st.usageBytes)} used of ${formatBytes(st.quotaBytes)} available · ${sightings} sightings (${dets} analysed windows) stored`;
     const frac = st.usageBytes != null && st.quotaBytes ? Math.min(1, st.usageBytes / st.quotaBytes) : 0;
     (storageBar.firstElementChild as HTMLElement).style.width = `${Math.max(1, Math.round(frac * 100))}%`;
     persistText.textContent = st.persisted === null ? 'Persistent storage: not supported here.' : st.persisted ? 'Persistent storage: granted. iOS may still remove data for sites not used in a while.' : 'Persistent storage: not granted (the browser may evict data under pressure).';
@@ -85,13 +86,13 @@ export function settingsView(ctx: ViewContext): View {
   // Export
   const exportCsv = el('button', { class: 'btn small' }, 'Export CSV');
   exportCsv.addEventListener('click', async () => {
-    const dets = await listDetections();
-    downloadBlob(new Blob([detectionsToCsv(dets)], { type: 'text/csv' }), `birdbrain-detections-${timestampForFilename()}.csv`);
+    const sightings = await listSightings();
+    downloadBlob(new Blob([sightingsToCsv(sightings)], { type: 'text/csv' }), `birdbrain-sightings-${timestampForFilename()}.csv`);
   });
   const exportGeo = el('button', { class: 'btn small' }, 'Export GeoJSON');
   exportGeo.addEventListener('click', async () => {
-    const dets = await listDetections();
-    downloadBlob(new Blob([JSON.stringify(detectionsToGeoJson(dets), null, 1)], { type: 'application/geo+json' }), `birdbrain-detections-${timestampForFilename()}.geojson`);
+    const sightings = await listSightings();
+    downloadBlob(new Blob([JSON.stringify(sightingsToGeoJson(sightings), null, 1)], { type: 'application/geo+json' }), `birdbrain-sightings-${timestampForFilename()}.geojson`);
   });
   const clearBtn = el('button', { class: 'btn small danger' }, 'Delete all recordings and detections');
   clearBtn.addEventListener('click', async () => {
@@ -128,6 +129,7 @@ export function settingsView(ctx: ViewContext): View {
       el('div', { class: 'small muted' }, 'Lower catches faint or distant birds but adds false IDs.'),
       slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
       toggle('Show non-bird classes', 'includeNonBird', 'Dog, engine, siren, human voice and similar.'),
+      slider('New sighting after', 'sightingGapSeconds', 5, 600, 5, (v) => `${v} s`, 'Consecutive detections of a species count as one sighting until this long passes without it.'),
     ),
     el(
       'section',
@@ -178,7 +180,7 @@ export function settingsView(ctx: ViewContext): View {
       ),
     ),
     el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, el('div', { class: 'row' }, persistBtn)),
-    el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), el('p', { class: 'small muted' }, 'All detections with time, species, confidence, position and recording link.')),
+    el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), el('p', { class: 'small muted' }, 'One row per sighting: first and last time, species, peak confidence, number of windows, position and recording link.')),
     el('section', { class: 'card' }, el('h2', null, 'Data'), el('div', { class: 'row' }, clearBtn)),
     el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works, limitations and licences')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
   );

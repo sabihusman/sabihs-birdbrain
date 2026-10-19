@@ -1,4 +1,4 @@
-import type { DetectionRecord } from '../storage/types';
+import type { SightingRecord } from '../storage/types';
 
 export function csvEscape(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -6,12 +6,15 @@ export function csvEscape(value: unknown): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export const DETECTION_CSV_COLUMNS = [
+/** One row per sighting (merged consecutive detections), not per analysis window. */
+export const SIGHTING_CSV_COLUMNS = [
   'id',
-  'time_iso',
+  'first_time_iso',
+  'last_time_iso',
   'scientific_name',
   'common_name',
-  'confidence',
+  'peak_confidence',
+  'hits',
   'latitude',
   'longitude',
   'accuracy_m',
@@ -20,22 +23,24 @@ export const DETECTION_CSV_COLUMNS = [
   'source',
 ] as const;
 
-export function detectionsToCsv(detections: DetectionRecord[]): string {
-  const lines = [DETECTION_CSV_COLUMNS.join(',')];
-  for (const d of detections) {
+export function sightingsToCsv(sightings: SightingRecord[]): string {
+  const lines = [SIGHTING_CSV_COLUMNS.join(',')];
+  for (const s of sightings) {
     lines.push(
       [
-        d.id,
-        new Date(d.time).toISOString(),
-        d.scientific,
-        d.common,
-        d.confidence.toFixed(4),
-        d.lat,
-        d.lon,
-        d.accuracy == null ? '' : Math.round(d.accuracy),
-        d.recordingId,
-        d.offsetSec,
-        d.source,
+        s.id,
+        new Date(s.firstTime).toISOString(),
+        new Date(s.lastTime).toISOString(),
+        s.scientific,
+        s.common,
+        s.peakConfidence.toFixed(4),
+        s.hits,
+        s.lat,
+        s.lon,
+        s.accuracy == null ? '' : Math.round(s.accuracy),
+        s.recordingId,
+        s.offsetSec,
+        s.source,
       ]
         .map(csvEscape)
         .join(','),

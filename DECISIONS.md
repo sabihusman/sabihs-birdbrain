@@ -510,3 +510,28 @@ Sabih's approval and a baseline check of the other sites after every reload.
   `MONITOR_*` variables need systemd ≥ 251 (Ubuntu 22.04 has 249: the mail
   then says "unknown" for result and exit code, the journal lines still tell).
 
+## 35. Sightings: consecutive detections of a species are one event
+
+- **Decision:** a new IndexedDB store `sightings` (DB version 3) holds one
+  record per run of detections of a species: `firstTime`, `lastTime`,
+  `peakConfidence`, `hits` (windows merged), and the position, recording and
+  offset of the peak window (or the first located window when the peak has
+  none). A detection joins the most recent sighting of the same species and
+  stream when it falls within `sightingGapSeconds` (setting, default 60) of
+  it; otherwise it opens a new one. Streams: all live listening is one stream
+  (sightings may span a stop/start), each recording or import is its own, so
+  re-analysing a file never merges into live history. Per-window detections
+  stay stored with a `sightingId`, for the recording timeline and "Why this
+  ID".
+- **Consumers:** the Map tab, the species page summary, the ID card, the
+  sighting history list, the heat map (one point per sighting, weighted by
+  peak confidence) and the CSV/GeoJSON exports (one row per sighting; the
+  file names changed from `detections` to `sightings`, with `first_time_iso`,
+  `last_time_iso`, `peak_confidence` and `hits` columns). Clips keep their
+  replace-if-higher rule per species.
+- **Migration:** the version-3 upgrade groups the existing detections with
+  the 60 s default inside the upgrade transaction and links them, once.
+  Changing the gap setting later affects new detections only.
+- **Not verified:** on a phone; the migration is tested with
+  `fake-indexeddb` from a hand-built version-2 database.
+

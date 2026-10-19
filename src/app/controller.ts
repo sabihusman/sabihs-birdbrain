@@ -12,7 +12,7 @@ import { parseLabels, type Species } from '../model/labels';
 import { selectDetections, type Score } from '../model/postprocess';
 import { InferenceClient, type ModelStatus } from '../model/worker-client';
 import { Emitter } from '../shared/emitter';
-import { addDetections, getClip, newId, putRecording } from '../storage/db';
+import { getClip, newId, putRecording, recordDetections } from '../storage/db';
 import type { ClipRecord, DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
 import { LocationManager, type LocationState } from './location';
 import { SettingsStore, type Settings } from './settings';
@@ -331,7 +331,7 @@ export class AppController extends Emitter<ControllerEvents> {
         sessionId: this.sessionId,
       };
     });
-    await addDetections(records);
+    await recordDetections(records, s.sightingGapSeconds * 1000);
     this.emit('detections-changed', undefined);
     if (this.clipsEnabled) {
       const offsetSamples = Math.round(result.offsetSec * SAMPLE_RATE);

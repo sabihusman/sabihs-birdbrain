@@ -1,4 +1,4 @@
-import type { DetectionRecord } from '../storage/types';
+import type { SightingRecord } from '../storage/types';
 
 export interface GeoJsonFeature {
   type: 'Feature';
@@ -11,24 +11,26 @@ export interface GeoJsonFeatureCollection {
   features: GeoJsonFeature[];
 }
 
-/** Detections with a position become Point features ([lon, lat] per RFC 7946). */
-export function detectionsToGeoJson(detections: DetectionRecord[]): GeoJsonFeatureCollection {
+/** Sightings with a position become Point features ([lon, lat] per RFC 7946). */
+export function sightingsToGeoJson(sightings: SightingRecord[]): GeoJsonFeatureCollection {
   const features: GeoJsonFeature[] = [];
-  for (const d of detections) {
-    if (d.lat == null || d.lon == null) continue;
+  for (const s of sightings) {
+    if (s.lat == null || s.lon == null) continue;
     features.push({
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [d.lon, d.lat] },
+      geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
       properties: {
-        id: d.id,
-        time: new Date(d.time).toISOString(),
-        scientific_name: d.scientific,
-        common_name: d.common,
-        confidence: Number(d.confidence.toFixed(4)),
-        accuracy_m: d.accuracy,
-        recording_id: d.recordingId,
-        offset_sec: d.offsetSec,
-        source: d.source,
+        id: s.id,
+        first_time: new Date(s.firstTime).toISOString(),
+        last_time: new Date(s.lastTime).toISOString(),
+        scientific_name: s.scientific,
+        common_name: s.common,
+        peak_confidence: Number(s.peakConfidence.toFixed(4)),
+        hits: s.hits,
+        accuracy_m: s.accuracy,
+        recording_id: s.recordingId,
+        offset_sec: s.offsetSec,
+        source: s.source,
       },
     });
   }

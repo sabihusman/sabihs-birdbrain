@@ -101,6 +101,11 @@ The name is always shown next to the colour.
   3 s clip per detection.
 - **Location sharing:** every located detection shows coordinates and a
   10-character Plus Code with copy buttons and an "Open in Google Maps" link.
+- **Sightings:** consecutive detections of a species are merged into one
+  sighting (peak confidence, first and last time, number of windows); a new
+  sighting starts after 60 s without the species (adjustable). The map,
+  the species pages, the clips and the CSV/GeoJSON exports all work in
+  sightings; the per-window detections stay stored underneath.
 - **Species ID card and sighting history (members):** on each species page, a
   card with the most recent sighting (Plus Code, coordinates, mini map, Google
   Maps link) and a play button for the species' saved clip; tap it for the

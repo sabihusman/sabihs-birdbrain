@@ -3,8 +3,8 @@ import 'leaflet.markercluster';
 import 'leaflet.heat';
 import type { AppController } from '../../app/controller';
 import { speciesColor } from '../../species/colors';
-import { listDetections } from '../../storage/db';
-import type { DetectionRecord } from '../../storage/types';
+import { listSightings } from '../../storage/db';
+import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { speciesHref } from '../router';
@@ -20,32 +20,38 @@ function baseMap(container: HTMLElement): L.Map {
   return map;
 }
 
-function markerFor(d: DetectionRecord, controller: AppController): L.CircleMarker {
-  const color = speciesColor(d.scientific);
-  const m = L.circleMarker([d.lat!, d.lon!], { radius: 8, color: '#fff', weight: 1.5, fillColor: color.css, fillOpacity: 0.9 });
-  m.bindPopup(popupFor(d, controller, color.css), { maxWidth: 300 });
+/** "1 May 2026, 06:30 – 06:30:45 · peak 88 % · 4 windows" */
+export function describeSighting(s: SightingRecord): string {
+  const when = s.firstTime === s.lastTime ? fmtDateTime(s.firstTime) : `${fmtDateTime(s.firstTime)} – ${new Date(s.lastTime).toLocaleTimeString()}`;
+  return `${when} · peak ${pct(s.peakConfidence)} · ${s.hits} window${s.hits === 1 ? '' : 's'}`;
+}
+
+function markerFor(s: SightingRecord, controller: AppController): L.CircleMarker {
+  const color = speciesColor(s.scientific);
+  const m = L.circleMarker([s.lat!, s.lon!], { radius: 8, color: '#fff', weight: 1.5, fillColor: color.css, fillOpacity: 0.9 });
+  m.bindPopup(popupFor(s, controller, color.css), { maxWidth: 300 });
   return m;
 }
 
-function popupFor(d: DetectionRecord, controller: AppController, colorCss: string): HTMLElement {
+function popupFor(s: SightingRecord, controller: AppController, colorCss: string): HTMLElement {
   const color = { css: colorCss };
-  const sp = controller.speciesByScientific(d.scientific);
+  const sp = controller.speciesByScientific(s.scientific);
   const popup = el(
     'div',
     null,
-    el('div', { class: 'chip', style: 'margin-bottom:6px' }, el('span', { class: 'swatch', style: `background:${color.css}` }), el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, sp?.common ?? d.common), el('span', { class: 'chip-sci' }, d.scientific))),
-    el('div', { class: 'small' }, `${fmtDateTime(d.time)} · ${pct(d.confidence)}`),
-    locationBlock(d.lat!, d.lon!, { accuracy: d.accuracy, compact: true }),
-    el('div', null, el('a', { href: speciesHref(d.scientific) }, 'Open species page')),
+    el('div', { class: 'chip', style: 'margin-bottom:6px' }, el('span', { class: 'swatch', style: `background:${color.css}` }), el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, sp?.common ?? s.common), el('span', { class: 'chip-sci' }, s.scientific))),
+    el('div', { class: 'small' }, describeSighting(s)),
+    locationBlock(s.lat!, s.lon!, { accuracy: s.accuracy, compact: true }),
+    el('div', null, el('a', { href: speciesHref(s.scientific) }, 'Open species page')),
   );
   return popup;
 }
 
-/** Small map for a single species' detections (species detail page). Returns a dispose function. */
-export function createMiniMap(container: HTMLElement, dets: DetectionRecord[], controller: AppController): () => void {
+/** Small map for a single species' sightings (species detail page). Returns a dispose function. */
+export function createMiniMap(container: HTMLElement, sightings: SightingRecord[], controller: AppController): () => void {
   const map = baseMap(container);
   const cluster = L.markerClusterGroup({ maxClusterRadius: 40 });
-  for (const d of dets) cluster.addLayer(markerFor(d, controller));
+  for (const s of sightings) cluster.addLayer(markerFor(s, controller));
   map.addLayer(cluster);
   const bounds = cluster.getBounds();
   if (bounds.isValid()) map.fitBounds(bounds.pad(0.2), { maxZoom: 14 });
@@ -58,13 +64,13 @@ export type HistoryMapMode = 'pins' | 'heat';
  * Map for one species' sighting history: clustered pins or a heat layer
  * (leaflet.heat, BSD-2-Clause) over the same OSM tiles. Returns controls.
  */
-export function createHistoryMap(container: HTMLElement, dets: DetectionRecord[], controller: AppController, mode: HistoryMapMode): { setMode(mode: HistoryMapMode): void; dispose(): void } {
+export function createHistoryMap(container: HTMLElement, sightings: SightingRecord[], controller: AppController, mode: HistoryMapMode): { setMode(mode: HistoryMapMode): void; dispose(): void } {
   const map = baseMap(container);
   const pins = L.markerClusterGroup({ maxClusterRadius: 40 });
-  for (const d of dets) pins.addLayer(markerFor(d, controller));
-  // Weight each point by confidence so sure identifications glow brighter.
+  for (const s of sightings) pins.addLayer(markerFor(s, controller));
+  // One point per sighting (not per window), weighted by its peak confidence so sure identifications glow brighter.
   const heat = L.heatLayer(
-    dets.map((d) => [d.lat!, d.lon!, Math.max(0.2, d.confidence)] as L.HeatLatLngTuple),
+    sightings.map((s) => [s.lat!, s.lon!, Math.max(0.2, s.peakConfidence)] as L.HeatLatLngTuple),
     { radius: 28, blur: 20, maxZoom: 17, minOpacity: 0.3 },
   );
   let current: L.Layer | null = null;
@@ -98,17 +104,17 @@ export function mapView(ctx: ViewContext): View {
 
   let map: L.Map | null = null;
   let cluster: L.MarkerClusterGroup | null = null;
-  let all: DetectionRecord[] = [];
+  let all: SightingRecord[] = [];
   let firstFit = true;
 
   const apply = () => {
     if (!map || !cluster) return;
     const from = fromInput.value ? new Date(fromInput.value).getTime() : -Infinity;
     const to = toInput.value ? new Date(toInput.value).getTime() + 86_400_000 : Infinity;
-    const filtered = all.filter((d) => d.lat != null && d.lon != null && (!speciesSel.value || d.scientific === speciesSel.value) && d.time >= from && d.time < to);
+    const filtered = all.filter((s) => s.lat != null && s.lon != null && (!speciesSel.value || s.scientific === speciesSel.value) && s.lastTime >= from && s.firstTime < to);
     cluster.clearLayers();
-    for (const d of filtered) cluster.addLayer(markerFor(d, controller));
-    summary.textContent = `${filtered.length} of ${all.filter((d) => d.lat != null).length} located detections shown (${all.length} total).`;
+    for (const s of filtered) cluster.addLayer(markerFor(s, controller));
+    summary.textContent = `${filtered.length} of ${all.filter((s) => s.lat != null).length} located sightings shown (${all.length} total).`;
     const bounds = cluster.getBounds();
     if (firstFit && bounds.isValid()) {
       map.fitBounds(bounds.pad(0.2), { maxZoom: 15 });
@@ -117,7 +123,7 @@ export function mapView(ctx: ViewContext): View {
   };
 
   const load = async () => {
-    all = await listDetections().catch(() => []);
+    all = await listSightings().catch(() => []);
     const names = new Map<string, string>();
     for (const d of all) names.set(d.scientific, d.common);
     const current = speciesSel.value;
