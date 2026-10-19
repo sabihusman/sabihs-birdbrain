@@ -404,7 +404,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
   IndexedDB and is a member feature; it reveals where someone walks, so it is
   never exported or sent anywhere (README › Privacy).
 
-## 32. Front-end `Referrer-Policy: strict-origin-when-cross-origin` (tiles need a Referer)
+## 30. Front-end `Referrer-Policy: strict-origin-when-cross-origin` (tiles need a Referer)
 
 - **Symptom:** map tiles answered `403 Access blocked` on the live site.
   OpenStreetMap's tile usage policy requires browser apps to send a valid

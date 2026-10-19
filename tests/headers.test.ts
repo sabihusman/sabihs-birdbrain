@@ -9,7 +9,7 @@ describe('front-end response headers (vercel.json)', () => {
   const header = (key: string) => site.headers.find((h) => h.key.toLowerCase() === key.toLowerCase())?.value;
 
   it('sends a Referer to tile and image hosts: Referrer-Policy is not no-referrer', () => {
-    // OpenStreetMap's tile usage policy requires a Referer; no-referrer made every tile a 403 (DECISIONS.md #32).
+    // OpenStreetMap's tile usage policy requires a Referer; no-referrer made every tile a 403 (DECISIONS.md #30).
     expect(header('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
     expect(header('Referrer-Policy')).not.toMatch(/no-referrer/);
   });
