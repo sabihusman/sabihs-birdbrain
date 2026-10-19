@@ -33,6 +33,13 @@ Key modules:
   `src/model/protocol.ts`. Jobs are serialised; `cancel` is handled out of band.
 - `src/app/controller.ts` — session state, persistence, wake lock, visibility,
   auto-save clips, demo clip. Views subscribe to its events.
+  `prepareForAnalysis()` applies the low-cut to clips before inference.
+- `src/audio/engine.ts` — two worklet taps: raw (recording, viz, conditions)
+  and analysis (through a 150 Hz `BiquadFilterNode` when `lowCut` is on).
+  Saved audio is always raw. `src/audio/mic-constraints.ts` classifies
+  `track.getSettings()` into the "Voice processing" status; `highpass.ts`,
+  `conditions.ts`, `ring-buffer.ts` hold the filter, the indicator thresholds
+  and the raw sample ring (see DECISIONS.md #22–24).
 - `src/app/settings.ts` — localStorage settings; `src/app/location.ts` — GPS /
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.

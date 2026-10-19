@@ -87,7 +87,13 @@ The name is always shown next to the colour.
 - **Listen:** Start/Stop continuous listening, multi-species results with
   confidences, confidence threshold slider, elapsed time, inference time,
   dropped-window count, screen wake lock (with a notice when unsupported),
-  resume after returning to the foreground, a “Try the sample clip” demo.
+  resume after returning to the foreground, a “Try the sample clip” demo,
+  and a conditions indicator (Good / Too quiet / Windy, guidance only).
+- **Microphone handling:** asks the browser for raw audio (echo cancellation,
+  noise suppression and automatic gain off) and shows in Settings what was
+  actually applied; a 150 Hz low-cut filter on the analysis path (default on)
+  removes wind rumble from what the model hears while saved recordings stay
+  unfiltered.
 - **Location filter:** GPS plus BirdNET’s week-of-year (four per month) through
   the official geo model; manual coordinates or off when location is denied.
   The strongest filtered-out species is shown greyed so the filter is visible.
