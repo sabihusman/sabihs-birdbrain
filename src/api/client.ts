@@ -19,6 +19,10 @@ export interface AdminUser extends AuthUser {
 export interface AskAnswer {
   answer: string;
   source: { title: string; url: string };
+  /** Wikipedia sections the answer cites ("[Diet]"), with section links. Absent from older servers. */
+  citations?: Array<{ section: string; url: string }>;
+  /** Whether the full article sections or only the summary were available. */
+  context?: 'article' | 'summary';
 }
 
 interface StoredSession {

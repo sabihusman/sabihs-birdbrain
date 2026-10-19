@@ -7,6 +7,7 @@ import { openDatabase } from './db.js';
 import { loadLabels } from './labels.js';
 import { createConsoleMailer, createSmtpMailer, withSendTimeout } from './mailer.js';
 import { fetchWikipediaSummary } from './wiki.js';
+import { createArticleCache, fetchWikipediaArticle } from './wiki-article.js';
 
 async function main() {
   const config = loadConfig();
@@ -17,7 +18,8 @@ async function main() {
   const mailer = withSendTimeout(config.MAIL_TRANSPORT === 'smtp' ? createSmtpMailer(config.SMTP_USER!, config.SMTP_APP_PASSWORD!, config.MAIL_FROM ?? `Sabih's Birdbrain <${config.SMTP_USER}>`) : createConsoleMailer());
   const model = config.GEMINI_API_KEY ? createGeminiModel(config.GEMINI_API_KEY, config.GEMINI_MODEL) : null;
   if (!model) console.warn('[startup] GEMINI_API_KEY not set: /v1/ask will answer 502');
-  const app = createApp({ config, db, auth, mailer, labels, wiki: fetchWikipediaSummary, model });
+  const article = createArticleCache(db).wrap(fetchWikipediaArticle);
+  const app = createApp({ config, db, auth, mailer, labels, wiki: fetchWikipediaSummary, article, model });
 
   const server = serve({ fetch: app.fetch, hostname: config.HOST, port: config.PORT }, (info) => {
     console.log(`[startup] birdbrain-api listening on ${info.address}:${info.port} (${labels.byScientific.size} species, mail=${config.MAIL_TRANSPORT})`);

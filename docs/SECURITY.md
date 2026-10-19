@@ -32,7 +32,7 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 
 | Risk | Status | Notes |
 | --- | --- | --- |
-| LLM01:2026 Prompt injection | Mitigated | Delivery surfaces: the user's question (direct, ≤500 chars) and the Wikipedia extract (indirect, semi-trusted). The extract is bounded to 6,000 chars with control characters stripped, fenced in `<source>` tags as provenance-labelled data, and the system instruction forbids following instructions inside it. Fence tags (`<source>`, `</source>`, any spelling) are removed from both the extract and the question before the prompt is built, so neither can close or reopen the fence (finding A1 below). Propagation is single-shot: no memory, no corpus, no tools, so a successful injection can only yield a wrong plain-text answer to the person who asked. Residual: the 2026 entry notes structural marking is bypassable by adaptive attackers; the blast radius, not the marking, is the real control here. |
+| LLM01:2026 Prompt injection | Mitigated | Delivery surfaces: the user's question (direct, ≤500 chars) and the Wikipedia text (indirect, semi-trusted): since the article-context change, up to 12,000 chars of selected article sections (2,500 per section, reference/culture/link sections dropped, seven-day server cache), or the 6,000-char summary as fallback. Control characters are stripped, fenced in `<source>` tags as provenance-labelled data, and the system instruction forbids following instructions inside it. Fence tags (`<source>`, `</source>`, any spelling) are removed from both the extract and the question before the prompt is built, so neither can close or reopen the fence (finding A1 below). Propagation is single-shot: no memory, no corpus, no tools, so a successful injection can only yield a wrong plain-text answer to the person who asked. Residual: the 2026 entry notes structural marking is bypassable by adaptive attackers; the blast radius, not the marking, is the real control here. |
 | LLM02:2026 Sensitive information disclosure | Mitigated | The model receives no user data (no email, name, location or audio) and no secrets. Question text is not logged; answers go only to the asking session. Side channels (token length, timing) reveal at most that a question was asked about a public species. |
 | LLM03:2026 Excessive agency | Mitigated | Zero functionality, zero permissions, zero autonomy: the model has no tools, cannot call anything, and its output is only displayed. Authorization (approval status, caps) is enforced in application code before the model is called. |
 | LLM04:2026 Supply chain | Partially | Official `@google/genai` SDK and all server dependencies pinned by exact version in `package-lock.json`; CI builds the image from a pinned Node base. **Gaps:** no dependency scanning in CI yet; the server pulls the image by the mutable `latest` tag (the forced deploy command takes no arguments, so a digest cannot be passed; mitigation: only this repository's CI token can push to the GHCR package, and `sha-<commit>` tags exist for pinning in `compose.yml`). |
@@ -92,6 +92,20 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
   plus explicit no-forwarding/no-pty options; sudoers allows that exact path
   with no arguments; the script is root-owned, mode 0750, ignores
   `SSH_ORIGINAL_COMMAND`, and only pulls and restarts the Birdbrain container.
+
+## Article context and citations (2026-10-19)
+
+`/v1/ask` now builds its source from the relevant sections of the full
+Wikipedia article (MediaWiki TextExtracts, plain text, `== Heading ==`
+markers), each fenced as `[Section: Name]` inside the single `<source>` block,
+and the model is told to cite section names in square brackets. The server
+maps citations back to section links it generated itself; unknown names stay
+as plain text. Every defence from the adversarial suite applies to every
+section (`neutralizeFence`, control-character stripping, marker-based leak
+rejection, plain-text output). The larger context raises the cost per
+question (more input tokens), still bounded by the caps; it does not add a
+new delivery surface, only a larger one. The section cache is keyed by
+scientific name and holds only public Wikipedia text.
 
 ## Adversarial test suite (2026-10-19)
 

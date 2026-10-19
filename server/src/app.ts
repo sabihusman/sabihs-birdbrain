@@ -15,6 +15,7 @@ import { MailError, type Mailer } from './mailer.js';
 import { RateLimiter } from './rate-limit.js';
 import { Users } from './users.js';
 import type { WikiFetcher } from './wiki.js';
+import type { ArticleFetcher } from './wiki-article.js';
 
 export interface AppDeps {
   config: Config;
@@ -23,6 +24,8 @@ export interface AppDeps {
   mailer: Mailer;
   labels: SpeciesLabels;
   wiki: WikiFetcher;
+  /** Full-article context (cached); the summary is the fallback. */
+  article?: ArticleFetcher;
   model: AnswerModel | null;
   /** Override limits in tests. */
   limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number };
@@ -234,7 +237,7 @@ export function createApp(deps: AppDeps) {
       raw = null;
     }
     if (raw === null) return json(c, 400, { error: 'invalid_request' });
-    const out = await answerQuestion({ labels, wiki: deps.wiki, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS }, s.user, raw);
+    const out = await answerQuestion({ labels, wiki: deps.wiki, article: deps.article, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS }, s.user, raw);
     return json(c, out.status, out.body);
   });
 

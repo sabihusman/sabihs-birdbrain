@@ -153,9 +153,11 @@ What does leave the phone, and why:
   wait for Sabih's approval.
 - If you are an approved member and use "Ask about this bird": only the
   species' scientific name and your question (up to 500 characters) are sent.
-  The server fetches the Wikipedia summary and asks Google's Gemini model to
-  answer from that text alone; the answer comes back as plain text with the
-  source link. Questions are not logged. There are daily limits per person and
+  The server fetches the relevant sections of the Wikipedia article
+  (description, voice, range, behaviour, diet, status; capped, cached for
+  seven days on the server) and asks Google's Gemini model to answer from
+  that text alone; the answer comes back as plain text with the sections it
+  cites as links. When the article cannot be fetched, the summary is used. Questions are not logged. There are daily limits per person and
   overall.
 
 Member features keep everything on the device too: the species ID card,
