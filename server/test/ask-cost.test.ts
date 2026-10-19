@@ -262,7 +262,7 @@ describe('admin ask-costs endpoint', () => {
     expect((await get(t.app, '/v1/admin/ask-costs')).status).toBe(403);
     expect((await get(t.app, '/v1/admin/ask-costs', bearer(member.token))).status).toBe(403);
     const empty = (await (await get(t.app, '/v1/admin/ask-costs', bearer(admin))).json()) as { model: string; days: unknown[] };
-    expect(empty).toEqual({ model: 'gemini-3.8-flash', days: [] });
+    expect(empty).toMatchObject({ model: 'gemini-3.8-flash', days: [] });
     // one question, then the same again: the second is a cache hit
     expect((await post(t.app, '/v1/ask', { species: 'Turdus merula', question: 'What does it eat?' }, bearer(member.token))).status).toBe(200);
     const second = (await (await post(t.app, '/v1/ask', { species: 'Turdus merula', question: 'what does it eat' }, bearer(member.token))).json()) as { cached?: boolean };

@@ -46,6 +46,23 @@ export interface AskCostDay {
   cacheHits: number;
 }
 
+/** One provider's totals over the admin window: which service answered, how often it was reached by fallback, its tokens. */
+export interface AskProviderTotals {
+  provider: 'ollama' | 'gemini';
+  requests: number;
+  promptTokens: number;
+  answerTokens: number;
+  fallbacks: number;
+}
+
+export interface AskCostSummary {
+  model: string;
+  days: AskCostDay[];
+  providerOrder?: Array<'ollama' | 'gemini'>;
+  models?: { ollama: string; gemini: string };
+  providers?: AskProviderTotals[];
+}
+
 /** What goes to the server with a question (shaped on the device by src/geo/region.ts). */
 export interface AskOptions {
   region?: string;
@@ -299,7 +316,7 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
   }
 
   /** The last 30 days of /v1/ask token and cost totals, newest first. */
-  adminAskCosts(): Promise<{ model: string; days: AskCostDay[] }> {
+  adminAskCosts(): Promise<AskCostSummary> {
     return this.call('/v1/admin/ask-costs');
   }
 }

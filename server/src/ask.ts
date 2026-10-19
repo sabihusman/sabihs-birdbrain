@@ -228,7 +228,31 @@ export function finishCutAnswer(text: string): string {
   return `${kept} ${CUT_SHORT_SUFFIX}`;
 }
 
-export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line), costs?: AskCostStore): AnswerModel {
+/** Token counts a provider reports; absent fields are logged as "-". */
+export interface ProviderUsage {
+  promptTokens?: number;
+  answerTokens?: number;
+  totalTokens?: number;
+}
+
+/** What a provider produced before the chain's output rules: the text, whether it was cut at the output limit, token counts, model and wall time. */
+export interface GeneratedAnswer {
+  text: string;
+  cut: boolean;
+  usage: ProviderUsage;
+  model: string;
+  durationMs: number;
+}
+
+export type Generator = (input: { systemInstruction: string; prompt: string }) => Promise<GeneratedAnswer>;
+
+/**
+ * Gemini generation with the finish-reason retry (#43) and cost logging (#48).
+ * Returns the raw text and whether the retry was cut too; `createGeminiModel`
+ * turns that into the "(answer cut short)" text, and the provider chain
+ * (`providers/index.ts`, #49) uses it to fall back to the next provider instead.
+ */
+export function createGeminiGenerator(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line), costs?: AskCostStore): Generator {
   const ai = client;
   const thinkingLevel = thinkingLevelFor(model);
   const generate = (systemInstruction: string, prompt: string, maxOutputTokens: number) =>
@@ -257,15 +281,24 @@ export function createGeminiModel(apiKey: string, model: string, client: GenAiCl
     return `[ask] attempt=${attempt} limit=${limit} finish=${finish} prompt_tokens=${u.promptTokenCount ?? '-'} answer_tokens=${u.candidatesTokenCount ?? '-'} thinking_tokens=${u.thoughtsTokenCount ?? '-'} total_tokens=${u.totalTokenCount ?? '-'} ${describeCost(cost)}`;
   };
   const hitLimit = (res: GenAiResponse) => res.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS;
+  const usageOf = (res: GenAiResponse): ProviderUsage => ({ promptTokens: res.usageMetadata?.promptTokenCount, answerTokens: res.usageMetadata?.candidatesTokenCount, totalTokens: res.usageMetadata?.totalTokenCount });
   return async ({ systemInstruction, prompt }) => {
+    const started = Date.now();
     let res = await generate(systemInstruction, prompt, ANSWER_MAX_OUTPUT_TOKENS);
     log(describe(res, 1, ANSWER_MAX_OUTPUT_TOKENS));
     if (hitLimit(res)) {
       res = await generate(systemInstruction, prompt, ANSWER_RETRY_OUTPUT_TOKENS);
       log(describe(res, 2, ANSWER_RETRY_OUTPUT_TOKENS));
-      if (hitLimit(res)) return finishCutAnswer(res.text ?? '');
     }
-    return res.text ?? '';
+    return { text: res.text ?? '', cut: hitLimit(res), usage: usageOf(res), model, durationMs: Date.now() - started };
+  };
+}
+
+export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line), costs?: AskCostStore): AnswerModel {
+  const generate = createGeminiGenerator(apiKey, model, client, log, costs);
+  return async (input) => {
+    const r = await generate(input);
+    return r.cut ? finishCutAnswer(r.text) : r.text;
   };
 }
 

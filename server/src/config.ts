@@ -16,6 +16,11 @@ const envSchema = z.object({
   MAIL_FROM: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
+  // Provider chain for /v1/ask (DECISIONS.md #49): tried in this order, each one falling back to the next.
+  AI_PROVIDER_ORDER: z.string().default('ollama,gemini'),
+  OLLAMA_API_KEY: z.string().optional(),
+  OLLAMA_MODEL: z.string().default('gemma4:31b'),
+  OLLAMA_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(8000),
   /** eBird API 2.0 key (optional): without it /v1/ask answers without eBird sightings. Never logged. */
   EBIRD_API_KEY: z.string().trim().min(1).optional(),
   ASK_DAILY_PER_USER: z.coerce.number().int().min(0).default(20),
@@ -30,9 +35,30 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+export const PROVIDER_NAMES = ['ollama', 'gemini'] as const;
+export type ProviderName = (typeof PROVIDER_NAMES)[number];
+
 export interface Config extends Env {
   allowedOrigins: string[];
   adminEmail: string;
+  /** `AI_PROVIDER_ORDER` parsed: unique, known names, in order. */
+  providerOrder: ProviderName[];
+}
+
+/** Parse "ollama, gemini" into known provider names; unknown or repeated names are a configuration error. */
+export function parseProviderOrder(raw: string): ProviderName[] {
+  const names = raw
+    .split(',')
+    .map((n) => n.trim().toLowerCase())
+    .filter(Boolean);
+  if (names.length === 0) throw new Error('Invalid configuration: AI_PROVIDER_ORDER is empty');
+  const out: ProviderName[] = [];
+  for (const n of names) {
+    if (!(PROVIDER_NAMES as readonly string[]).includes(n)) throw new Error(`Invalid configuration: AI_PROVIDER_ORDER has an unknown provider: ${n}`);
+    if (out.includes(n as ProviderName)) throw new Error(`Invalid configuration: AI_PROVIDER_ORDER repeats ${n}`);
+    out.push(n as ProviderName);
+  }
+  return out;
 }
 
 /** Parse and validate process.env (or a test override). Never logs values. */
@@ -55,7 +81,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
   // The Vite dev server, only outside production (compose.yml pins NODE_ENV=production).
   const DEV_ORIGIN = 'http://localhost:5173';
   if (env.NODE_ENV !== 'production' && !allowedOrigins.includes(DEV_ORIGIN)) allowedOrigins.push(DEV_ORIGIN);
-  return { ...env, allowedOrigins, adminEmail: env.ADMIN_EMAIL.toLowerCase() };
+  return { ...env, allowedOrigins, adminEmail: env.ADMIN_EMAIL.toLowerCase(), providerOrder: parseProviderOrder(env.AI_PROVIDER_ORDER) };
 }
 
 /** Every variable the server reads, for documentation and the .env template. */
