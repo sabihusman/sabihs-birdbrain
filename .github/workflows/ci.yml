@@ -18,6 +18,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Server maintenance scripts (fake tree, no docker)
+        run: bash scripts/server/test.sh
       - run: npm run build
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

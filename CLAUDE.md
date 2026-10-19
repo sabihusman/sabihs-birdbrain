@@ -108,6 +108,7 @@ src/                          app code (TypeScript, no framework)
 tests/                        Vitest unit tests (node environment, fake-indexeddb)
 e2e/                          Playwright test (Chromium, iPhone viewport)
 scripts/                      validate-model.ts (Node check of the model), make-icons.ts, screenshots.ts
+scripts/server/               update-planner.sh, backup-restore-test.sh (run by hand on the host, read-only; test.sh; docs/SERVER_RUNBOOK.md)
 docs/                         BUILD_SPEC.md (original brief), SOURCES.md, screenshots/
 ```
 
