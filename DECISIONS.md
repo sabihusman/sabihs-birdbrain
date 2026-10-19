@@ -1077,7 +1077,106 @@ Sabih's approval and a baseline check of the other sites after every reload.
   Gemini keeps to the role rules and the "sources differ" wording; the
   bounding boxes on a device near a border.
 
-## 51. Account deletion: password + DELETE, one transaction, no grace period
+## 48. `/v1/ask` cost: token logging, lean context, minimal thinking, answer cache, model eval
+
+- **Problem:** every question sent the whole selected article (up to 12,000
+  characters, ~1,800 prompt tokens in the live logs) at thinking level LOW
+  and the server had no idea what a day of questions cost.
+- **Prices (verified 2026-10-19 on https://ai.google.dev/gemini-api/docs/pricing,
+  Standard tier, USD per 1M tokens):** `gemini-3.8-flash` input "$0.75 through
+  December 31, 2026" ("$1.50 starting January 1, 2027"), output "$3.75"
+  ("$7.50"), cached input "$0.075" ("$0.15"); `gemini-3.5-flash-lite` input
+  "$0.30 (text / image / video / audio)", output "$2.50", cached input "$0.03".
+  The page labels every output price "(including thinking tokens)", so
+  thinking tokens are billed at the output rate. `server/src/pricing.ts`
+  holds the table (also `gemini-3.1-flash-lite` and `gemini-2.5-flash-lite`)
+  with the URL and date; an unknown model yields cost `null`, logged as
+  `cost_usd=unknown` and counted in `unpriced_requests`. The 2027 price rise
+  is a comment, not code: the table must be revisited then.
+- **Model IDs (https://ai.google.dev/gemini-api/docs/models, "Last updated
+  2026-10-13"):** `gemini-3.8-flash` (Stable) and `gemini-3.5-flash-lite`
+  (Stable; "For any new projects, use our latest models: 3.5 Flash-Lite or 3.8
+  Flash"). `GEMINI_MODEL` stays configurable, default unchanged.
+- **Thinking (https://ai.google.dev/gemini-api/docs/thinking):** the table
+  lists `gemini-3.8-flash` with low, medium, high (default medium) and
+  `gemini-3.5-flash-lite` with minimal, low, medium, high (default minimal).
+  Neither can be turned off. `thinkingLevelFor(model)` sends MINIMAL to
+  3.5 Flash-Lite and LOW to 3.8 Flash and to unknown models (`ThinkingLevel.
+  MINIMAL` exists in `@google/genai` 2.30); `thinkingBudget` is still never
+  sent (#43).
+- **Implicit caching (https://ai.google.dev/gemini-api/docs/caching):**
+  "enabled by default for all Gemini 2.5 and newer models"; "Try putting large
+  and common contents at the beginning of your prompt" and "send requests with
+  similar prefix in a short amount of time"; savings are passed on
+  automatically and reported as cached tokens. The prompt already has the
+  static system instruction first, then the source context, then the
+  question, and the cost code bills `cachedContentTokenCount` at the cached
+  rate. Caveat from the same page: the minimum prompt for an implicit cache
+  hit on Gemini 3.8 Flash is 4,096 tokens (no minimum is listed for 3.5
+  Flash-Lite), and this prompt is ~1,800 tokens at most, so a cache discount is
+  not expected in practice; the ordering costs nothing and the smaller prompt
+  saves more than a cache would.
+- **Context (`server/src/context-select.ts`):** the Wikipedia sections are
+  scored by keyword overlap between the question and the heading + text (lower-case,
+  stop words removed, a light suffix strip so "eat" meets "eats" and "breed"
+  meets "breeding"; a heading match counts three times). The lead always
+  scores at least 1, so it is the fallback when nothing matches. Sections are
+  added in score order until ~1,500 tokens (chars / 4; the last one cut at a
+  word boundary with "[…]", dropped if fewer than 60 tokens fit) and sent in
+  article order. The ~1,500 tokens are the whole fenced source: the
+  NatureServe and eBird blocks (#47) are short and always sent whole, and
+  `wikiTokenBudget()` gives Wikipedia what they leave, never below 400
+  tokens. Citations still resolve against every section (same anchors and
+  labels). The fence neutralisation, control stripping and leak markers are
+  unchanged; the prompt order stays static instruction → source → question.
+- **Answer cache (`server/src/answer-cache.ts`):** SQLite `answer_cache`
+  keyed by SHA-256 of species + region code ("none" when absent) + the
+  position rounded to 0.1° ("-" when absent) + normalised question
+  (lower-case, trimmed, punctuation and symbols removed, whitespace
+  collapsed, 200 characters), so the table never stores a question. The
+  same question from another state or another place is another answer
+  because the eBird sections differ (#47); the member is not in the key.
+  Seven-day TTL from `created_at`;
+  only successful answers are stored; expired rows are pruned on each write.
+  A hit returns the same body plus `cached: true`, is served before the
+  daily caps are checked and does not count against them.
+- **Logging and totals:** the `[ask]` line gains `cost_usd=0.001875
+  cached=false` (six decimals; a cache hit logs one line with
+  `finish=CACHE … cost_usd=0.000000 cached=true`); still no question or
+  answer text. `server/src/ask-cost.ts` keeps SQLite `ask_cost` per UTC day
+  (requests = billed calls, retries included; prompt, answer, thinking and
+  cached tokens; cost_micros; unpriced_requests; cache_hits). `GET
+  /v1/admin/ask-costs` (admin only) returns the last 30 days and the
+  configured model; the Admin page shows them as a table with totals
+  (`src/ui/views/admin.ts`, `adminAskCosts()` in `src/api/client.ts`).
+- **Eval (`server/scripts/eval-models.ts`, pieces in `server/src/eval-models.ts`):**
+  20 fixed questions over 5 species (blackbird, great tit, robin, blue jay,
+  house finch; one off-topic control), the real `answerQuestion` pipeline
+  with the article fetched once per species so both models see the same
+  context, `gemini-3.8-flash` versus `gemini-3.5-flash-lite`. It prints the
+  worst-case plan first (1,500 context + instruction + question ≈ 1,758 prompt
+  tokens, 200 answer and 150 thinking tokens per call: $0.0526 + $0.0280 =
+  $0.081) and refuses above $0.10 or for an unpriced model; `--dry-run`
+  makes no network call. Output is a Markdown table (question, each model's
+  answer, prompt/answer/thinking tokens, cost) plus totals. `GEMINI_API_KEY`
+  comes from the environment only.
+- **Alternatives:** explicit context caches (storage fee per hour, and the
+  prompt is below the implicit minimum anyway); an embedding-based section
+  match (a second model call per question, more cost than it saves); caching
+  per member or region (fewer hits for no benefit, since the answer depends
+  on neither); thinking off (not offered on Gemini 3 text models).
+- **Tests:** `server/test/ask-cost.test.ts` (prices and cost arithmetic,
+  thinking level per model, log line, daily totals, cache normalisation and
+  TTL with a fake clock, caps not charged for hits, failures not cached,
+  keyword/stem/score, selection order and budget, admin endpoint, eval plan,
+  refusal and table against `FakeGemini`), `tests/admin-costs.test.ts`
+  (client call and table totals). `adversarial-llm.test.ts` now asks three
+  different questions in its cap test, because a repeat is a cache hit.
+- **Not verified:** a live call with `thinkingLevel: MINIMAL` on
+  3.5 Flash-Lite and the eval itself (no API key in this environment: the
+  script was run with `--dry-run` only); whether Gemini ever reports cached
+  tokens for this prompt size; the Admin table on a phone.
+## 50. Account deletion (numbered #50: #49 is reserved for the Ollama branch): password + DELETE, one transaction, no grace period
 
 - **Decision:** Settings › Account › "Delete my account" asks for the
   password again and the word DELETE (button disabled until both are
@@ -1110,8 +1209,10 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **What is not on the server:** sightings, clips, detections and ticks
   (IndexedDB only; the ticks are derived from the sightings store); clip
   files (none exist on the server, so there is no file step); stored
-  questions or answers (only the per-day counters); an answer cache (none
-  on main). The source caches are keyed by species.
+  questions tied to a person. The answer cache from #48 (`answer_cache`) is
+  keyed by species + region + rounded position + normalised question, never
+  by user id or address, and expires after seven days; `ask_cost` holds
+  per-day totals only. The source caches are keyed by species.
 - **"What we store":** `src/ui/components/what-we-store.ts`, one paragraph
   derived from the code, on the sign-up form and in the Account card,
   ending with "Copies in server backups are removed when those backups

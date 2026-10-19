@@ -217,7 +217,8 @@ What does leave the phone, and why:
   with no grace period, everything the server holds for you in one
   transaction: the account row, the password hash, every session and
   sign-in code, your display name, your shared species list, friendships
-  and invites in both directions, and your daily question counters. A short
+  and invites in both directions, and your daily question counters (the
+  seven-day answer cache holds no name or email). A short
   confirmation is emailed to you. Sightings, recordings and clips exist only
   on your phone, so the confirmation screen offers "Also clear sightings
   saved on this phone" (off by default). The admin account cannot delete

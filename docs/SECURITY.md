@@ -229,8 +229,10 @@ permanently: no grace period, no undo. Controls:
   `verification`, `session`, `account` and `user`. The test asserts that no
   column in any table still equals the user id, the address or the ask
   scope. The three source caches (`wiki_article_cache`, `natureserve_cache`,
-  `ebird_cache`) are keyed by species, not person; questions and answers
-  are not stored; there are no per-user files on disk. Sightings, clips,
+  `ebird_cache`) are keyed by species, not person; the seven-day
+  `answer_cache` is keyed by species + region + rounded position +
+  normalised question and `ask_cost` by day, neither by person; there are
+  no per-user files on disk. Sightings, clips,
   detections and ticks never reach the server (IndexedDB only).
 - **Admin.** The `ADMIN_EMAIL` account answers 400 `admin_account` before
   the password is looked at (it is the only account that can approve

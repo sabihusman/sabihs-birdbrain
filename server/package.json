@@ -11,7 +11,8 @@
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "eval": "tsx scripts/eval-models.ts"
   },
   "dependencies": {
     "@google/genai": "2.30.0",

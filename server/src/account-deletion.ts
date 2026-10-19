@@ -12,8 +12,10 @@ import type { DatabaseSync } from 'node:sqlite';
  * directions and `invite_usage`. Sightings, clips, detections and ticks live
  * only on the device (IndexedDB) and never reach the server; the
  * `wiki_article_cache`, `natureserve_cache` and `ebird_cache` tables hold
- * public species text keyed by scientific name, not by person. Questions and
- * answers are not stored. There are no per-user files on disk.
+ * public species text keyed by scientific name, not by person; `answer_cache`
+ * is keyed by species + region + rounded position + normalised question and
+ * `ask_cost` holds per-day totals, neither by person. There are no per-user
+ * files on disk.
  */
 export function deleteUserCompletely(db: DatabaseSync, userId: string, email: string): void {
   db.exec('BEGIN IMMEDIATE');

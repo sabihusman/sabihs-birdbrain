@@ -137,9 +137,10 @@ describe('LLM10 output handling and LLM06 consumption', () => {
     const fail = await ask(t, token, 'What does it eat? [scenario:throw]');
     expect(fail.status).toBe(502);
     expect(JSON.stringify(await fail.json())).not.toMatch(/503|fake|stack/);
+    // Different questions each time: a repeat would be served from the answer cache and not count.
     expect((await ask(t, token, 'What does it eat?')).status).toBe(200);
-    expect((await ask(t, token, 'What does it eat?')).status).toBe(200);
-    expect((await ask(t, token, 'What does it eat?')).status).toBe(429);
+    expect((await ask(t, token, 'Where does it nest?')).status).toBe(200);
+    expect((await ask(t, token, 'How big is it?')).status).toBe(429);
   });
 
   it('oversized and odd Unicode input is bounded before anything is fetched', async () => {
