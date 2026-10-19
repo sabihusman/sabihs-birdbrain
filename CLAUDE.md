@@ -3,9 +3,8 @@
 Sabih’s Birdbrain is a mobile-first PWA that identifies bird sounds on-device
 with BirdNET V2.4 running in TensorFlow.js inside a Web Worker. Audio never
 leaves the phone. Front end on Vercel at `https://sabihs-birdbrain.vercel.app`
-(base path `/`; verified live with the strict CSP on 2026-10-19). GitHub Pages
-(`https://sabihusman.github.io/sabihs-birdbrain/`, base `/sabihs-birdbrain/`) is
-still published as a fallback until Sabih turns it off. Optional back end (`server/`) at
+(base path `/`; verified live with the strict CSP on 2026-10-19; the former
+GitHub Pages site was switched off the same day). Optional back end (`server/`) at
 `https://bird-brain.duckdns.org`: accounts with an emailed login code, admin
 approval, and member-only "Ask about this bird" answered by Gemini from the
 Wikipedia summary.
@@ -93,19 +92,19 @@ docs/                         BUILD_SPEC.md (original brief), SOURCES.md, screen
 
 ```
 npm install
-npm run dev          # http://localhost:5173/sabihs-birdbrain/
+npm run dev          # http://localhost:5173/
 npm run typecheck    # tsconfig.json (DOM) + tsconfig.worker.json (WebWorker lib)
 npm run lint
 npm test             # vitest
 npm run build        # typecheck + vite build → dist/ (includes sw.js)
-npm run preview      # serve dist/ at http://localhost:4173/sabihs-birdbrain/
+npm run preview      # serve dist/ at http://localhost:4173/
 npm run test:e2e     # playwright (starts preview itself); needs Chromium installed
 npx tsx scripts/validate-model.ts <modelDir> real <file.wav> [windows]   # Node sanity check
 ```
 
-Deploy: Vercel builds from the repo with base `/` (Sabih connected it);
-`.github/workflows/deploy.yml` still publishes to GitHub Pages with
-`VITE_BASE_PATH=/sabihs-birdbrain/`. `ci.yml` runs lint, typecheck, unit tests,
+Deploy: Vercel builds from the repo with base `/` (Sabih connected it); the
+GitHub Pages workflow is gone (Pages switched off 2026-10-19). `VITE_BASE_PATH`
+remains as a generic override for serving under a sub-path. `ci.yml` runs lint, typecheck, unit tests,
 build and the e2e test on every push. `server-image.yml` tests the API, pushes
 the image to GHCR, and on `main` triggers the server's forced-command deploy
 over SSH (secrets `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`). The CSP in
