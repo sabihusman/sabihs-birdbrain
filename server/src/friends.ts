@@ -45,7 +45,7 @@ export interface IncomingInvite {
  * only ids and display names travel.
  */
 export class FriendsStore {
-  constructor(private db: DatabaseSync) {}
+  constructor(private readonly db: DatabaseSync) {}
 
   // ---- invites ----------------------------------------------------------------
 

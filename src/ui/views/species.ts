@@ -13,8 +13,8 @@ import { locationBlock } from '../components/location-block';
 import { speciesIdCard } from '../components/species-id-card';
 import { lockedNoteEl } from '../components/member-gate';
 import { isMember, memberAccess } from '../../app/access';
-import { describeLocalCount, filterLocal } from '../../species/local';
-import { countSpotted, filterSpotted, isSpotted, loadSpottedSet, type SpottedSet } from '../../species/spotted';
+import { isSpotted, loadSpottedSet, type SpottedSet } from '../../species/spotted';
+import { scopeSpeciesList } from '../../species/list-scope';
 import { describeSpottedBy } from '../../species/friends';
 import { spottedByBlock } from '../components/spotted-by';
 
@@ -96,41 +96,28 @@ export function speciesListView(ctx: ViewContext): View {
   const search = () => {
     const all = controller.species.filter((s) => s.isBird || settings.get().includeNonBird);
     const local = controller.getLocalSpecies();
-    const spottedOnly = settings.get().speciesSpottedOnly;
-    const scope = filterLocal(all, local.indices, settings.get().speciesShowAll, local.note);
-    const friendSpecies = ctx.friends.species();
+    const scope = scopeSpeciesList({
+      all,
+      localIndices: local.indices,
+      localNote: local.note,
+      showAll: settings.get().speciesShowAll,
+      spotted,
+      spottedOnly: settings.get().speciesSpottedOnly,
+      friendSpecies: ctx.friends.species(),
+      friendsAvailable: ctx.friends.available,
+      friendsOnly,
+      friendCount: ctx.friends.friendCount,
+    });
+    friendsOnly = scope.friendsOnly;
     friendsChip.style.display = ctx.friends.available ? '' : 'none';
-    if (!ctx.friends.available) friendsOnly = false;
     friendsChip.setAttribute('aria-pressed', String(friendsOnly));
-    friendsCount.textContent = all.length && ctx.friends.available ? String(all.filter((s) => friendSpecies.has(s.scientific)).length) : '';
-    let base = spottedOnly || friendsOnly ? all : scope.shown;
-    if (spottedOnly && friendsOnly) base = base.filter((s) => isSpotted(s, spotted) || friendSpecies.has(s.scientific));
-    else if (spottedOnly) base = filterSpotted(base, spotted, true);
-    else if (friendsOnly) base = base.filter((s) => friendSpecies.has(s.scientific));
-    spottedCount.textContent = all.length ? String(countSpotted(all, spotted)) : '';
-    localLine.textContent = all.length
-      ? spottedOnly && friendsOnly
-        ? `${base.length.toLocaleString()} species spotted by you or your friends · ${all.length.toLocaleString()} total`
-        : spottedOnly
-          ? `${base.length.toLocaleString()} species spotted by you · ${all.length.toLocaleString()} total`
-          : friendsOnly
-            ? `${base.length.toLocaleString()} species spotted by your friends · ${all.length.toLocaleString()} total`
-            : describeLocalCount(scope)
-      : '';
-    const noteText =
-      spottedOnly && friendsOnly
-        ? 'Showing every species you or a friend have spotted, local or not.'
-        : spottedOnly
-          ? 'Showing every species you have a sighting of on this device, local or not.'
-          : friendsOnly
-            ? ctx.friends.friendCount
-              ? 'Showing every species a friend has shared, local or not. Friends share only the bird and the day they last spotted it.'
-              : 'No friend has shared a list yet. Add friends in Settings › Account.'
-            : scope.note;
-    note.textContent = noteText ?? '';
-    note.style.display = noteText ? '' : 'none';
+    friendsCount.textContent = scope.friendsCount;
+    spottedCount.textContent = scope.spottedCount;
+    localLine.textContent = scope.line;
+    note.textContent = scope.note ?? '';
+    note.style.display = scope.note ? '' : 'none';
     showAll.disabled = local.indices === null;
-    results = input.value.trim() ? searchSpecies(base, input.value, 500) : base;
+    results = input.value.trim() ? searchSpecies(scope.shown, input.value, 500) : scope.shown;
     render(true);
   };
   const refreshSpotted = () => {

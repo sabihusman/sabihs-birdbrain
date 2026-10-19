@@ -1,5 +1,5 @@
 import type { Species } from '../../model/labels';
-import { fmtDay, type SpottedBy } from '../../species/friends';
+import { byNewestThenName, fmtDay, type SpottedBy } from '../../species/friends';
 import { localDay } from '../../species/sharing';
 import { listSightingsForSpecies } from '../../storage/db';
 import type { ViewContext } from '../app';
@@ -11,6 +11,15 @@ import { el } from '../dom';
  * first. My row opens the species ID card; friends' rows are not tappable.
  * Friends' days come from the FriendsCache, mine from IndexedDB.
  */
+type Row = SpottedBy & { me: boolean };
+
+/** Newest day first; on the same day "You" comes before friends, then names. */
+function byNewestMeFirst(a: Row, b: Row): number {
+  if (a.lastSeen !== b.lastSeen) return byNewestThenName(a, b);
+  if (a.me !== b.me) return a.me ? -1 : 1;
+  return a.name.localeCompare(b.name);
+}
+
 export function spottedByBlock(ctx: ViewContext, species: Species, findIdCard: () => HTMLElement | null): { el: HTMLElement; dispose: () => void } {
   const { controller, friends } = ctx;
   const list = el('div', { class: 'stack', 'data-testid': 'spotted-by-list' }, el('p', { class: 'muted' }, 'Loading…'));
@@ -24,9 +33,9 @@ export function spottedByBlock(ctx: ViewContext, species: Species, findIdCard: (
     } catch {
       mine = null;
     }
-    const rows: Array<SpottedBy & { me: boolean }> = friends.spottedBy(species.scientific).map((r) => ({ ...r, me: false }));
+    const rows: Row[] = friends.spottedBy(species.scientific).map((r) => ({ ...r, me: false }));
     if (mine) rows.push({ name: 'You', lastSeen: mine, me: true });
-    rows.sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : a.lastSeen > b.lastSeen ? -1 : a.me ? -1 : b.me ? 1 : a.name.localeCompare(b.name)));
+    rows.sort(byNewestMeFirst);
     list.replaceChildren();
     if (rows.length === 0) {
       list.append(el('p', { class: 'muted' }, 'Not spotted by you or your friends yet.'));

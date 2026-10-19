@@ -48,7 +48,7 @@ describe('display name', () => {
     expect(((await res.json()) as { user: { name: string } }).user.name).toBe('Alex Birder');
     const after = (await (await get(t.app, '/v1/me', bearer(token))).json()) as { user: { name: string } };
     expect(after.user.name).toBe('Alex Birder');
-    for (const name of ['', '   ', 'x'.repeat(41), 'a\u0000b', 'line\nbreak', 'tab\there', 'bidi‮evil', 'zero​width', 42 as unknown as string]) {
+    for (const name of ['', '   ', 'x'.repeat(41), 'a\u0000b', 'line\nbreak', 'tab\there', 'bidi\u202Eevil', 'zero\u200Bwidth', 42 as unknown as string]) {
       expect((await post(t.app, '/v1/me/name', { name }, bearer(token))).status, JSON.stringify(name)).toBe(400);
     }
     expect((await post(t.app, '/v1/me/name', { name: 'ok', extra: 1 }, bearer(token))).status).toBe(400);

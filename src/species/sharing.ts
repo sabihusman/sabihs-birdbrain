@@ -90,13 +90,15 @@ export class SpeciesSharer {
   lastError: string | null = null;
 
   constructor(
-    private api: ApiClient,
+    private readonly api: ApiClient,
     controller: Pick<AppController, 'on'>,
-    private storage: Storage | null = defaultStorage(),
-    private online: () => boolean = () => (typeof navigator === 'undefined' ? true : navigator.onLine),
+    private readonly storage: Storage | null = defaultStorage(),
+    private readonly online: () => boolean = () => (typeof navigator === 'undefined' ? true : navigator.onLine),
   ) {
-    this.unsubs.push(controller.on('detections-changed', () => this.schedule()));
-    this.unsubs.push(api.on('change', () => this.schedule()));
+    this.unsubs.push(
+      controller.on('detections-changed', () => this.schedule()),
+      api.on('change', () => this.schedule()),
+    );
     if (typeof window !== 'undefined') {
       const onOnline = () => this.schedule();
       window.addEventListener('online', onOnline);

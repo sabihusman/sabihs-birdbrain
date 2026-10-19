@@ -32,12 +32,21 @@ export function indexFriendsSpecies(friends: readonly FriendSpecies[]): Map<stri
       if (!s.sci || seen.has(s.sci)) continue; // never repeat a person
       seen.add(s.sci);
       let rows = bySpecies.get(s.sci);
-      if (!rows) bySpecies.set(s.sci, (rows = []));
+      if (!rows) {
+        rows = [];
+        bySpecies.set(s.sci, rows);
+      }
       rows.push({ name: f.displayName, lastSeen: s.lastSeen });
     }
   }
-  for (const rows of bySpecies.values()) rows.sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : a.lastSeen > b.lastSeen ? -1 : a.name.localeCompare(b.name)));
+  for (const rows of bySpecies.values()) rows.sort(byNewestThenName);
   return bySpecies;
+}
+
+/** Sort order for "Spotted by" rows: most recent day first, then by name. Days are YYYY-MM-DD, so string order is date order. */
+export function byNewestThenName(a: SpottedBy, b: SpottedBy): number {
+  if (a.lastSeen !== b.lastSeen) return a.lastSeen < b.lastSeen ? 1 : -1;
+  return a.name.localeCompare(b.name);
 }
 
 /** "Spotted by Alex, Sam" (names in newest-first order, at most `max` shown). */
@@ -45,7 +54,8 @@ export function describeSpottedBy(rows: readonly SpottedBy[], max = 3): string {
   if (rows.length === 0) return '';
   const names = rows.slice(0, max).map((r) => r.name);
   const rest = rows.length - names.length;
-  return `Spotted by ${names.join(', ')}${rest > 0 ? ` and ${rest} more` : ''}`;
+  const more = rest > 0 ? ` and ${rest} more` : '';
+  return `Spotted by ${names.join(', ')}${more}`;
 }
 
 /** "Oct 12, 2026" from a YYYY-MM-DD day, without time-zone shifts (the day is read as local). */
@@ -63,9 +73,9 @@ export class FriendsCache extends Emitter<{ change: Map<string, SpottedBy[]> }> 
   private readonly unsub: () => void;
 
   constructor(
-    private api: ApiClient,
-    private storage: Storage | null = typeof sessionStorage !== 'undefined' ? sessionStorage : null,
-    private online: () => boolean = () => (typeof navigator === 'undefined' ? true : navigator.onLine),
+    private readonly api: ApiClient,
+    private readonly storage: Storage | null = typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    private readonly online: () => boolean = () => (typeof navigator === 'undefined' ? true : navigator.onLine),
   ) {
     super();
     this.load();
