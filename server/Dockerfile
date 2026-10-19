@@ -14,6 +14,11 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --chown=node:node public/models/birdnet-v2.4/labels.json ./data/labels.json
+# Mount points for the named volumes, owned by uid 1000 (the `node` user). A new named
+# volume copies the ownership of the image directory it is mounted over, so the SQLite
+# file and backups are writable without the chown step in deploy/setup.sh (kept there
+# for volumes created by older images).
+RUN mkdir -p /data /backups && chown node:node /data /backups
 USER node
 EXPOSE 8010
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
