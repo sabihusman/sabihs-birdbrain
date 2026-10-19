@@ -65,7 +65,9 @@ export function listenView(ctx: ViewContext): View {
     'div',
     { class: 'stack mic-steps', 'data-testid': 'mic-steps' },
     el('p', null, 'Birdbrain needs the microphone to hear birds. Nothing is recorded or uploaded unless you save it.'),
-    el('p', null, el('strong', null, 'iPhone: '), 'Settings → Safari → Microphone → Ask or Allow. For the home-screen app, Settings → Birdbrain → Microphone. Then tap Try again.'),
+    el('p', null, el('strong', null, 'Safari on iPhone: '), 'Settings → Safari → Microphone → Ask or Allow (on iOS 18 and later: Settings → Apps → Safari → Microphone), or tap “aA” in the address bar → Website Settings. Then tap Try again.'),
+    el('p', null, el('strong', null, 'Chrome, Firefox, Edge or another iPhone browser: '), 'Settings → Apps → [that browser] → Microphone, then allow the site when the browser asks again.'),
+    el('p', null, el('strong', null, 'Home-screen app: '), 'Settings → Apps → Birdbrain → Microphone.'),
     el('p', { class: 'small muted' }, 'You can still ', el('a', { href: '#/recordings' }, 'import a recording'), '.'),
   );
 
@@ -303,7 +305,8 @@ export function listenView(ctx: ViewContext): View {
       status.textContent = `Listening at ${controller.engine.contextSampleRate ?? '?'} Hz${controller.engine.contextSampleRate !== 48000 ? ' (resampling to 48 kHz)' : ''}`;
       pipeline.setResampling(controller.engine.contextSampleRate !== 48000);
     } catch {
-      status.textContent = controller.getMicError()?.message ?? 'Microphone not available.';
+      // The state block (title, hint, steps) and the toast already say why; a third copy on the status line would repeat it.
+      status.textContent = '';
     } finally {
       dockStartBtn.disabled = false;
       renderState();

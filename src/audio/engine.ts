@@ -41,7 +41,8 @@ export function describeMicError(err: unknown): StartError {
     case 'NotAllowedError':
     case 'PermissionDeniedError':
     case 'SecurityError':
-      return { kind: 'denied', message: 'Microphone access was denied. On iPhone: Settings › Safari › Microphone, or tap “aA” in the address bar › Website Settings. Home-screen apps ask again on their own.' };
+      // Short on purpose: the Listen screen shows the per-browser steps next to it (one message, not two).
+      return { kind: 'denied', message: 'Microphone access was denied.' };
     case 'NotFoundError':
     case 'DevicesNotFoundError':
       return { kind: 'no-mic', message: 'No microphone was found on this device.' };
