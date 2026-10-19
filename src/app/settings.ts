@@ -26,6 +26,8 @@ export interface Settings {
   lowCut: boolean;
   /** Seconds without a species after which its next detection starts a new sighting. */
   sightingGapSeconds: number;
+  /** Species tab: list every species instead of the local ones. */
+  speciesShowAll: boolean;
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
@@ -50,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showAdvancedViz: true,
   lowCut: true,
   sightingGapSeconds: 60,
+  speciesShowAll: false,
 };
 
 const KEY = 'birdbrain.settings.v1';

@@ -111,6 +111,12 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
         p?.resolve({ scores: msg.scores, inferMs: msg.inferMs, geoApplied: msg.geoApplied } satisfies AnalyzeResult);
         return;
       }
+      case 'local-species': {
+        const p = this.pending.get(msg.id);
+        this.pending.delete(msg.id);
+        p?.resolve(msg.maxProbs);
+        break;
+      }
       case 'geo-ready': {
         const p = this.pending.get(msg.id);
         this.pending.delete(msg.id);
@@ -160,6 +166,11 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
   /** Set (or clear) the location/season filter. Resolves with the number of species in range. */
   setGeo(location: { lat: number; lon: number; week: number } | null, threshold: number): Promise<number> {
     return this.request<number>((id) => ({ type: 'set-geo', id, location, threshold }));
+  }
+
+  /** Year-round geo scores at a position: per-species maximum over the 48 weeks. */
+  localSpecies(lat: number, lon: number): Promise<Float32Array> {
+    return this.request<Float32Array>((id) => ({ type: 'local-species', id, lat, lon }));
   }
 
   /** Run one 3-second window. The buffer is transferred to the worker. */

@@ -16,6 +16,7 @@ import { getClip, newId, putRecording, recordDetections } from '../storage/db';
 import type { ClipRecord, DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
 import { LocationManager, type LocationState } from './location';
 import { SettingsStore, type Settings } from './settings';
+import { localIndices, LocalSpeciesCache } from '../species/local';
 
 export interface WindowResult {
   windowId: number;
@@ -66,6 +67,8 @@ interface ControllerEvents extends Record<string, unknown> {
   wakelock: WakeLockState;
   location: LocationState;
   'geo-count': number;
+  /** The local species list changed (position moved, model ready, or the range threshold changed). */
+  'local-species': LocalSpeciesState;
   notice: Notice;
   stage: PipelineStage;
   'species-loaded': Species[];
@@ -87,6 +90,13 @@ interface PendingLiveClip {
   offsetSamples: number;
 }
 
+export interface LocalSpeciesState {
+  /** Species indices the geo model scores at or above the range threshold in any week; null when no position is known. */
+  indices: Set<number> | null;
+  /** Why the list is unavailable, when it is. */
+  note: string | null;
+}
+
 /** Orchestrates microphone capture, inference, persistence and device APIs. */
 export class AppController extends Emitter<ControllerEvents> {
   readonly settings = new SettingsStore();
@@ -105,6 +115,8 @@ export class AppController extends Emitter<ControllerEvents> {
   private lastAutoClip = new Map<string, number>();
   private geoCount = 0;
   private modelReady = false;
+  private localCache = new LocalSpeciesCache();
+  private localComputing: Promise<void> | null = null;
   private conditions = new ConditionsMeter(SAMPLE_RATE, (a) => this.emit('conditions', a));
   /** Raw (unfiltered) live audio for species clips; member feature, see setClipsEnabled. */
   private liveRing = new SampleRing(SAMPLE_RATE * LIVE_RING_SECONDS);
@@ -129,6 +141,7 @@ export class AppController extends Emitter<ControllerEvents> {
     this.location.on('change', (l) => {
       this.emit('location', l);
       void this.pushGeo();
+      void this.refreshLocalSpecies();
     });
     this.settings.on('change', (s) => this.onSettings(s));
     if (typeof document !== 'undefined') {
@@ -170,6 +183,7 @@ export class AppController extends Emitter<ControllerEvents> {
     try {
       await this.inference.init(this.baseUrl, this.settings.get().backend);
       await this.pushGeo();
+      void this.refreshLocalSpecies();
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Model failed to load: ${(e as Error).message}` });
     }
@@ -180,6 +194,46 @@ export class AppController extends Emitter<ControllerEvents> {
     this.engine.setOverlap(s.overlapSeconds);
     this.engine.setLowCut(s.lowCut);
     void this.pushGeo();
+    this.emit('local-species', this.getLocalSpecies()); // the range threshold may have changed
+  }
+
+  // Local species (Species tab) ---------------------------------------------
+
+  /** Local list at the current range threshold, from the cached year-round geo scores. */
+  getLocalSpecies(): LocalSpeciesState {
+    const loc = this.location.get();
+    if (!loc.location) return { indices: null, note: loc.mode === 'off' ? 'Showing all species: the location filter is off (Settings › Location).' : `Showing all species: no location is available (${loc.message || loc.status}).` };
+    const entry = this.localCache.current;
+    if (!entry || this.localCache.needsRecompute(loc.location.lat, loc.location.lon)) {
+      return { indices: null, note: this.modelReady ? 'Showing all species while the local list is being computed…' : 'Showing all species until the model has loaded.' };
+    }
+    return { indices: localIndices(entry.maxProbs, this.settings.get().geoThreshold), note: null };
+  }
+
+  /** Recompute the cached year-round scores when the position moved more than 25 km (or nothing is cached). */
+  private async refreshLocalSpecies(): Promise<void> {
+    const loc = this.location.get().location;
+    if (!loc || !this.modelReady) {
+      this.emit('local-species', this.getLocalSpecies());
+      return;
+    }
+    if (!this.localCache.needsRecompute(loc.lat, loc.lon)) {
+      this.emit('local-species', this.getLocalSpecies());
+      return;
+    }
+    if (this.localComputing) return;
+    this.localComputing = (async () => {
+      try {
+        const maxProbs = await this.inference.localSpecies(loc.lat, loc.lon);
+        this.localCache.set({ lat: loc.lat, lon: loc.lon, maxProbs, computedAt: Date.now() });
+      } catch (e) {
+        this.emit('notice', { kind: 'warn', text: `Local species list failed: ${(e as Error).message}` });
+      } finally {
+        this.localComputing = null;
+        this.emit('local-species', this.getLocalSpecies());
+      }
+    })();
+    await this.localComputing;
   }
 
   /** Last known microphone voice-processing report ('unknown' until a session has started). */

@@ -6,6 +6,8 @@ export type BackendPreference = 'auto' | BackendName;
 export type WorkerRequest =
   | { type: 'init'; id: number; baseUrl: string; backend: BackendPreference; floor: number }
   | { type: 'set-geo'; id: number; location: { lat: number; lon: number; week: number } | null; threshold: number }
+  /** Geo-model scores for every week of the year at one position, reduced to the per-species maximum. */
+  | { type: 'local-species'; id: number; lat: number; lon: number }
   | { type: 'analyze'; id: number; audio: Float32Array; tag?: unknown }
   | { type: 'analyze-file'; id: number; audio: Float32Array; hopSamples: number }
   | { type: 'occlusion'; id: number; audio: Float32Array; targetIndex: number; timeSteps: number; freqBands: number }
@@ -19,6 +21,7 @@ export type WorkerResponse =
   | { type: 'stage'; id: number; stage: 'spectrogram' | 'network' | 'filter' }
   | { type: 'result'; id: number; scores: Score[]; inferMs: number; geoApplied: boolean; tag?: unknown }
   | { type: 'geo-ready'; id: number; count: number }
+  | { type: 'local-species'; id: number; maxProbs: Float32Array }
   | { type: 'file-window'; id: number; offsetSamples: number; padded: boolean; scores: Score[]; index: number; total: number }
   | { type: 'file-done'; id: number; cancelled: boolean }
   | { type: 'occlusion-progress'; id: number; done: number; total: number }

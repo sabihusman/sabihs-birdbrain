@@ -1,27 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiClient, ApiError, describeApiError, parseStoredSession, SESSION_KEY } from '../src/api/client';
-
-class MemoryStorage implements Storage {
-  private m = new Map<string, string>();
-  get length() {
-    return this.m.size;
-  }
-  clear() {
-    this.m.clear();
-  }
-  getItem(k: string) {
-    return this.m.get(k) ?? null;
-  }
-  key(i: number) {
-    return Array.from(this.m.keys())[i] ?? null;
-  }
-  removeItem(k: string) {
-    this.m.delete(k);
-  }
-  setItem(k: string, v: string) {
-    this.m.set(k, v);
-  }
-}
+import { MemoryStorage } from './helpers/memory-storage';
 
 const user = { id: 'u1', email: 'a@b.co', name: 'a', status: 'pending' as const, role: 'member' as const };
 

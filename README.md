@@ -115,7 +115,10 @@ The name is always shown next to the colour.
 - **Accounts (optional):** email + password + emailed code; approved members
   can ask AI questions about a species, answered only from its Wikipedia
   summary; Sabih approves members on an admin page.
-- **Species:** offline browser of all 6,522 BirdNET classes with search by
+- **Species:** offline browser of the BirdNET classes, listing by default the
+  species the location model expects near you in some week of the year
+  ("312 local species · 6,511 total", with a "Show all species" toggle and a
+  note when no location is available), with search by
   common or scientific name; Wikipedia summary (scientific name first, then
   common; disambiguation and not-found handled), image with Commons attribution
   link, cached for offline; your own detection count, first/last seen, mini map

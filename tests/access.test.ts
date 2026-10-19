@@ -1,28 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiClient, SESSION_KEY } from '../src/api/client';
 import { isMember, lockedNote, memberAccess } from '../src/app/access';
-
-class MemoryStorage implements Storage {
-  private m = new Map<string, string>();
-  get length() {
-    return this.m.size;
-  }
-  clear() {
-    this.m.clear();
-  }
-  getItem(k: string) {
-    return this.m.get(k) ?? null;
-  }
-  key(i: number) {
-    return Array.from(this.m.keys())[i] ?? null;
-  }
-  removeItem(k: string) {
-    this.m.delete(k);
-  }
-  setItem(k: string, v: string) {
-    this.m.set(k, v);
-  }
-}
+import { MemoryStorage } from './helpers/memory-storage';
 
 const base = { id: 'u1', email: 'a@b.co', name: 'a', role: 'member' as const };
 const offlineFetch: typeof fetch = async () => {

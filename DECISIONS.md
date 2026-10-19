@@ -535,3 +535,24 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone; the migration is tested with
   `fake-indexeddb` from a hand-built version-2 database.
 
+## 36. Species tab lists local species by default
+
+- **Decision:** "local" means the existing BirdNET geo model scores the
+  species at or above the range threshold (`geoThreshold`, the Settings
+  slider) at the user's position in **any** of the 48 weeks. The worker runs
+  the geo model once for all 48 weeks in a batch of 48 rows (one week per
+  row at the same position; falls back to 48 single predictions if the graph
+  refuses the batch) and keeps only the per-species maximum, so the threshold
+  can change without recomputing. The result is cached in localStorage
+  (`birdbrain.localSpecies.v1`, values rounded to three decimals) and
+  recomputed only when the position moves more than 25 km (haversine).
+- **UI:** count line "312 local species · 6,511 total", a "Show all
+  species" toggle (setting `speciesShowAll`, default off), search over the
+  shown list. With no position (filter off, denied, or not yet known) the
+  tab shows everything with one line saying why; while the list is being
+  computed it shows everything too. Listen's identification path is
+  untouched (it still uses the current week via `set-geo`).
+- **Not verified:** the batch prediction on the real TF.js geo graph in a
+  browser (the fallback covers a refused batch); the 25 km radius is a
+  guess at "same area" for a bird list.
+
