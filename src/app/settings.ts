@@ -26,8 +26,6 @@ export interface Settings {
   showAdvancedViz: boolean;
   /** 150 Hz high-pass on the analysis path (live and imported clips). Saved audio is never filtered. */
   lowCut: boolean;
-  /** Seconds without a species after which its next detection starts a new sighting. */
-  sightingGapSeconds: number;
   /** Species tab: list every species instead of the local ones. */
   speciesShowAll: boolean;
   /** Species tab: list only species with at least one of your sightings ("Spotted by me"). */
@@ -56,7 +54,6 @@ export const DEFAULT_SETTINGS: Settings = {
   includeNonBird: false,
   showAdvancedViz: true,
   lowCut: true,
-  sightingGapSeconds: 60,
   speciesShowAll: false,
   speciesSpottedOnly: false,
   listenLayout: 'consolidated',
@@ -123,7 +120,6 @@ export function sanitize(s: Settings): Settings {
     threshold,
     overlapSeconds: clamp(s.overlapSeconds, 0, 2.5, DEFAULT_SETTINGS.overlapSeconds),
     geoThreshold: clamp(s.geoThreshold, 0, 1, DEFAULT_SETTINGS.geoThreshold),
-    sightingGapSeconds: clamp(s.sightingGapSeconds, 5, 600, DEFAULT_SETTINGS.sightingGapSeconds),
     listenLayout: s.listenLayout === 'dock' || s.listenLayout === 'focus' ? s.listenLayout : 'consolidated',
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),

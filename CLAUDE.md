@@ -72,7 +72,14 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   the email second factor; `src/ask.ts` the Gemini pipeline and caps;
   `src/wiki-article.ts`, `src/natureserve.ts`, `src/ebird.ts` the three
   fetched, cached sources (`EBIRD_API_KEY` optional; DECISIONS #47);
-  `src/users.ts` admin SQL; `src/backup.ts` `VACUUM INTO` backups.
+  `src/context-select.ts` (Wikipedia sections relevant to the question, the
+  whole fenced source ~1,500 tokens), `src/answer-cache.ts` (same species +
+  region + position + question → 7-day reuse), `src/pricing.ts` (list prices
+  and thinking level per model, verified dates in the comment) and
+  `src/ask-cost.ts` (per-day token/cost totals, `GET /v1/admin/ask-costs`;
+  DECISIONS #48); `src/users.ts` admin SQL; `src/account-deletion.ts` the
+  one-transaction account wipe (DECISIONS.md #50); `src/backup.ts`
+  `VACUUM INTO` backups.
 - Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or
   Better Auth logs a schema mismatch.
 - Tests: `cd server && npm test` (Vitest, in-memory SQLite, `FakeMailer`).
@@ -84,6 +91,18 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   Nginx site files, lego renew units, forced-command deploy user files; see
   `server/deploy/README.md`). Env variable names: `server/.env.example`.
   Default Gemini model: `gemini-3.8-flash` (`GEMINI_MODEL`).
+- AI providers for `/v1/ask` (DECISIONS.md #49): `src/providers/ollama.ts`
+  (Ollama Cloud, `POST https://ollama.com/api/chat`, plain `fetch` with an
+  `AbortController` timeout), `src/providers/gemini.ts` (the existing wrapper
+  behind the provider interface), `src/providers/index.ts` (the chain:
+  `AI_PROVIDER_ORDER`, default `ollama,gemini`, fallback on any failure,
+  empty or cut-off answer; one `[ask] provider=… fallback_from=…` line per
+  request). `src/provider-usage.ts` keeps per-provider daily totals
+  (`ask_provider_usage`) shown on the admin cost summary. The live `.env`
+  sets `OLLAMA_MODEL` and `GEMINI_MODEL`; never hardcode model names.
+  Tests: `test/fake-ollama.ts`, `test/providers.test.ts`,
+  `test/adversarial-ollama.test.ts`, `test/provider-usage.test.ts`.
+  `docs/LIVE_HARDENING.md` is the checklist to run against the live server.
 - Server state (installed 2026-10-19 with `setup.sh` steps 1-8 on 95.216.159.93,
   which also hosts other projects that must never be touched; see
   `server/deploy/README.md`): `/opt/birdbrain/.env` sets `BIRDBRAIN_IMAGE_TAG=latest`,
@@ -108,6 +127,7 @@ src/                          app code (TypeScript, no framework)
 tests/                        Vitest unit tests (node environment, fake-indexeddb)
 e2e/                          Playwright test (Chromium, iPhone viewport)
 scripts/                      validate-model.ts (Node check of the model), make-icons.ts, screenshots.ts
+                              (the model eval lives in server/scripts/eval-models.ts: `cd server && npm run eval`)
 scripts/server/               update-planner.sh, backup-restore-test.sh (run by hand on the host, read-only; test.sh; docs/SERVER_RUNBOOK.md)
 docs/                         BUILD_SPEC.md (original brief), SOURCES.md, screenshots/
 ```
@@ -124,6 +144,7 @@ npm run build        # typecheck + vite build → dist/ (includes sw.js)
 npm run preview      # serve dist/ at http://localhost:4173/
 npm run test:e2e     # playwright (starts preview itself); needs Chromium installed
 npx tsx scripts/validate-model.ts <modelDir> real <file.wav> [windows]   # Node sanity check
+cd server && npm run eval -- --dry-run   # plan only; with GEMINI_API_KEY set it runs (refuses above $0.10)
 ```
 
 Deploy: Vercel builds from the repo with base `/` (Sabih connected it); the

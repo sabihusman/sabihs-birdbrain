@@ -1077,7 +1077,334 @@ Sabih's approval and a baseline check of the other sites after every reload.
   Gemini keeps to the role rules and the "sources differ" wording; the
   bounding boxes on a device near a border.
 
-## 50. Server maintenance scripts are read-only planners, run by hand, tested against a fake tree
+## 48. `/v1/ask` cost: token logging, lean context, minimal thinking, answer cache, model eval
+
+- **Problem:** every question sent the whole selected article (up to 12,000
+  characters, ~1,800 prompt tokens in the live logs) at thinking level LOW
+  and the server had no idea what a day of questions cost.
+- **Prices (verified 2026-10-19 on https://ai.google.dev/gemini-api/docs/pricing,
+  Standard tier, USD per 1M tokens):** `gemini-3.8-flash` input "$0.75 through
+  December 31, 2026" ("$1.50 starting January 1, 2027"), output "$3.75"
+  ("$7.50"), cached input "$0.075" ("$0.15"); `gemini-3.5-flash-lite` input
+  "$0.30 (text / image / video / audio)", output "$2.50", cached input "$0.03".
+  The page labels every output price "(including thinking tokens)", so
+  thinking tokens are billed at the output rate. `server/src/pricing.ts`
+  holds the table (also `gemini-3.1-flash-lite` and `gemini-2.5-flash-lite`)
+  with the URL and date; an unknown model yields cost `null`, logged as
+  `cost_usd=unknown` and counted in `unpriced_requests`. The 2027 price rise
+  is a comment, not code: the table must be revisited then.
+- **Model IDs (https://ai.google.dev/gemini-api/docs/models, "Last updated
+  2026-10-13"):** `gemini-3.8-flash` (Stable) and `gemini-3.5-flash-lite`
+  (Stable; "For any new projects, use our latest models: 3.5 Flash-Lite or 3.8
+  Flash"). `GEMINI_MODEL` stays configurable, default unchanged.
+- **Thinking (https://ai.google.dev/gemini-api/docs/thinking):** the table
+  lists `gemini-3.8-flash` with low, medium, high (default medium) and
+  `gemini-3.5-flash-lite` with minimal, low, medium, high (default minimal).
+  Neither can be turned off. `thinkingLevelFor(model)` sends MINIMAL to
+  3.5 Flash-Lite and LOW to 3.8 Flash and to unknown models (`ThinkingLevel.
+  MINIMAL` exists in `@google/genai` 2.30); `thinkingBudget` is still never
+  sent (#43).
+- **Implicit caching (https://ai.google.dev/gemini-api/docs/caching):**
+  "enabled by default for all Gemini 2.5 and newer models"; "Try putting large
+  and common contents at the beginning of your prompt" and "send requests with
+  similar prefix in a short amount of time"; savings are passed on
+  automatically and reported as cached tokens. The prompt already has the
+  static system instruction first, then the source context, then the
+  question, and the cost code bills `cachedContentTokenCount` at the cached
+  rate. Caveat from the same page: the minimum prompt for an implicit cache
+  hit on Gemini 3.8 Flash is 4,096 tokens (no minimum is listed for 3.5
+  Flash-Lite), and this prompt is ~1,800 tokens at most, so a cache discount is
+  not expected in practice; the ordering costs nothing and the smaller prompt
+  saves more than a cache would.
+- **Context (`server/src/context-select.ts`):** the Wikipedia sections are
+  scored by keyword overlap between the question and the heading + text (lower-case,
+  stop words removed, a light suffix strip so "eat" meets "eats" and "breed"
+  meets "breeding"; a heading match counts three times). The lead always
+  scores at least 1, so it is the fallback when nothing matches. Sections are
+  added in score order until ~1,500 tokens (chars / 4; the last one cut at a
+  word boundary with "[…]", dropped if fewer than 60 tokens fit) and sent in
+  article order. The ~1,500 tokens are the whole fenced source: the
+  NatureServe and eBird blocks (#47) are short and always sent whole, and
+  `wikiTokenBudget()` gives Wikipedia what they leave, never below 400
+  tokens. Citations still resolve against every section (same anchors and
+  labels). The fence neutralisation, control stripping and leak markers are
+  unchanged; the prompt order stays static instruction → source → question.
+- **Answer cache (`server/src/answer-cache.ts`):** SQLite `answer_cache`
+  keyed by SHA-256 of species + region code ("none" when absent) + the
+  position rounded to 0.1° ("-" when absent) + normalised question
+  (lower-case, trimmed, punctuation and symbols removed, whitespace
+  collapsed, 200 characters), so the table never stores a question. The
+  same question from another state or another place is another answer
+  because the eBird sections differ (#47); the member is not in the key.
+  Seven-day TTL from `created_at`;
+  only successful answers are stored; expired rows are pruned on each write.
+  A hit returns the same body plus `cached: true`, is served before the
+  daily caps are checked and does not count against them.
+- **Logging and totals:** the `[ask]` line gains `cost_usd=0.001875
+  cached=false` (six decimals; a cache hit logs one line with
+  `finish=CACHE … cost_usd=0.000000 cached=true`); still no question or
+  answer text. `server/src/ask-cost.ts` keeps SQLite `ask_cost` per UTC day
+  (requests = billed calls, retries included; prompt, answer, thinking and
+  cached tokens; cost_micros; unpriced_requests; cache_hits). `GET
+  /v1/admin/ask-costs` (admin only) returns the last 30 days and the
+  configured model; the Admin page shows them as a table with totals
+  (`src/ui/views/admin.ts`, `adminAskCosts()` in `src/api/client.ts`).
+- **Eval (`server/scripts/eval-models.ts`, pieces in `server/src/eval-models.ts`):**
+  20 fixed questions over 5 species (blackbird, great tit, robin, blue jay,
+  house finch; one off-topic control), the real `answerQuestion` pipeline
+  with the article fetched once per species so both models see the same
+  context, `gemini-3.8-flash` versus `gemini-3.5-flash-lite`. It prints the
+  worst-case plan first (1,500 context + instruction + question ≈ 1,758 prompt
+  tokens, 200 answer and 150 thinking tokens per call: $0.0526 + $0.0280 =
+  $0.081) and refuses above $0.10 or for an unpriced model; `--dry-run`
+  makes no network call. Output is a Markdown table (question, each model's
+  answer, prompt/answer/thinking tokens, cost) plus totals. `GEMINI_API_KEY`
+  comes from the environment only.
+- **Alternatives:** explicit context caches (storage fee per hour, and the
+  prompt is below the implicit minimum anyway); an embedding-based section
+  match (a second model call per question, more cost than it saves); caching
+  per member or region (fewer hits for no benefit, since the answer depends
+  on neither); thinking off (not offered on Gemini 3 text models).
+- **Tests:** `server/test/ask-cost.test.ts` (prices and cost arithmetic,
+  thinking level per model, log line, daily totals, cache normalisation and
+  TTL with a fake clock, caps not charged for hits, failures not cached,
+  keyword/stem/score, selection order and budget, admin endpoint, eval plan,
+  refusal and table against `FakeGemini`), `tests/admin-costs.test.ts`
+  (client call and table totals). `adversarial-llm.test.ts` now asks three
+  different questions in its cap test, because a repeat is a cache hit.
+- **Not verified:** a live call with `thinkingLevel: MINIMAL` on
+  3.5 Flash-Lite and the eval itself (no API key in this environment: the
+  script was run with `--dry-run` only); whether Gemini ever reports cached
+  tokens for this prompt size; the Admin table on a phone.
+
+## 49. `/v1/ask`: Ollama Cloud first, Gemini as automatic fallback
+
+(Numbered 49 on branch `claude/ollama-provider`; #47 and #48 are taken by
+other open branches, so this may be renumbered at merge.)
+
+- **Decision:** `AI_PROVIDER_ORDER` (default `ollama,gemini`) names the
+  providers `/v1/ask` tries, in order. `server/src/providers/index.ts` builds
+  the chain at startup; a provider whose key is missing is skipped with one
+  `[startup] … provider skipped` line (no error); with no provider left
+  `/v1/ask` answers 502 `model_unavailable` as it did without
+  `GEMINI_API_KEY`. The chain falls back to the next provider on any thrown
+  failure (HTTP 429 whether the body says limit or queue, any 5xx, a network
+  error, the 8 s timeout, a 401/403 from a wrong key, an unparseable body),
+  on an empty reply, and on an answer cut at the output limit (Ollama
+  `done_reason` other than `"stop"`; Gemini `MAX_TOKENS` after its own retry
+  from #43). The last provider's cut answer is kept and marked "(answer cut
+  short)" as before. When every provider fails, the existing 502
+  `model_unavailable` is returned and the client shows "The answer service is
+  unavailable right now": members never see a provider error.
+- **Ollama Cloud, verified 2026-10-19:**
+  - `https://docs.ollama.com/cloud`: the example is
+    `curl https://ollama.com/api/chat -H "Authorization: Bearer $OLLAMA_API_KEY"
+    -H "Content-Type: application/json" -d '{"model":"gemma4:31b","messages":[{"role":"user","content":"…"}],"stream":false}'`,
+    "Read the answer from `message.content`", keys from
+    `https://ollama.com/settings/keys`, "Browse cloud models, or list them with
+    the API: `curl https://ollama.com/api/tags`", "For API requests to
+    ollama.com, use the name returned by this list, such as `gemma4:31b`. In
+    the Ollama app or CLI, use `gemma4:cloud`."
+  - `https://docs.ollama.com/api/chat`: request `model`, `messages[]` with
+    `role` (`system`, `user`, `assistant`, `tool`) and `content`, `stream`
+    (default true), `options` (`temperature`, `num_predict` "Maximum number of
+    tokens to generate", …), `think`, `keep_alive`; non-streaming response
+    `message.role`/`message.content`/`message.thinking`, `done` ("Indicates
+    whether the chat response has finished"), `done_reason` ("Reason the
+    response finished", a string; **no values are enumerated**, so only
+    `"stop"` is treated as complete and anything else as cut), `total_duration`,
+    `prompt_eval_count` ("Number of tokens in the prompt"), `eval_count`
+    ("Number of tokens generated in the response"). The example shows
+    `"done_reason": "stop"`.
+  - `https://docs.ollama.com/api/errors`: non-streaming errors are
+    `{"error": "…"}`; status codes 400, 404, 429 "Too Many Requests (e.g. when a
+    rate limit is exceeded)", 500, 502 "Bad Gateway (e.g. when a cloud model
+    cannot be reached)". No limit or queue message strings are documented, so
+    the server classifies 429 by the word "queue" in the body (log only) and
+    falls back on any 429 regardless.
+  - `https://ollama.com/pricing`: "Free includes 1 concurrent request, Pro 3,
+    and Max and Team 10", "Requests beyond your plan's concurrency limit are
+    queued and processed as soon as a slot is available", "if the queue is full,
+    the request will be rejected until one of your concurrency slots opens";
+    free usage resets monthly. Hence the 8 s `OLLAMA_TIMEOUT_MS` and the
+    single Ollama attempt per request (no retry: a second call would wait on
+    the same single slot; the budget is `num_predict` 1,400, the larger of the
+    two Gemini budgets).
+  - **Live, 2026-10-19 (from Sabih's server):** `POST https://ollama.com/api/chat`
+    with `Authorization: Bearer <OLLAMA_API_KEY>` and
+    `{"model":"gpt-oss:20b","messages":[…],"stream":false}` returned HTTP 200,
+    so the endpoint, header and request shape are confirmed against the
+    account; the response fields above come from the docs.
+  - **Unverified:** the set of `done_reason` values (the local Ollama server
+    uses `"length"` for a `num_predict` cut; the test fake mirrors that);
+    whether `num_predict` also bounds `message.thinking` on thinking models;
+    the exact 429 body text; whether `/api/tags` against `ollama.com` needs
+    the bearer header (the docs' example sends none; the checklist sends it).
+    `https://docs.ollama.com/cloud/models`, `/cloud/usage`, `/cloud/pricing`
+    and `/api/openapi` answered 404.
+- **Model:** `OLLAMA_MODEL=gemma4:31b`, **Sabih's choice**, set explicitly in
+  the live `.env` (the config default applies only when unset; nothing in the
+  code names a model). Shortlist from `https://ollama.com/search?c=cloud`
+  (20 cloud models on 2026-10-19) and the library pages, instruction-following
+  text models with a `system` role: `gemma4:31b` (the docs' own example;
+  library page: "native support for the `system` role", 256K context, tags
+  `31b-cloud`/`cloud`), `nemotron-3-nano:30b` (30B MoE, 3.5B active, "unified
+  model for both reasoning and non-reasoning tasks", `30b-cloud`) and
+  `gpt-oss:20b` (confirmed live on this account; absent from the search page
+  that day). `mistral-large-3:675b` has tools and vision but no thinking and
+  is a Pro-sized model. The list of models the account can use:
+  `curl -s https://ollama.com/api/tags -H "Authorization: Bearer $OLLAMA_API_KEY"`.
+  Which of the three answers best is **provisional** until
+  `scripts/eval-models.ts` has run with both keys (no key here).
+- **Same prompt both ways:** `SYSTEM_INSTRUCTION` is the system message,
+  `buildPrompt` (fenced source + question) the user message; Gemini keeps its
+  `systemInstruction` config. `leaksSystemPrompt`, `toPlainText` and the
+  2,000-character cap stay in `answerQuestion`, after the model call, so they
+  apply to whichever provider answered. `server/test/adversarial-ollama.test.ts`
+  runs the #8 probes (injection through the question and the extract, leak
+  verbatim and paraphrased, markup, too long, empty, failures, odd Unicode)
+  through the Ollama provider with the same `gemini-responses.json` fixtures;
+  `adversarial-llm.test.ts` keeps the Gemini run.
+- **Logging:** per answered request one line
+  `[ask] provider=ollama model=gemma4:31b fallback_from=- fallback_reason=-
+  finish=stop prompt_tokens= answer_tokens= total_tokens= duration_ms=
+  day_requests= day_prompt_tokens= day_answer_tokens= day_fallbacks=`
+  (`fallback_from=ollama fallback_reason=timeout` when Gemini stepped in; a
+  failed provider logs `[ask] provider=ollama failed reason=rate_limit
+  (falling back)`); Gemini's per-attempt `[ask] attempt=` lines with cost (#48)
+  stay. Never the question, the answer or a key. `server/src/provider-usage.ts`
+  keeps SQLite `ask_provider_usage` (day, provider, requests, prompt_tokens,
+  answer_tokens, fallbacks); `GET /v1/admin/ask-costs` adds `providerOrder`,
+  `models` and `providers[]` (one row per provider over 30 days) and the
+  Admin page shows them above the Gemini cost table, so the free allowance
+  drain is visible. `ask_cost` (#48) still records Gemini's billed calls only;
+  Ollama has no list price.
+- **Eval:** `scripts/eval-models.ts` adds an `ollama:<OLLAMA_MODEL>` column
+  (`--ollama gemma4:31b`, `--no-ollama`) and four adversarial cases
+  (`server/src/eval-adversarial.ts`: injection via the question, injection via
+  an extra article section, a leak request, a markup request). Every answer
+  carries flags computed from the raw reply before the server's output rules:
+  `provider_error`, `empty`, `cut_off`, `leak`, `injected`, `markup`; the
+  totals table counts flagged answers per model. The plan prices Gemini only
+  and lists Ollama as plan allowance. Run on the server or locally:
+  `cd server && GEMINI_API_KEY=… OLLAMA_API_KEY=… npm run eval -- --models gemini-3.5-flash-lite --ollama gemma4:31b`
+  (`--dry-run` first; no key in this environment, so only the dry run was
+  executed here).
+- **Alternatives:** the OpenAI-compatible `https://ollama.com/v1` endpoint
+  (would need the OpenAI SDK or a second request shape for nothing gained);
+  the `ollama` npm package (a dependency for one POST); streaming (no need);
+  retrying Ollama before falling back (the single free slot makes the wait
+  longer than the Gemini fallback).
+- **Tests:** `server/test/providers.test.ts` (order parsing, skip without
+  key, request shape, each failure kind, timeout honouring the abort signal,
+  every fallback reason, reverse order, cut answer kept on the last provider,
+  both-fail 502, log fields), `adversarial-ollama.test.ts`,
+  `provider-usage.test.ts` (daily totals, log day counts, configured model
+  names reach both fakes, admin rows, eval flags and the adversarial cases
+  through both providers), `tests/admin-costs.test.ts` (provider rows).
+- **Not verified:** a live Ollama answer through the chain (no key here; see
+  `docs/LIVE_HARDENING.md` for the drill), the fallback timing on the free
+  plan's single slot, and the Admin table on a phone.
+
+## 50. Account deletion: password + DELETE, one transaction, no grace period
+
+- **Decision:** Settings › Account › "Delete my account" asks for the
+  password again and the word DELETE (button disabled until both are
+  filled; a wrong word is caught on the device and again on the server).
+  `POST /v1/me/delete` takes `{ password, confirm: 'DELETE' }` (strict),
+  refuses the admin account first (400 `admin_account`, message "The admin
+  account can’t be deleted from the app, because it approves other members.
+  Ask Sabih."), verifies the password with `auth.api.signInEmail`, then
+  runs `deleteUserCompletely` (`server/src/account-deletion.ts`): one
+  `BEGIN IMMEDIATE` transaction over `shared_species`, `friendship`,
+  `friend_invite`, `invite_usage`, `ask_usage`, `login_challenge`,
+  `verification`, `session`, `account`, `user`. After the commit a short
+  confirmation mail goes to the address (failure logged, not returned).
+  The app then shows a confirmation screen (`account-deleted`) with "Also
+  clear sightings saved on this phone" unchecked; Done with it checked runs
+  `clearAllData()` on the device. Listening keeps working either way.
+- **Better Auth checked (1.7.11, `@better-auth/core` types and
+  `dist/api/routes/update-user.mjs`, and the docs page "Delete User",
+  2026-10-19):** `user.deleteUser.enabled`, `sendDeleteAccountVerification`,
+  `beforeDelete`, `afterDelete`, `deleteTokenExpiresIn` exist, and
+  `auth.api.deleteUser` accepts `password` (verified with
+  `ctx.context.password.verify`) or else needs a session younger than
+  `session.freshAge` (24 h). Its deletion is `internalAdapter.deleteUser`
+  then `deleteUserSessions`, two separate adapter calls outside any
+  transaction, and the hooks run before and after them, so the app's own
+  tables could not be wiped atomically with the user row. Not used; the
+  password check it does is the same scrypt verify that `signInEmail`
+  performs, so that documented call is used instead and the extra session
+  row dies in the transaction.
+- **What is not on the server:** sightings, clips, detections and ticks
+  (IndexedDB only; the ticks are derived from the sightings store); clip
+  files (none exist on the server, so there is no file step); stored
+  questions tied to a person. The answer cache from #48 (`answer_cache`) is
+  keyed by species + region + rounded position + normalised question, never
+  by user id or address, and expires after seven days; `ask_cost` holds
+  per-day totals only. The source caches are keyed by species.
+- **"What we store":** `src/ui/components/what-we-store.ts`, one paragraph
+  derived from the code, on the sign-up form and in the Account card,
+  ending with "Copies in server backups are removed when those backups
+  expire." It names Gemini only: there is no Ollama in the code.
+- **Tests:** `server/test/account-deletion.test.ts` (every table from
+  `sqlite_master` free of the id, the address and the ask scope; both tokens
+  401; the former friend's and invitee's lists empty; admin 400; wrong
+  password / wrong word / missing field / extra field 400 with the snapshot
+  unchanged; mail sent, mail failure harmless; pending account may delete),
+  `tests/what-we-store.test.ts`, `tests/api-client.test.ts`, and the e2e
+  member test (disabled button, wrong word does nothing, stubbed success
+  shows the confirmation screen, session gone, sighting kept).
+- **Not verified:** the live mail and the retention of `VACUUM INTO`
+  backups on the server (the PR asks the PC session to confirm it).
+
+
+## 51. Recent sightings: one 30 s lumping rule, grouped per species on Listen
+
+- **What Sabih saw (2026-10-19):** Listen → Recent sightings listed Eastern
+  Bluebird at 3:34:15, :17, :18 and :20 and Mourning Dove at :06, :08 and :09,
+  although a 60 s sighting merge existed.
+- **Cause:** the 60 s rule lived only in storage. `recordDetections` folded
+  each analysis window into a `sightings` row correctly (reproduced with that
+  exact sequence in `tests/sightings.test.ts`: 7 stored hits, 2 sightings),
+  but the Listen screen never read `sightings`. "Recent sightings" rendered
+  an in-memory list of every window hit (`recent.slice(-8)`), and the live
+  result list showed the latest hit per species. The merge was invisible
+  where it mattered.
+- **Decision: one rule, 30 s, rolling, in one constant.**
+  `LUMP_GAP_SECONDS = 30` in `src/species/recent.ts` lumps hits of a species
+  when no more than 30 s separates one hit from the next (a bird singing
+  steadily stays one detection). The stored sightings now use the same
+  constant (`DEFAULT_SIGHTING_GAP_SECONDS = LUMP_GAP_SECONDS`), the
+  "New sighting after" slider is gone, and DB version 5 re-lumps the existing
+  `sightings` rows from the stored hits once. Stored per-window hits are never
+  dropped or merged (history, the heat map, clips and ticks need them); only
+  their `sightingId` links change.
+- **Display (`src/ui/components/recent-group-card.ts`, `src/ui/views/listen.ts`):**
+  one card per species, ordered by last heard, newest first; name, scientific
+  name, best confidence labelled "best", "Heard once" / "Heard N times" (N =
+  lumped detections, not raw hits) and "last <end of the newest detection>".
+  The header reads "N birds · N detections". The whole card is a button
+  (≥ 44 px, `aria-expanded`, label "Eastern Bluebird, heard once, best 100%,
+  last at 3:34 PM"); tapping it lists the detections, newest first, each with
+  a time range when it spans several hits ("3:34:15–3:34:20 PM"), the hit
+  count and the best confidence. Members get the species' saved clip (the
+  best one kept). The live results list reuses the same grouping: one result
+  card per species with "best", the count and the time last heard; Focus mode
+  shows the newest species large. The scope is this Listen view's session
+  (up to 400 hits kept), as before.
+- **Alternatives:** keep two rules (60 s stored, 30 s shown): rejected, the
+  numbers would disagree between Listen and the history. Count raw hits:
+  rejected, every 1.5 s window would inflate the number. Merge stored hits:
+  rejected, history and clips need each window.
+- **Tests:** `tests/recent.test.ts` (29 s merges, 31 s splits, a 20-hit chain
+  stays one detection, sort order, a new hit moves the card up and bumps the
+  count, counts, labels, expand/collapse state), `tests/sightings.test.ts`
+  (the phone sequence, the version-5 re-lump, stored hits untouched), and a
+  Playwright test per Listen layout (card, aria-expanded, rows, collapse, no
+  overflow). Screenshots: `docs/screenshots/listen-recent-{grouped,expanded}-{dark,light}.png`.
+
+## 52. Server maintenance scripts are read-only planners, run by hand, tested against a fake tree
 
 (Numbered #50 while #48 cost and #49 Ollama are on open branches; may be renumbered on merge.)
 

@@ -162,27 +162,6 @@ export class FriendsStore {
     return this.friendsOf(userId).map((f) => ({ id: f.id, displayName: f.name, species: this.sharedSpeciesOf(f.id) }));
   }
 
-  // ---- account deletion -------------------------------------------------------
-
-  /**
-   * Delete everything the account owns, in one transaction: shared list,
-   * friendships, invites in both directions, invite and ask counters, login
-   * challenges, sessions, the credential row and the user itself.
-   */
-  deleteUserCompletely(userId: string): void {
-    this.transaction(() => {
-      this.db.prepare('DELETE FROM shared_species WHERE user_id = ?').run(userId);
-      this.db.prepare('DELETE FROM friendship WHERE user_a = ? OR user_b = ?').run(userId, userId);
-      this.db.prepare('DELETE FROM friend_invite WHERE from_user_id = ? OR to_user_id = ?').run(userId, userId);
-      this.db.prepare('DELETE FROM invite_usage WHERE user_id = ?').run(userId);
-      this.db.prepare('DELETE FROM ask_usage WHERE scope = ?').run(`user:${userId}`);
-      this.db.prepare('DELETE FROM login_challenge WHERE user_id = ?').run(userId);
-      this.db.prepare('DELETE FROM session WHERE userId = ?').run(userId);
-      this.db.prepare('DELETE FROM account WHERE userId = ?').run(userId);
-      this.db.prepare('DELETE FROM user WHERE id = ?').run(userId);
-    });
-  }
-
   private transaction(fn: () => void): void {
     this.db.exec('BEGIN IMMEDIATE');
     try {

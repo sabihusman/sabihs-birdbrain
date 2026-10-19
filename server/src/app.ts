@@ -6,7 +6,12 @@ import type { DatabaseSync } from 'node:sqlite';
 import { APIError } from 'better-auth/api';
 import { answerQuestion, type AnswerModel, type CapConfig } from './ask.js';
 import { publicUser, toAppUser, type AppUser, type Auth, type UserStatus } from './auth.js';
+import { deleteUserCompletely, deletionMail } from './account-deletion.js';
 import type { Config } from './config.js';
+import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
+import { createAnswerCache, type AnswerCache } from './answer-cache.js';
+import type { AnswerBody } from './ask.js';
+import { COST_SUMMARY_DAYS, createAskCostStore, type AskCostStore } from './ask-cost.js';
 import { createUsageStore } from './db.js';
 import { FriendsStore, INVITES_PER_DAY, INVITE_TTL_DAYS, MAX_SHARED_SPECIES, isCalendarDay } from './friends.js';
 import { clientIp, emailSchema, passwordSchema, readJson } from './http.js';
@@ -35,6 +40,12 @@ export interface AppDeps {
   /** eBird sightings (cached); null when EBIRD_API_KEY is not set. */
   ebird?: EbirdSource | null;
   model: AnswerModel | null;
+  /** Daily ask cost totals; main.ts shares one store with createGeminiModel. Created here when absent. */
+  costs?: AskCostStore;
+  /** Per-provider daily totals (DECISIONS.md #49); main.ts shares one store with the provider chain. Created here when absent. */
+  providerUsage?: ProviderUsageStore;
+  /** Answer cache; created here when absent. */
+  answers?: AnswerCache<AnswerBody>;
   /** Override limits in tests. */
   limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number; signupNotifyWindowMs?: number; invitesPerDay?: number };
   /** Clock for the sign-up notifier (tests). */
@@ -64,7 +75,8 @@ const sharedSpeciesSchema = z
     species: z.array(z.object({ sci: z.string().min(1).max(80), lastSeen: z.string().length(10).refine(isCalendarDay, 'not a calendar day') }).strict()).max(MAX_SHARED_SPECIES),
   })
   .strict();
-const emptySchema = z.object({}).strict();
+/** Account deletion: the password again and the word DELETE, nothing else. */
+const deleteSchema = z.object({ password: z.string().min(1).max(128), confirm: z.string().max(16) }).strict();
 
 const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 502 | 503, body: unknown) => c.json(body, status);
 
@@ -73,6 +85,9 @@ export function createApp(deps: AppDeps) {
   const users = new Users(db);
   const challenges = new LoginChallenges(db, config.BETTER_AUTH_SECRET, config.LOGIN_CODE_TTL_SECONDS);
   const usage = createUsageStore(db);
+  const costs = deps.costs ?? createAskCostStore(db);
+  const providerUsage = deps.providerUsage ?? createProviderUsageStore(db);
+  const answers = deps.answers ?? createAnswerCache<AnswerBody>(db);
   const friends = new FriendsStore(db);
   const invitesPerDay = deps.limits?.invitesPerDay ?? INVITES_PER_DAY;
   const caps: CapConfig = { perUserDaily: config.ASK_DAILY_PER_USER, globalDaily: config.ASK_DAILY_GLOBAL };
@@ -234,19 +249,32 @@ export function createApp(deps: AppDeps) {
   });
 
   /**
-   * Delete the account and everything it owns, in one transaction (see
-   * FriendsStore.deleteUserCompletely). Any signed-in user may delete their own
-   * account; the admin account is the exception, since it is the only one that
-   * can approve people (sign up again with ADMIN_EMAIL would recreate it, but
-   * that is an operational decision, not a tap).
+   * Delete the account and everything the server holds for it, immediately
+   * and permanently (server/src/account-deletion.ts). The caller must give the
+   * password again and type DELETE. The admin account is refused: it is the
+   * only one that can approve people. The confirmation mail goes out after the
+   * commit; a mail failure is logged and does not change the answer.
    */
   app.post('/v1/me/delete', async (c) => {
     const s = await sessionUser(c);
     if (!s) return json(c, 401, { error: 'unauthorized' });
-    const body = await readJson(c, emptySchema);
-    if (!body) return json(c, 400, { error: 'invalid_request' });
     if (s.user.role === 'admin') return json(c, 400, { error: 'admin_account' });
-    friends.deleteUserCompletely(s.user.id);
+    const body = await readJson(c, deleteSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    if (body.confirm !== 'DELETE') return json(c, 400, { error: 'confirm_mismatch' });
+    try {
+      // Better Auth checks the password; the session it creates is deleted with the rest.
+      await auth.api.signInEmail({ body: { email: s.user.email, password: body.password } });
+    } catch (err) {
+      if (err instanceof APIError) return json(c, 400, { error: 'wrong_password' });
+      throw err;
+    }
+    deleteUserCompletely(db, s.user.id, s.user.email);
+    try {
+      await mailer.send(deletionMail(s.user.email));
+    } catch (err) {
+      console.error(`[error] deletion mail failed: ${describeMailError(err)}`);
+    }
     return json(c, 200, { ok: true });
   });
 
@@ -367,6 +395,19 @@ export function createApp(deps: AppDeps) {
     return json(c, 200, { users: users.list().map((u) => ({ ...publicUser(u), emailVerified: u.emailVerified, createdAt: u.createdAt.toISOString() })) });
   });
 
+  /** Per-day token and cost totals for /v1/ask (DECISIONS.md #48): numbers only, no questions. */
+  app.get('/v1/admin/ask-costs', async (c) => {
+    if (!(await requireAdmin(c))) return json(c, 403, { error: 'forbidden' });
+    return json(c, 200, {
+      model: config.GEMINI_MODEL,
+      days: costs.summary(COST_SUMMARY_DAYS),
+      // Which provider answered (DECISIONS.md #49): one row per provider over the same window, with the configured model names.
+      providerOrder: config.providerOrder,
+      models: { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL },
+      providers: providerUsage.totals(PROVIDER_SUMMARY_DAYS),
+    });
+  });
+
   const transitions: Record<string, UserStatus> = { approve: 'approved', reject: 'rejected', disable: 'disabled' };
   app.post('/v1/admin/users/:id/:action', async (c) => {
     const admin = await requireAdmin(c);
@@ -405,7 +446,7 @@ export function createApp(deps: AppDeps) {
       raw = null;
     }
     if (raw === null) return json(c, 400, { error: 'invalid_request' });
-    const out = await answerQuestion({ labels, wiki: deps.wiki, article: deps.article, natureserve: deps.natureserve, ebird: deps.ebird ?? null, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS }, s.user, raw);
+    const out = await answerQuestion({ labels, wiki: deps.wiki, article: deps.article, natureserve: deps.natureserve, ebird: deps.ebird ?? null, model: deps.model, usage, caps, maxQuestionChars: config.ASK_MAX_QUESTION_CHARS, answers, costs, log: (line) => console.info(line) }, s.user, raw);
     return json(c, out.status, out.body);
   });
 

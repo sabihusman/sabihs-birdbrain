@@ -188,8 +188,10 @@ What does leave the phone, and why:
   Explorer conservation ranks (global and for your state/province; cached
   30 days) and, when the server has an eBird key, the recent eBird sightings
   in your state/province and near the rounded point (last 30 days; locality
-  name, date and count only; cached one hour), then asks Google's Gemini
-  model to answer from that text alone, labelling each fact with its source
+  name, date and count only; cached one hour), then asks an AI model to
+  answer from that text alone (Ollama Cloud first, Google's Gemini when
+  Ollama is unavailable or over its limit; both receive exactly the same
+  data and nothing about you beyond what is listed here), labelling each fact with its source
   and saying "sources differ" when they disagree. The model never calls
   these services. The answer comes back as plain text with the cited
   sections and the sources used as links. When the article cannot be
@@ -211,8 +213,20 @@ What does leave the phone, and why:
   clips, no history of earlier sightings, and nothing about species you have
   not spotted. Only accepted friends can read it, and they see your display
   name with those pairs, nothing else. Turning the switch off removes the
-  list from the server immediately; "Delete account" removes the list, your
-  friendships and invites, your sessions and the account itself in one step.
+  list from the server immediately.
+- **Deleting your account** (Settings › Account › "Delete my account": your
+  password again and the word DELETE) removes, immediately and permanently,
+  with no grace period, everything the server holds for you in one
+  transaction: the account row, the password hash, every session and
+  sign-in code, your display name, your shared species list, friendships
+  and invites in both directions, and your daily question counters (the
+  seven-day answer cache holds no name or email). A short
+  confirmation is emailed to you. Sightings, recordings and clips exist only
+  on your phone, so the confirmation screen offers "Also clear sightings
+  saved on this phone" (off by default). The admin account cannot delete
+  itself from the app. Copies in server backups are removed when those
+  backups expire. The same facts, in one paragraph, appear on the sign-up
+  form and in the Account card ("What we store").
 
 Member features keep everything on the device too: the species ID card,
 sighting history, heat map and the one saved clip per species are read from

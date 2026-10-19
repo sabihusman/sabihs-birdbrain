@@ -4,8 +4,10 @@ import { WINDOW_SECONDS } from '../../model/constants';
 import type { Species } from '../../model/labels';
 import { selectDetections } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
+import { groupRecent, LUMP_GAP_SECONDS, toggleExpanded, type KeyedHit } from '../../species/recent';
 import { plusCode } from '../../geo/pluscode';
 import type { View, ViewContext } from '../app';
+import { recentGroupCard } from '../components/recent-group-card';
 import { resultCard } from '../components/result-card';
 import { speciesChip } from '../components/species-chip';
 import { el, fmtDuration, pct } from '../dom';
@@ -31,11 +33,8 @@ export const STATE_TEXT: Record<ListenStatus, { title: string; hint: string }> =
   offline: { title: 'Offline', hint: 'Listening works; AI questions and the map are unavailable.' },
 };
 
-interface Heard {
-  species: Species;
-  confidence: number;
-  time: number;
-}
+/** Hits kept for the Listen screen (this view's session). Grouping and lumping happen at render time (src/species/recent.ts). */
+const MAX_RECENT_HITS = 400;
 
 export function listenView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -102,8 +101,10 @@ export function listenView(ctx: ViewContext): View {
   const resultsList = el('div', { class: 'result-list', 'data-testid': 'results' });
   const lowLine = el('button', { class: 'btn small text', type: 'button', 'data-testid': 'low-toggle', style: 'display:none' }, '');
   const resultsEmpty = el('p', { class: 'muted', 'data-testid': 'results-empty' }, 'Nothing heard above your minimum yet. Birds are easiest to hear at dawn.');
-  const recentList = el('div', { class: 'chip-list', 'data-testid': 'recent' });
-  const recentDetails = el('details', { class: 'fold', 'data-testid': 'recent-fold' }, el('summary', null, 'Recent sightings'), recentList, el('p', { class: 'small muted' }, 'Kept on this device only. ', el('a', { href: '#/map' }, 'Map')));
+  const recentList = el('div', { class: 'recent-list', 'data-testid': 'recent' });
+  const recentEmpty = el('p', { class: 'small muted', 'data-testid': 'recent-empty' }, 'Birds heard this session appear here, one card per species.');
+  const recentSummary = el('span', { class: 'small muted recent-summary', 'data-testid': 'recent-summary' });
+  const recentDetails = el('details', { class: 'fold', 'data-testid': 'recent-fold' }, el('summary', null, el('span', { class: 'fold-title' }, 'Recent sightings'), recentSummary), recentEmpty, recentList, el('p', { class: 'small muted' }, `Repeat hits of a bird within ${LUMP_GAP_SECONDS} s count as one. Tap a card for the details. Kept on this device only. `, el('a', { href: '#/map' }, 'Map')));
 
   // Visualisations inside "How it works"
   const waveCanvas = el('canvas', { class: 'waveform', 'aria-label': 'Live waveform' });
@@ -152,8 +153,9 @@ export function listenView(ctx: ViewContext): View {
 
   // ---- state -----------------------------------------------------------------
   let lastResult: WindowResult | null = null;
-  const heard: Heard[] = [];
-  const recent: Array<{ time: number; index: number; prob: number }> = [];
+  const hits: KeyedHit<Species>[] = [];
+  const expanded = new Set<string>();
+  const recentDisposers: Array<() => void> = [];
   let showLow = false;
   let raf = 0;
   let dirty = true;
@@ -208,23 +210,25 @@ export function listenView(ctx: ViewContext): View {
       const dets = selectDetections(lastResult.scores, controller.species, { threshold: s.threshold, applyGeo: lastResult.geoApplied, includeNonBird: s.includeNonBird });
       const shown = new Set(dets.map((d) => d.index));
       low = lastResult.scores.filter((x) => x.prob < s.threshold && x.prob >= LOW_FLOOR && x.inRange && (controller.species[x.index]?.isBird || s.includeNonBird)).length;
-      const items: Heard[] = heard.slice().reverse();
+      // One card per species, newest first; a new hit moves its species to the top (src/species/recent.ts).
+      const items = groupRecent(hits);
+      const cardFor = (g: (typeof items)[number], large = false) => resultCard(ctx, g.species, { confidence: g.best, time: g.lastHeard, heardTimes: g.detections.length, large, conditions: large ? conditionsText : undefined });
       if (layout !== 'focus') {
-        for (const h of items) {
-          const card = resultCard(ctx, h.species, { confidence: h.confidence, time: h.time });
+        for (const g of items) {
+          const card = cardFor(g);
           disposers.push(card.dispose);
           resultsList.appendChild(card.el);
         }
       } else {
-        for (const h of items.slice(1)) {
-          const card = resultCard(ctx, h.species, { confidence: h.confidence, time: h.time });
+        for (const g of items.slice(1)) {
+          const card = cardFor(g);
           disposers.push(card.dispose);
           resultsList.appendChild(card.el);
         }
         focusLatest.replaceChildren();
         const latest = items[0];
         if (latest) {
-          const card = resultCard(ctx, latest.species, { confidence: latest.confidence, time: latest.time, large: true, conditions: conditionsText });
+          const card = cardFor(latest, true);
           disposers.push(card.dispose);
           focusLatest.appendChild(card.el);
         } else focusLatest.appendChild(el('p', { class: 'muted' }, 'Listening… the latest bird appears here.'));
@@ -242,16 +246,28 @@ export function listenView(ctx: ViewContext): View {
     }
     lowLine.textContent = showLow ? 'Hide sounds below your minimum' : `${low} more sound${low === 1 ? '' : 's'} below your minimum · show`;
     setHidden(lowLine, low === 0);
-    setHidden(resultsEmpty, heard.length > 0 || showLow);
+    setHidden(resultsEmpty, hits.length > 0 || showLow);
     timeline.setThreshold(s.threshold);
     dirty = true;
   };
 
   const renderRecent = () => {
+    for (const d of recentDisposers.splice(0)) d();
     recentList.replaceChildren();
-    for (const r of recent.slice(-8).reverse()) {
-      const sp = controller.species[r.index];
-      if (sp) recentList.appendChild(speciesChip(sp, { confidence: r.prob, subtitle: new Date(r.time).toLocaleTimeString() }));
+    const groups = groupRecent(hits);
+    setHidden(recentEmpty, groups.length > 0);
+    const detections = groups.reduce((n, g) => n + g.detections.length, 0);
+    recentSummary.textContent = groups.length ? `${groups.length} bird${groups.length === 1 ? '' : 's'} · ${detections} detection${detections === 1 ? '' : 's'}` : '';
+    for (const g of groups) {
+      const card = recentGroupCard(ctx, g, {
+        expanded: expanded.has(g.key),
+        onToggle: (key) => {
+          toggleExpanded(expanded, key);
+          renderRecent();
+        },
+      });
+      recentDisposers.push(card.dispose);
+      recentList.appendChild(card.el);
     }
   };
 
@@ -265,14 +281,9 @@ export function listenView(ctx: ViewContext): View {
     for (const d of r.detections) {
       const sp = controller.species[d.index];
       if (!sp) continue;
-      recent.push({ time: r.time, index: d.index, prob: d.prob });
-      // One card per species, kept fresh: the newest detection moves the card to the top.
-      const i = heard.findIndex((h) => h.species.scientific === sp.scientific);
-      if (i >= 0) heard.splice(i, 1);
-      heard.push({ species: sp, confidence: d.prob, time: r.time });
+      hits.push({ key: sp.scientific, species: sp, time: r.time, confidence: d.prob });
     }
-    if (recent.length > 50) recent.splice(0, recent.length - 50);
-    if (heard.length > 30) heard.splice(0, heard.length - 30);
+    if (hits.length > MAX_RECENT_HITS) hits.splice(0, hits.length - MAX_RECENT_HITS);
     renderResults();
     renderRecent();
   };
@@ -435,6 +446,7 @@ export function listenView(ctx: ViewContext): View {
       cancelAnimationFrame(raf);
       for (const u of subs) u();
       for (const d of disposers) d();
+      for (const d of recentDisposers) d();
     },
   };
 }

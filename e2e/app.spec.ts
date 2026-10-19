@@ -220,10 +220,17 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('share-species')).not.toBeChecked();
   await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
   await expect(page.getByTestId('invite-send')).toBeVisible();
+  await expect(page.getByTestId('what-we-store')).toContainText('The server keeps no backups of this data at the moment, so nothing lingers.');
+  // Delete section: the button stays disabled until the password and the word are typed; a wrong word does nothing.
+  await expect(page.getByTestId('delete-account')).toBeDisabled();
+  await page.getByTestId('delete-password').fill('correct horse battery staple');
+  await expect(page.getByTestId('delete-account')).toBeDisabled();
+  await page.getByTestId('delete-word').fill('delete');
+  await expect(page.getByTestId('delete-account')).toBeEnabled();
   await page.getByTestId('delete-account').click();
-  await expect(page.getByTestId('delete-account-confirm')).toBeVisible();
-  await page.getByRole('button', { name: 'Keep my account' }).click();
-  await expect(page.getByTestId('delete-account-confirm')).toBeHidden();
+  await expect(page.getByTestId('account')).toContainText('Type DELETE in capitals to confirm. Your account was not deleted.');
+  await expect(page.getByTestId('account-deleted')).toHaveCount(0);
+  await expect(page.getByTestId('account-name')).toHaveText('member');
   // The species page shows the "Spotted by" card with the member's own row (friends unreachable: only "You").
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('spotted-by-me')).toContainText(/You · /);
@@ -247,6 +254,33 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('wiki')).toBeVisible();
   await expect(page.getByText('Your sightings')).toBeVisible();
   await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // the sighting is still there
+
+  // Deletion with the API stubbed: the right password and word show the confirmation screen, signed out,
+  // with "Also clear sightings saved on this phone" unchecked; Done keeps the sighting.
+  let deleteBody: unknown = null;
+  await page.route(/\/v1\/me\/delete$/, async (route) => {
+    deleteBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+  await page.evaluate(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'member', status: 'approved', role: 'member' } }));
+  });
+  await page.goto('./#/settings');
+  await page.reload();
+  await expect(page.getByTestId('account-name')).toHaveText('member');
+  await page.getByTestId('delete-password').fill('correct horse battery staple');
+  await page.getByTestId('delete-word').fill('DELETE');
+  await page.getByTestId('delete-account').click();
+  await expect(page.getByTestId('account-deleted')).toBeVisible();
+  await expect(page.getByTestId('account-deleted')).toContainText('Your account was deleted.');
+  expect(deleteBody).toEqual({ password: 'correct horse battery staple', confirm: 'DELETE' });
+  await expect(page.getByTestId('wipe-phone')).not.toBeChecked();
+  expect(await page.evaluate(() => localStorage.getItem('birdbrain.auth.v1'))).toBeNull();
+  await page.getByTestId('deleted-done').click();
+  await expect(page.getByTestId('account-deleted')).toHaveCount(0);
+  await expect(page.getByTestId('account').getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // kept: the box was unchecked
 });
 
 test('theme: dark by default whatever the device prefers, toggle persists, no wrong-theme flash', async ({ browser }) => {
@@ -449,3 +483,63 @@ test('mic blocked state explains the iPhone steps and offers Try again and impor
   await context.close();
 });
 
+
+for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+  test(`Recent sightings (${layout}): one card per species, best + Heard once + last, expands to the lumped detections and collapses`, async ({ page }) => {
+    await page.addInitScript((l) => {
+      const raw = localStorage.getItem('birdbrain.settings.v1');
+      const s = raw ? JSON.parse(raw) : {};
+      s.listenLayout = l;
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify(s));
+    }, layout);
+    await page.goto('./#/listen');
+    await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+    await expect(page.getByTestId('recent-empty')).toBeAttached(); // inside the collapsed fold until opened
+    await page.getByTestId('demo').click();
+    await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
+    // The live results list shows the best confidence labelled "best" and the count.
+    if (layout !== 'focus') {
+      const result = page.getByTestId('result-card').first();
+      await expect(result).toContainText(/best\s*\d+%/);
+      await expect(result).toContainText('Heard once');
+    } else {
+      await expect(page.getByTestId('focus-latest')).toContainText('Heard once');
+    }
+    // Recent sightings: one card per species, a real button with aria-expanded, at least 44 px tall.
+    const fold = page.getByTestId('recent-fold');
+    await expect(page.getByTestId('recent-summary')).toHaveText(/^\d+ birds? · \d+ detections?$/);
+    await fold.locator('summary').click();
+    await expect(page.getByTestId('recent-empty')).toBeHidden();
+    const cards = page.getByTestId('recent-card');
+    const n = await cards.count();
+    expect(n).toBeGreaterThanOrEqual(1);
+    const keys = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-species')));
+    expect(new Set(keys).size, 'no duplicate species cards').toBe(keys.length);
+    const card = cards.first();
+    await expect(card).toHaveAttribute('aria-expanded', 'false');
+    await expect(card).toHaveAttribute('aria-label', /^.+, heard once, best \d+%, last at .+$/);
+    await expect(card).toContainText(/Acanthis/);
+    await expect(card).toContainText(/best\s*\d+%/);
+    await expect(card.getByTestId('recent-count')).toHaveText('Heard once');
+    await expect(card).toContainText(/last\s*\d/);
+    const box = await card.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await expect(page.getByTestId('recent-rows').first()).toBeHidden();
+    // Tap expands: the lumped detections, newest first, each with time (or range), hit count and best.
+    await card.click();
+    const expandedCard = page.getByTestId('recent-card').first();
+    await expect(expandedCard).toHaveAttribute('aria-expanded', 'true');
+    const rows = page.getByTestId('recent-rows').first();
+    await expect(rows).toBeVisible();
+    await expect(rows.locator('.recent-row').first()).toContainText(/\d{1,2}:\d{2}:\d{2}/);
+    await expect(rows.locator('.recent-row').first()).toContainText(/\d+ hits? · best \d+%/);
+    // Tap again collapses.
+    await expandedCard.click();
+    await expect(page.getByTestId('recent-card').first()).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('recent-rows').first()).toBeHidden();
+    // Nothing on the screen overflows the phone width.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+}

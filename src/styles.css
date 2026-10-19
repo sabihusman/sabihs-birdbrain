@@ -105,6 +105,10 @@ main.view { flex: 1; padding: var(--space-3) calc(var(--space-3) + var(--sar)) c
 .tabs a.active { color: var(--accent); font-weight: var(--weight-bold); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--space-3); margin-bottom: var(--space-3); }
 .card h2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.table-wrap { overflow-x: auto; }
+.cost-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.cost-table th, .cost-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.cost-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .row.between { justify-content: space-between; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
@@ -332,3 +336,28 @@ textarea { color: inherit; }
 .spotted-by-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 48px; padding: 8px 12px; border-radius: var(--radius-control); background: var(--surface-2); color: var(--text); font: inherit; text-align: left; }
 .spotted-by-row.me { border: 1px solid var(--accent); width: 100%; }
 .field input[type=password] { min-height: 44px; padding: 8px 10px; border-radius: var(--radius-control); border: 1px solid var(--border); background: var(--surface); width: 100%; }
+
+/* Listen → Recent sightings: one expandable card per species (src/ui/components/recent-group-card.ts) */
+.recent-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.recent-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+.recent-card.open { border-color: var(--accent); }
+.recent-card-head { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 64px; padding: var(--space-2) var(--space-3); border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-card); }
+.recent-card-head:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.recent-card-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.recent-card-main .result-name, .recent-card-main .result-sci { overflow-wrap: anywhere; }
+.recent-card-meta { display: flex; flex-wrap: wrap; gap: 0 2px; font-size: var(--text-sm); color: var(--text); }
+.recent-best, .recent-last { font-weight: var(--weight-semibold); }
+.recent-count { color: var(--muted); }
+.recent-chevron { flex: none; font-size: var(--text-lg); color: var(--muted); transform: rotate(90deg); transition: transform var(--motion); }
+.recent-card.open .recent-chevron { transform: rotate(-90deg); }
+.recent-rows { list-style: none; margin: 0; padding: 0 var(--space-3) var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); }
+.recent-rows[hidden] { display: none; }
+.recent-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px var(--space-2); padding: 6px 0; border-top: 1px solid var(--line); font-size: var(--text-sm); }
+.recent-row-time { font-weight: var(--weight-semibold); }
+.recent-row-link { justify-content: flex-end; }
+.recent-row-link a { color: var(--accent); min-height: 44px; display: inline-flex; align-items: center; }
+.recent-clip { margin: 0 var(--space-3) var(--space-2); }
+.result-heard { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .recent-chevron { transition: none; } }
+.fold > summary .fold-title { flex: 1; }
+.fold > summary .recent-summary { margin-right: var(--space-2); font-weight: 400; }

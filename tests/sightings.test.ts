@@ -1,7 +1,7 @@
 import { deleteDB, openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { applyDetection, buildSightings, canMerge, DEFAULT_SIGHTING_GAP_SECONDS, sightingFromDetection, sightingStreamKey } from '../src/species/sightings';
-import { countSightings, DB_NAME, getDB, listDetections, listSightings, listSightingsForSpecies, recordDetections, deleteDetectionsForRecording, deleteRecording, putRecording } from '../src/storage/db';
+import { countSightings, DB_NAME, getDB, listDetections, listSightings, listSightingsForSpecies, rebuildSightings, recordDetections, deleteDetectionsForRecording, deleteRecording, putRecording } from '../src/storage/db';
 import type { DetectionRecord } from '../src/storage/types';
 
 const GAP = DEFAULT_SIGHTING_GAP_SECONDS * 1000;
@@ -24,13 +24,17 @@ const det = (over: Partial<DetectionRecord> = {}): DetectionRecord => ({
 });
 
 describe('sightings: merging rules', () => {
-  it('consecutive detections within the gap merge; a gap of more than 60 s starts a new sighting', () => {
-    const dets = [det({ time: 0, confidence: 0.6 }), det({ time: 3000, confidence: 0.9, lat: 1, lon: 2, accuracy: 5 }), det({ time: 61_000, confidence: 0.5 }), det({ time: 61_000 + GAP + 1, confidence: 0.8 })];
+  it('the gap is the single 30 s rule shared with the Listen screen', () => {
+    expect(DEFAULT_SIGHTING_GAP_SECONDS).toBe(30);
+  });
+
+  it('consecutive detections within the gap merge; a gap of more than 30 s starts a new sighting', () => {
+    const dets = [det({ time: 0, confidence: 0.6 }), det({ time: 3000, confidence: 0.9, lat: 1, lon: 2, accuracy: 5 }), det({ time: 3000 + GAP, confidence: 0.5 }), det({ time: 3000 + GAP + GAP + 1, confidence: 0.8 })];
     let ids = 0;
     const { sightings, assignments } = buildSightings(dets, GAP, () => `s${++ids}`);
     expect(sightings.length).toBe(2);
-    expect(sightings[0]).toMatchObject({ firstTime: 0, lastTime: 61_000, peakConfidence: 0.9, hits: 3, lat: 1, lon: 2, peakDetectionId: 'd2' });
-    expect(sightings[1]).toMatchObject({ firstTime: 61_000 + GAP + 1, hits: 1, peakConfidence: 0.8 });
+    expect(sightings[0]).toMatchObject({ firstTime: 0, lastTime: 3000 + GAP, peakConfidence: 0.9, hits: 3, lat: 1, lon: 2, peakDetectionId: 'd2' });
+    expect(sightings[1]).toMatchObject({ firstTime: 3000 + GAP + GAP + 1, hits: 1, peakConfidence: 0.8 });
     expect(assignments.get('d3')).toBe(sightings[0].id);
     expect(assignments.get('d4')).toBe(sightings[1].id);
   });
@@ -83,6 +87,22 @@ describe('sightings: storage', () => {
     expect((await listSightingsForSpecies('Turdus merula')).map((s) => s.hits)).toEqual([3, 1]);
   });
 
+  it('the phone sequence (Bluebird :15 :17 :18 :20, Dove :06 :08 :09) keeps every hit stored and merges each species into one 60 s sighting', async () => {
+    const T = Date.parse('2026-10-19T15:34:00');
+    const blue = (sec: number, over: Partial<DetectionRecord> = {}) => det({ time: T + sec * 1000, label: 'Sialia sialis_Eastern Bluebird', scientific: 'Sialia sialis', common: 'Eastern Bluebird', ...over });
+    const dove = (sec: number) => det({ time: T + sec * 1000, label: 'Zenaida macroura_Mourning Dove', scientific: 'Zenaida macroura', common: 'Mourning Dove' });
+    // One window at a time, as the controller persists them; one Bluebird window carries an auto-clip recording id.
+    for (const d of [dove(6), dove(8), dove(9), blue(15, { recordingId: 'autoclip-1', offsetSec: 0 }), blue(17, { confidence: 1 }), blue(18), blue(20)]) await recordDetections([d], GAP);
+    const stored = await listDetections();
+    expect(stored).toHaveLength(7); // the 60 s dedupe never drops or merges stored hits
+    const sightings = await listSightings();
+    expect(sightings.map((s) => [s.common, s.hits])).toEqual([
+      ['Mourning Dove', 3],
+      ['Eastern Bluebird', 4],
+    ]);
+    expect(new Set(stored.map((d) => d.sightingId)).size).toBe(2);
+  });
+
   it('re-analysing or deleting a recording removes its sightings', async () => {
     const blob = new Blob(['x']);
     await putRecording({ id: 'r1', createdAt: 0, name: 'r', durationSec: 1, sampleRate: 48000, bytes: 1, blob, source: 'import', lat: null, lon: null, accuracy: null, summary: [], analyzedAt: null });
@@ -94,6 +114,37 @@ describe('sightings: storage', () => {
     await recordDetections([det({ time: 0, source: 'import', recordingId: 'r1', offsetSec: 0, sessionId: 'rec-r1' })], GAP);
     await deleteRecording('r1');
     expect((await listSightings()).map((s) => s.source)).toEqual(['live']);
+  });
+});
+
+describe('sightings: version-5 re-lump at the 30 s rule', () => {
+  it('rebuildSightings re-lumps 60 s sightings into 30 s ones without touching the stored hits', async () => {
+    const db = await getDB();
+    // Hits as a 60 s rule would have stored them: one sighting spanning 0, 20 s, 45 s (gaps 20 s and 25 s) plus one at 120 s.
+    const hits = [det({ time: 0 }), det({ time: 20_000, confidence: 0.9 }), det({ time: 45_000 }), det({ time: 120_000 })];
+    const old = buildSightings(hits, 60_000, () => 'old');
+    expect(old.sightings.map((s) => s.hits)).toEqual([3, 1]);
+    const seed = db.transaction(['detections', 'sightings'], 'readwrite');
+    await Promise.all([seed.objectStore('detections').clear(), seed.objectStore('sightings').clear()]); // leftovers from other tests
+    for (const s of old.sightings) await seed.objectStore('sightings').put(s);
+    for (const d of hits) await seed.objectStore('detections').put({ ...d, sightingId: old.assignments.get(d.id) });
+    await seed.done;
+    const tx = db.transaction(['detections', 'sightings'], 'readwrite');
+    await rebuildSightings(tx);
+    await tx.done;
+    const after = await listSightings();
+    // 20 s and 25 s gaps are both within 30 s: still one lump of 3; the 75 s gap splits. Same shape, now at the 30 s rule.
+    expect(after.map((s) => s.hits)).toEqual([3, 1]);
+    expect((await listDetections()).length).toBe(4);
+    // And a 31 s gap that the 60 s rule merged is now split.
+    const seed2 = db.transaction(['detections', 'sightings'], 'readwrite');
+    await seed2.objectStore('detections').clear();
+    for (const d of [det({ time: 0 }), det({ time: 31_000 })]) await seed2.objectStore('detections').put(d);
+    await seed2.done;
+    const tx2 = db.transaction(['detections', 'sightings'], 'readwrite');
+    await rebuildSightings(tx2);
+    await tx2.done;
+    expect((await listSightings()).map((s) => s.hits)).toEqual([1, 1]);
   });
 });
 

@@ -45,7 +45,7 @@ describe('answers cut at the output limit', () => {
     const model = createGeminiModel('fake-key', 'gemini-test', gemini, (l) => lines.push(l));
     await model(input('truncated_twice'));
     for (const line of lines) {
-      expect(line).toMatch(/^\[ask\] attempt=\d limit=\d+ finish=MAX_TOKENS prompt_tokens=1800 answer_tokens=\d+ thinking_tokens=300 total_tokens=\d+$/);
+      expect(line).toMatch(/^\[ask\] attempt=\d limit=\d+ finish=MAX_TOKENS prompt_tokens=1800 answer_tokens=\d+ thinking_tokens=300 total_tokens=\d+ cost_usd=unknown cached=false$/);
       expect(line).not.toMatch(/Des Moines|where does it live/);
     }
   });

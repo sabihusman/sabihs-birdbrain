@@ -24,10 +24,43 @@ export interface AskAnswer {
   citations?: Array<{ section: string; url: string; source?: string }>;
   /** Whether the full article sections or only the summary were available. */
   context?: 'article' | 'summary';
+  /** True when the server reused an earlier answer to the same question (no model call). */
+  cached?: boolean;
   /** Every source the answer drew on: Wikipedia, NatureServe Explorer, eBird (when available). */
   sources?: Array<{ name: string; url: string }>;
   /** The region code the server used. */
   region?: string;
+}
+
+/** One UTC day of /v1/ask spend as the admin endpoint reports it (counts only, no questions). */
+export interface AskCostDay {
+  day: string;
+  requests: number;
+  promptTokens: number;
+  answerTokens: number;
+  thinkingTokens: number;
+  cachedTokens: number;
+  /** Estimated cost in micro-dollars (1,000,000 = $1). */
+  costMicros: number;
+  unpricedRequests: number;
+  cacheHits: number;
+}
+
+/** One provider's totals over the admin window: which service answered, how often it was reached by fallback, its tokens. */
+export interface AskProviderTotals {
+  provider: 'ollama' | 'gemini';
+  requests: number;
+  promptTokens: number;
+  answerTokens: number;
+  fallbacks: number;
+}
+
+export interface AskCostSummary {
+  model: string;
+  days: AskCostDay[];
+  providerOrder?: Array<'ollama' | 'gemini'>;
+  models?: { ollama: string; gemini: string };
+  providers?: AskProviderTotals[];
 }
 
 /** What goes to the server with a question (shaped on the device by src/geo/region.ts). */
@@ -80,6 +113,9 @@ export class ApiError extends Error {
 
 export const SESSION_KEY = 'birdbrain.auth.v1';
 
+/** Why the admin account has no delete flow (the server answers `admin_account`). */
+export const ADMIN_DELETE_MESSAGE = 'The admin account can’t be deleted from the app, because it approves other members. Ask Sabih.';
+
 /** Human-readable text for API error codes. */
 export function describeApiError(e: unknown): string {
   if (!(e instanceof ApiError)) return e instanceof Error && e.name === 'TypeError' ? 'Could not reach the server. Check your connection.' : 'Something went wrong.';
@@ -116,7 +152,11 @@ export function describeApiError(e: unknown): string {
     case 'unknown_species':
       return 'The server did not recognise a species in your list. Update the app and try again.';
     case 'admin_account':
-      return 'The admin account cannot be deleted from the app.';
+      return ADMIN_DELETE_MESSAGE;
+    case 'wrong_password':
+      return 'That password is wrong. Your account was not deleted.';
+    case 'confirm_mismatch':
+      return 'Type DELETE in capitals to confirm. Your account was not deleted.';
     default:
       return `Request failed (${e.status}).`;
   }
@@ -234,13 +274,15 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return res.user;
   }
 
-  /** Delete the account and everything the server holds for it; the local session is dropped either way. */
-  async deleteAccount(): Promise<void> {
-    try {
-      await this.call('/v1/me/delete', {});
-    } finally {
-      this.setSession(null);
-    }
+  /**
+   * Delete the account and everything the server holds for it, immediately and
+   * permanently. The password is checked again on the server and `confirm`
+   * must be the word DELETE. On success the local session is dropped; on a
+   * refusal (wrong password, wrong word, admin account) it stays.
+   */
+  async deleteAccount(password: string, confirm: string): Promise<void> {
+    await this.call('/v1/me/delete', { password, confirm });
+    this.setSession(null);
   }
 
   /** Always resolves with "Invite sent" (the server never says whether the address has an account). */
@@ -280,5 +322,10 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
 
   adminSetStatus(id: string, action: 'approve' | 'reject' | 'disable'): Promise<{ ok: boolean; user: AuthUser }> {
     return this.call(`/v1/admin/users/${encodeURIComponent(id)}/${action}`, {});
+  }
+
+  /** The last 30 days of /v1/ask token and cost totals, newest first. */
+  adminAskCosts(): Promise<AskCostSummary> {
+    return this.call('/v1/admin/ask-costs');
   }
 }
