@@ -672,6 +672,18 @@ Sabih's approval and a baseline check of the other sites after every reload.
   plus the blocked-microphone state; unit tests cover the state mapping and
   relative times. Screenshots of all three layouts in both themes (Ready,
   results, Listening, Mic blocked) are in `docs/screenshots/`.
+- **Microphone help by browser:** `src/ui/mic-help.ts` reads the user agent
+  (CriOS, FxiOS, EdgiOS; Safari otherwise on iPhone) and shows that browser's
+  path: Chrome "iPhone Settings › Apps › Chrome › Microphone, then reload and
+  tap Allow", Safari its own steps (Settings → Safari → Microphone, Settings ›
+  Apps › Safari on iOS 18, or the aA menu), and a generic "Settings › Apps ›
+  [your browser] › Microphone" for anything else on iPhone. The engine's
+  denied message is one short sentence and the status line stays empty, so
+  the explanation appears once (the iPhone test showed it twice).
+- **Updates:** the service worker runs with `registerType: 'prompt'`; a new
+  version shows a "New version available — tap to update" banner at the top.
+  Nothing reloads on its own, and a tap while listening only changes the
+  banner to "Stop listening first", so a session is never interrupted.
 - **Not verified:** on a phone (swipe, safe areas with the dock, real
   microphone states); the "paused" state needs a real backgrounding.
 

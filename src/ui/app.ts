@@ -55,6 +55,31 @@ function tabGroup(route: Route): string {
   }
 }
 
+let updateBannerHost: { mount: (node: HTMLElement) => void; listening: () => boolean } | null = null;
+let pendingUpdate: (() => Promise<void>) | null = null;
+
+/**
+ * "New version available — tap to update" banner. The reload happens only on
+ * the tap, and never while listening: the banner then asks to stop first and
+ * stays until the session ends.
+ */
+export function showUpdateBanner(apply: () => Promise<void>): void {
+  pendingUpdate = apply;
+  if (!updateBannerHost) return;
+  const text = el('span', null, 'New version available — tap to update');
+  const btn = el('button', { class: 'update-banner', type: 'button', 'data-testid': 'update-banner', 'aria-live': 'polite' }, text);
+  btn.addEventListener('click', () => {
+    if (updateBannerHost?.listening()) {
+      text.textContent = 'New version ready. Stop listening first, then tap to update.';
+      return;
+    }
+    text.textContent = 'Updating…';
+    btn.disabled = true;
+    void pendingUpdate?.();
+  });
+  updateBannerHost.mount(btn);
+}
+
 export function mountApp(root: HTMLElement, controller: AppController, api: ApiClient): void {
   const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status' }, 'Loading model…');
   const themeToggle = el('button', { class: 'theme-toggle', type: 'button', 'data-testid': 'theme-toggle' });
@@ -106,6 +131,15 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   window.addEventListener('online', renderPill);
   window.addEventListener('offline', renderPill);
   renderPill();
+
+  updateBannerHost = {
+    mount: (node) => {
+      notices.querySelector('[data-testid="update-banner"]')?.remove();
+      notices.prepend(node);
+    },
+    listening: () => controller.listening,
+  };
+  if (pendingUpdate) showUpdateBanner(pendingUpdate);
 
   const ctx: ViewContext = { controller, api, notify };
   let current: View | null = null;

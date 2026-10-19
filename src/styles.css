@@ -259,3 +259,6 @@ textarea { color: inherit; }
 .focus-block .listen-panel { margin-bottom: 0; }
 .more-sheet { position: fixed; left: 0; right: 0; bottom: 0; top: 15vh; z-index: 30; background: var(--card); border-radius: var(--radius-card) var(--radius-card) 0 0; border: 1px solid var(--line); padding: var(--space-3); overflow: auto; }
 .more-sheet[hidden] { display: none; }
+
+.update-banner { width: 100%; min-height: 44px; border: none; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); padding: 10px 14px; margin: 8px 0; text-align: left; }
+.update-banner:disabled { opacity: 0.7; }

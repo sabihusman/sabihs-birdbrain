@@ -10,6 +10,7 @@ import { resultCard } from '../components/result-card';
 import { speciesChip } from '../components/species-chip';
 import { el, fmtDuration, pct } from '../dom';
 import { listenStatus, type ListenStatus } from '../status';
+import { micHelp } from '../mic-help';
 import { PipelineView } from '../viz/pipeline';
 import { SpectrogramView } from '../viz/spectrogram';
 import { TimelineView, type TimelinePoint } from '../viz/timeline';
@@ -61,13 +62,13 @@ export function listenView(ctx: ViewContext): View {
   const status = el('div', { class: 'small muted', 'data-testid': 'listen-status', role: 'status', 'aria-live': 'polite' }, '');
   const modelBar = el('div', { class: 'progress' }, el('span', { style: 'width:0%' }));
   const modelText = el('div', { class: 'small muted', 'data-testid': 'model-text' }, '');
+  // Steps for the browser in use (Chrome, Firefox and Edge on iPhone keep the switch under Settings › Apps).
+  const help = micHelp(typeof navigator === 'undefined' ? '' : navigator.userAgent);
   const micSteps = el(
     'div',
-    { class: 'stack mic-steps', 'data-testid': 'mic-steps' },
+    { class: 'stack mic-steps', 'data-testid': 'mic-steps', 'data-browser': help.browser },
     el('p', null, 'Birdbrain needs the microphone to hear birds. Nothing is recorded or uploaded unless you save it.'),
-    el('p', null, el('strong', null, 'Safari on iPhone: '), 'Settings → Safari → Microphone → Ask or Allow (on iOS 18 and later: Settings → Apps → Safari → Microphone), or tap “aA” in the address bar → Website Settings. Then tap Try again.'),
-    el('p', null, el('strong', null, 'Chrome, Firefox, Edge or another iPhone browser: '), 'Settings → Apps → [that browser] → Microphone, then allow the site when the browser asks again.'),
-    el('p', null, el('strong', null, 'Home-screen app: '), 'Settings → Apps → Birdbrain → Microphone.'),
+    ...help.steps.map((s) => el('p', null, s)),
     el('p', { class: 'small muted' }, 'You can still ', el('a', { href: '#/recordings' }, 'import a recording'), '.'),
   );
 
