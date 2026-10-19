@@ -58,3 +58,58 @@ describe('ApiClient', () => {
     expect(describeApiError(new ApiError(401, 'invalid_code'))).toMatch(/code/);
   });
 });
+
+describe('ApiClient: account and friends', () => {
+  it('calls the friends and sharing endpoints with the bearer token and updates the cached name', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(SESSION_KEY, JSON.stringify({ token: 'tok', expiresAt: null, user: { ...user, status: 'approved' } }));
+    const seen: Array<{ url: string; method: string | undefined; auth: string | undefined; body: unknown }> = [];
+    const api = new ApiClient(
+      'https://api.test',
+      storage,
+      fakeFetch((url, init) => {
+        const headers = init?.headers as Record<string, string>;
+        seen.push({ url: url.replace('https://api.test', ''), method: init?.method, auth: headers.Authorization, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        if (url.endsWith('/v1/me/name')) return { status: 200, body: { ok: true, user: { ...user, status: 'approved', name: 'Alex' } } };
+        if (url.endsWith('/v1/friends/species')) return { status: 200, body: { friends: [] } };
+        if (url.endsWith('/v1/friends')) return { status: 200, body: { friends: [], invites: [] } };
+        return { status: 200, body: { ok: true, message: 'Invite sent', count: 0 } };
+      }),
+    );
+    await api.setName('Alex');
+    expect(api.user?.name).toBe('Alex');
+    expect(JSON.parse(storage.getItem(SESSION_KEY)!).user.name).toBe('Alex');
+    await api.inviteFriend('sam@example.com');
+    await api.listFriends();
+    await api.respondToInvite('inv 1', 'accept');
+    await api.removeFriend('f/1');
+    await api.friendsSpecies();
+    await api.uploadSharedSpecies([{ sci: 'Turdus merula', lastSeen: '2026-10-12' }]);
+    await api.clearSharedSpecies();
+    expect(seen.map((s) => `${s.method} ${s.url}`)).toEqual([
+      'POST /v1/me/name',
+      'POST /v1/friends/invite',
+      'GET /v1/friends',
+      'POST /v1/friends/invites/inv%201/accept',
+      'POST /v1/friends/f%2F1/remove',
+      'GET /v1/friends/species',
+      'POST /v1/me/species',
+      'POST /v1/me/species/clear',
+    ]);
+    expect(seen.every((s) => s.auth === 'Bearer tok')).toBe(true);
+    expect(seen[6].body).toEqual({ species: [{ sci: 'Turdus merula', lastSeen: '2026-10-12' }] });
+    expect(seen[1].body).toEqual({ email: 'sam@example.com' });
+  });
+
+  it('deleteAccount drops the local session even when the server fails', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(SESSION_KEY, JSON.stringify({ token: 'tok', expiresAt: null, user }));
+    const api = new ApiClient('https://api.test', storage, fakeFetch(() => ({ status: 500, body: { error: 'internal_error' } })));
+    await expect(api.deleteAccount()).rejects.toBeInstanceOf(ApiError);
+    expect(api.signedIn).toBe(false);
+    expect(storage.getItem(SESSION_KEY)).toBeNull();
+    expect(describeApiError(new ApiError(400, 'admin_account'))).toMatch(/admin/);
+    expect(describeApiError(new ApiError(404, 'not_found'))).toMatch(/invite/);
+    expect(describeApiError(new ApiError(400, 'unknown_species'))).toMatch(/species/);
+  });
+});

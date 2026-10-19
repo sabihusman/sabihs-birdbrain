@@ -53,7 +53,7 @@ Key modules:
   preview, "Tap to explore") above `location-block.ts` (Plus Code folded under
   "More location details"), confidence as text (`src/ui/confidence-text.ts`),
   `about-bird.ts` (summary + sections, also used by the species page) and
-  `ask-box.ts` for members. See DECISIONS.md #45.
+  `ask-box.ts` for members. See DECISIONS.md #46.
 - `src/export/` — CSV / GeoJSON.
 - Member-only, on-device: `src/app/access.ts` (gating from the cached
   session), `src/species/clips.ts` (one raw clip per species, replace-if-higher,

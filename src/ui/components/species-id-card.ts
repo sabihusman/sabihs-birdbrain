@@ -5,7 +5,7 @@ import type { ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor } from '../router';
 import { speciesColor } from '../../species/colors';
-import { clipPlayer } from './clip-player';
+import { clipCard } from './clip-card';
 import { locationBlock } from './location-block';
 import { mapPreview } from './map-preview';
 import { memberGate } from './member-gate';
@@ -13,9 +13,10 @@ import { memberGate } from './member-gate';
 /**
  * Member-only species ID card: most recent sighting location (map preview,
  * coordinates, Google Maps link, Plus Code under "More location details",
- * the same block as the sighting card) and the species' saved clip.
- * Tapping the card opens the sighting history. Everything is read from
- * IndexedDB; nothing is fetched except OSM tiles for the map preview.
+ * the same block as the sighting card) and the species' saved ID clip
+ * (player, spectrogram with the identifying windows outlined, tap-to-run
+ * "Why this ID"). Tapping the card opens the sighting history. Everything is
+ * read from IndexedDB; nothing is fetched except OSM tiles for the map preview.
  */
 export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLElement; dispose: () => void } {
   const { controller, api } = ctx;
@@ -37,7 +38,7 @@ export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLEle
       };
       card.addEventListener('click', (e) => {
         const t = e.target as HTMLElement;
-        if (t.closest('button, a, audio, input, select, .leaflet-container')) return;
+        if (t.closest('button, a, audio, input, select, canvas, .viz, .leaflet-container')) return;
         open();
       });
       card.addEventListener('keydown', (e) => {
@@ -65,11 +66,11 @@ export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLEle
           parts.push(el('p', { class: 'small muted' }, dets.length ? `${dets.length} sighting${dets.length === 1 ? '' : 's'}, none with a position yet.` : 'No sightings of this species yet.'));
         }
         if (clip) {
-          const player = clipPlayer(clip);
-          disposers.push(player.dispose);
-          parts.push(player.el);
+          const block = clipCard(ctx, species, clip);
+          disposers.push(block.dispose);
+          parts.push(block.el);
         } else {
-          parts.push(el('p', { class: 'small muted' }, 'No saved clip yet. One 10-second raw clip per species is kept, replaced only by a more confident detection.'));
+          parts.push(el('p', { class: 'small muted' }, 'No saved clip yet. One raw clip of up to 10 seconds around the detection is kept per species, replaced only by a more confident detection.'));
         }
         parts.push(el('div', { class: 'small muted' }, 'Tap the card for the full sighting history and map. Kept on this device only.'));
         body.replaceChildren(...parts);

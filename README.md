@@ -97,15 +97,16 @@ The name is always shown next to the colour.
   The strongest filtered-out species is shown greyed so the filter is visible.
 - **Recordings:** record WAV straight from the AudioWorklet stream (no
   MediaRecorder), import audio files, play back, re-analyse, export WAV,
-  delete, optional auto-save of a 3 s clip per detection. Opening a recording
-  shows its **sighting card**: the bird's common and scientific names as the
-  title, a map preview with one dot (tap to explore) above the coordinates,
-  Copy and Google Maps buttons, the Plus Code under "More location details",
-  the spectrogram with seek-by-tap, "Confidence 96% · your minimum 60%" and the
-  matched 3 s windows as text, per-species detections, "Why this ID", an
-  "About this bird" box (Wikipedia summary plus collapsed Description, Song and
-  calls, Habitat and Diet sections, cached for offline) and, for members,
-  "Ask about this bird".
+  delete, optional auto-save of each 3 s detection window as a recording
+  ("Auto-save 3-second detection windows as recordings", not to be confused
+  with the species ID clip below). Opening a recording shows its **sighting
+  card**: the bird's common and scientific names as the title, a map preview
+  with one dot (tap to explore) above the coordinates, Copy and Google Maps
+  buttons, the Plus Code under "More location details", the spectrogram with
+  seek-by-tap, "Confidence 96% · your minimum 60%" and the matched 3 s windows
+  as text, per-species detections, "Why this ID", an "About this bird" box
+  (Wikipedia summary plus collapsed Description, Song and calls, Habitat and
+  Diet sections, cached for offline) and, for members, "Ask about this bird".
 - **Location sharing:** every located detection shows coordinates and a
   10-character Plus Code with copy buttons and an "Open in Google Maps" link.
 - **Sightings:** consecutive detections of a species are merged into one
@@ -116,10 +117,16 @@ The name is always shown next to the colour.
 - **Species ID card and sighting history (members):** on each species page, a
   card with the most recent sighting (map preview, coordinates, Google Maps
   link, Plus Code under "More location details", the same block as the
-  sighting card) and a play button for the species' saved clip; tap it for the
-  full sighting history with a heat map / pin map of your own detections. One
-  raw 10-second clip is kept per species and replaced only by a more confident
-  detection. Free users see a short "Sign in to unlock" note instead.
+  sighting card) and the species' saved ID clip: up to 10 s of raw audio around
+  the detection, with a spectrogram drawn from the clip, the 3 s window(s)
+  that triggered the ID outlined and labelled with their confidence, a
+  playback cursor, tap-to-seek and a tap-to-run "Why this ID" occlusion heat
+  map on the identifying window. BirdNET marks *when* a species is heard, not
+  which of the overlapping sounds it is, and the card says so. Tap the card
+  for the full sighting history with a heat map / pin map of your own
+  detections. One clip is kept per species and replaced only by a more
+  confident detection. Free users see a short "Sign in to unlock" note
+  instead.
 - **Accounts (optional):** email + password + emailed code; approved members
   can ask AI questions about a species (on the species page and on each
   sighting card), answered only from its Wikipedia article with section
@@ -137,8 +144,8 @@ The name is always shown next to the colour.
   tiles are never cached or prefetched.
 - **Settings:** threshold (default 60 %; lower catches faint birds but adds
   false IDs), overlap, location source and manual coordinates,
-  seasonal filter, species-range threshold, auto-save (its own confidence bar,
-  never below the threshold), compute backend,
+  seasonal filter, species-range threshold, auto-save of detection windows
+  (its own confidence bar, never below the threshold), compute backend,
   occlusion resolution, storage used vs available, `navigator.storage.persist()`
   result, CSV and GeoJSON export, delete all.
 - **PWA:** manifest, icons, apple-touch-icon, service worker precaching the app
@@ -177,6 +184,23 @@ What does leave the phone, and why:
   that text alone; the answer comes back as plain text with the sections it
   cites as links. When the article cannot be fetched, the summary is used. Questions are not logged. There are daily limits per person and
   overall.
+
+- If you are an approved member and use **Friends** (Settings › Account):
+  your display name is stored on the server and shown to friends instead of
+  your email. Inviting a friend sends their address to the API, which always
+  answers "Invite sent"; an email goes out only to an approved member who is
+  not already your friend, and it names you by display name, never by email.
+  Sharing is **off by default**. If you turn on "Share my species list with
+  friends" (the switch says exactly what is shared: "which birds you've
+  spotted and the date you last spotted each one"), the app uploads, for
+  each species, only the scientific name and the calendar day of your most
+  recent sighting (`YYYY-MM-DD`, local day, no time), replacing the whole
+  list after each new sighting. No locations, no counts, no recordings or
+  clips, no history of earlier sightings, and nothing about species you have
+  not spotted. Only accepted friends can read it, and they see your display
+  name with those pairs, nothing else. Turning the switch off removes the
+  list from the server immediately; "Delete account" removes the list, your
+  friendships and invites, your sessions and the account itself in one step.
 
 Member features keep everything on the device too: the species ID card,
 sighting history, heat map and the one saved clip per species are read from

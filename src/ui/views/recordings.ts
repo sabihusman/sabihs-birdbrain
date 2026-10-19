@@ -17,7 +17,7 @@ import { aboutBird } from '../components/about-bird';
 import { askBox } from '../components/ask-box';
 import { locationBlock } from '../components/location-block';
 import { mapPreview } from '../components/map-preview';
-import { bestByConfidence, clipFocus, clipRange, sliceClip } from '../../species/clips';
+import { bestByConfidence, clipFocus, clipRange, sliceClip, windowsInClip } from '../../species/clips';
 import { confidenceLine, windowLines } from '../confidence-text';
 import { cssToken } from '../../theme/theme';
 
@@ -314,8 +314,12 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         if (!best) continue; // cannot happen (groups are non-empty), but keeps the call total
         const focus = clipFocus(dets.map((d) => ({ offsetSec: d.offsetSec ?? 0, confidence: d.confidence })));
         const range = clipRange(focus, { start: 0, end: audio.length / SAMPLE_RATE });
+        const windows = windowsInClip(
+          dets.map((d) => ({ startSec: d.offsetSec ?? 0, confidence: d.confidence })),
+          range,
+        );
         await controller
-          .offerClip({ scientific: best.scientific, common: best.common, confidence: best.confidence, time: best.time, lat: best.lat, lon: best.lon, accuracy: best.accuracy, source: best.source, recordingId: id }, sliceClip(audio, range))
+          .offerClip({ scientific: best.scientific, common: best.common, confidence: best.confidence, time: best.time, lat: best.lat, lon: best.lon, accuracy: best.accuracy, source: best.source, recordingId: id, windows }, sliceClip(audio, range))
           .catch((e: Error) => ctx.notify({ kind: 'warn', text: `Could not save the species clip: ${e.message}` }));
       }
     };

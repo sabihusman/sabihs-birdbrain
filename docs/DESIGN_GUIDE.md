@@ -129,6 +129,11 @@ There are two themes. **Dark is the default**, whatever the phone's own light/da
 
 The user picks a layout in **Settings → Listen layout**, and the choice is remembered on the device. **The default is Consolidated.** All three share the same components and states. Only their arrangement differs.
 
+**The picker.** Three preview tiles in one row, not a dropdown: Consolidated, Bottom dock, Focus. Each tile is a small generic phone wireframe (inline SVG, 52×73 px, drawn only from theme tokens so it reads in both themes: frame and result rows in `--muted`, control block in `--accent`, card in `--surface-2`) with the layout name under it. The wireframes hint at the arrangement: a control block on top with rows below (Consolidated), rows filling the screen with a control bar just above the tab bar (Bottom dock), one large card (Focus).
+- **Selected tile:** a 3 px `--accent` border plus a check-mark badge in the top-right corner, so the choice is never shown by colour alone. Tapping a tile switches at once and is remembered.
+- **Accessibility:** the row is `role="radiogroup"` and each tile `role="radio"` with `aria-checked`; roving tabindex (the selected tile is 0, the others −1); Left/Right and Up/Down move focus and selection with wrap-around, Home/End jump to the ends, Space/Enter select; the focus ring is the usual 3 px `--focus`; every tile is at least 44 px on both sides.
+- **Height budget:** the whole card is at most 1.5× the height of the dropdown card it replaced (210.6 px at 375 px, so ≤ 316 px; the picker measures about 183 px). At 320 px the tiles stay inside the viewport ("Consolidated" may break at its soft hyphen). Both are checked by Playwright.
+
 1. **Consolidated (default).**
    - **Ready:** title, short hint, mic button, context chips, then the collapsed "How it works" and "Recent sightings" rows.
    - **Listening:** the panel at the top, result cards below, newest first.

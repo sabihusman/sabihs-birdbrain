@@ -1,5 +1,5 @@
 /**
- * Sighting card screenshots (DECISIONS.md #45): the recording detail opened from Recordings
+ * Sighting card screenshots (DECISIONS.md #46): the recording detail opened from Recordings
  * after importing the bundled BirdNET sample clip, in both themes, signed out and signed in
  * (an approved member faked through the cached session in localStorage, as the e2e test does;
  * the API is blocked so nothing is sent anywhere). A manual position gives the card a map.

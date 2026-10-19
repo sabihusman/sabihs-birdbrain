@@ -687,9 +687,245 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone (swipe, safe areas with the dock, real
   microphone states); the "paused" state needs a real backgrounding.
 
-## 45. Sighting card: title, map preview, confidence text, About this bird, Ask box
 
-(Numbered 45 on the branch; may be renumbered at merge.)
+## 41. Species ticks: on-device "spotted" marks and the "Spotted by me" chip
+
+- **Decision:** on the Species tab every species with at least one sighting
+  on this device shows a tick (`✓`, accent colour, a 48 px button beside the
+  chip with the words "spotted by you" in its label). Tapping the tick opens
+  that species' ID card for members (the species page, scrolled to and
+  focused on the card: the card is where the ID card lives today, and tapping
+  it still opens the sighting history) and, for everyone else, shows the
+  same one-line "Sign in to unlock the species ID card." note under the row
+  (`lockedNoteEl`, split out of `member-gate.ts` so both places render it
+  the same way). A pressable "✓ Spotted by me · N" chip above the list keeps
+  only spotted species; the choice is remembered on the device
+  (`speciesSpottedOnly`).
+- **Where the set comes from:** `listSightedSpecies()` walks the unique keys
+  of the sightings store's `by-scientific` index (`openKeyCursor(null,
+  'nextunique')`), so no sighting rows are loaded however many there are.
+  `src/species/spotted.ts` turns that into a `Set` and holds the pure filter;
+  the view rebuilds the set on `detections-changed` (new detections, deleted
+  recordings, "clear all data") and re-renders on session changes. Nothing is
+  fetched: the ticks are decided from IndexedDB and the cached session only.
+- **Scope of the chip:** while it is on, the local / "Show all species" scope
+  is bypassed and the line reads "N species spotted by you · M total" with a
+  note saying so. A bird you heard on a trip is still one you spotted; hiding
+  it because it is not expected at home would make the list lie.
+- **Alternatives:** a tick inside the chip link (`<a>`) would nest a button in
+  a link, which is invalid and would make the chip tap ambiguous; a separate
+  "my species" route would duplicate the list, search and local toggle; a
+  persisted "spotted" flag on the species would drift from the sightings
+  when recordings are deleted. Counting per species (`by-scientific` count)
+  was not needed: the tick is binary and the species page has the numbers.
+- **Tests:** `tests/spotted.test.ts` (fake-indexeddb: unique keys across
+  repeated and separate sightings; the filter on/off, count, empty names).
+  Playwright: the free-user import test checks the tick, the chip narrowing
+  the list to ticked rows only, the count line and the inline sign-in note;
+  the member test opens the ID card from the tick and checks it is focused.
+- **Not verified:** on a phone; the tick row beside a long name at 320 px is
+  not covered by the width test, which runs with no sightings (the CSS keeps
+  the row from wrapping: the chip shrinks, the 48 px tick does not).
+
+## 42. ID clips: 10 s context, identifying windows, spectrogram and tap-to-run "Why this ID"
+
+- **Decision:** the per-species ID clip (#28) keeps its 10 s cap and its
+  replace-if-higher rule, and now records *which* 3 s analysis windows
+  triggered the ID: `ClipRecord.windows`, a list of `{ offsetSec, confidence }`
+  relative to the clip start (DB version 4). Live, the controller remembers
+  every window that detected the species while it is still inside the 24 s
+  raw ring and stores the ones that fall in the clip (`windowsInClip`); for
+  recordings and imports the per-window detections give the same list. A
+  window cut at a clip edge keeps its true offset (it may be slightly
+  negative) and is clamped when drawn. The surrounding audio is kept on
+  purpose: other birds may be audible, and the user should hear the context
+  the model heard.
+- **Card:** the species ID card draws a spectrogram of the clip from the
+  stored samples with our own FFT (`computeStaticSpectrogram`, shared with the
+  recording view and DOM-free so the frames, outlines and cursor are
+  unit-tested), outlines each identifying window in the species colour with
+  its confidence as the label, shows a playback cursor (tap the spectrogram
+  to seek) and a line listing the windows. "Why this ID" is a button: it runs
+  the existing occlusion job on the most confident identifying window and
+  shades the heat map over that window. It is 25–97 model passes, so it never
+  runs on its own (as in the recording view).
+- **Wording, in the card and here:** BirdNET marks *when* a species is heard,
+  not which of the overlapping sounds it is. An outlined window means the
+  model's confidence for that species crossed the threshold in those 3 s; the
+  sound it reacted to may sit under another bird, wind or a voice. The
+  occlusion heat map is the honest way to narrow it down, and it is still an
+  approximation.
+- **Migration:** version 4 adds no store; clips saved before it have no
+  `windows` and are read as "unknown windows" (`clipWindows()` returns null):
+  the card says the windows were not recorded, draws no outlines and runs
+  "Why this ID" on the clip centre (live clips were always centred on their
+  window). A later, more confident detection replaces such a clip the normal
+  way. Tested with `fake-indexeddb` from a hand-built version-3 database.
+- **Setting renamed:** the older option that saves each detection's 3 s
+  window into Recordings is now "Auto-save 3-second detection windows as
+  recordings" (hint: separate from the species ID clip), and those
+  recordings are named "Detection window: <species>" instead of "Auto clip".
+  The storage keys (`autoSaveClips`, `autoSaveMinConfidence`, source
+  `'autoclip'`) are unchanged: nothing to migrate.
+- **Not verified:** on a phone; the playback cursor follows
+  `audio.currentTime` in a `requestAnimationFrame` loop, whose timing against
+  the sound on iOS Safari has not been checked. Playwright exercises the card
+  with the bundled sample (one window, the occlusion run) in Chromium.
+
+## 43. `/v1/ask` reads Gemini's finish reason; no half sentences
+
+- **Problem:** live answers ended mid-sentence ("…though it notes that the").
+  The call asked for 400 output tokens and the model's own thinking counts
+  against the same allowance on thinking models, so the visible answer was
+  cut without any sign of it.
+- **Decision:** `createGeminiModel` sends `maxOutputTokens: 700` (room for 2–4
+  short paragraphs with citations) and `thinkingConfig.thinkingLevel: LOW`
+  (`ThinkingConfig.thinkingLevel` / `ThinkingLevel.LOW` in `@google/genai`
+  2.30). The Gemini API "Thinking" page lists `gemini-3.8-flash` with levels
+  low, medium and high (default medium); `thinking_budget` is kept only for
+  backward compatibility and cannot be combined with `thinking_level` (400),
+  so the legacy field is not sent. It reads
+  `candidates[0].finishReason`; on `MAX_TOKENS` it retries once with 1400,
+  and if that is cut too it returns the complete sentences (citations kept)
+  followed by "(answer cut short)". The system instruction already asked for
+  at most 120 words. Each call logs one line, `[ask] attempt= limit= finish=
+  prompt_tokens= answer_tokens= thinking_tokens= total_tokens=`, never the
+  question or the answer.
+- **Alternatives:** streaming (more code for the same result); raising the
+  limit alone (hides the cause); asking the model to "finish the sentence"
+  (another call, same risk).
+- **Tests:** `server/test/ask-truncation.test.ts` with `FakeGemini` returning
+  `finishReason: 'MAX_TOKENS'` once and twice.
+- **Not verified:** a live call with the level set (a rejected value surfaces
+  through the existing 502 path; adjust `ANSWER_THINKING_LEVEL` in
+  `server/src/ask.ts`).
+
+## 44. Friends: species-only sharing with explicit consent
+
+- **Decision:** members can set a display name (`POST /v1/me/name`, trimmed,
+  1–40 characters, no control or format characters), add friends by email,
+  accept or decline invites and remove friends, and, only after turning on
+  "Share my species list with friends", let accepted friends see which birds
+  they have spotted. The Species tab then shows "Spotted by Alex, Sam" under
+  a chip (next to the user's own tick from #41 when both apply), a "Spotted
+  by friends" filter chip, and on each species page a "Spotted by" card with
+  one row per person, "You" included, each with the day of their most recent
+  sighting, newest first. The user's own row opens the ID card; friends'
+  rows are not tappable. Friends' data is fetched by the client
+  (`GET /v1/friends/species`), kept in memory and `sessionStorage` per user
+  id, refreshed when the tab opens and the device is online, and dropped on
+  sign-out.
+- **What is shared, exactly:** per species the scientific name and the local
+  calendar day (`YYYY-MM-DD`) of the most recent sighting. The upload
+  (`POST /v1/me/species`) is always the full current set, capped at 2,000
+  species; the server validates every name against `labels.json`
+  (`unknown_species`), every day as a real calendar day, refuses duplicates
+  and any extra field (strict schema), and replaces the stored rows in one
+  transaction. The client builds the list from the sightings store
+  (`buildSharedSpeciesList`: one entry per species, newest first) and uploads
+  it debounced 5 s after `detections-changed`, on turning sharing on, on
+  sign-in and when the connection returns. The consent text next to the
+  switch reads: "Friends will see which birds you've spotted and the date you
+  last spotted each one. Nothing else: no times, no places, no recordings, no
+  counts. Turning this off removes the list from the server at once."
+- **What is NOT shared:** times of day, positions, accuracy, counts of
+  sightings or windows, confidence, clips or recordings, the history of
+  earlier dates, species never spotted, the email address (friends see the
+  display name; the mail to an invitee names the inviter by display name
+  only and never carries any address). Nothing is uploaded while signed out,
+  pending or with sharing off, and the consent flag is a `localStorage` key
+  per user id, so it never follows the session to another account.
+- **Invites:** `POST /v1/friends/invite` always answers
+  `{ ok: true, message: 'Invite sent' }`; a mail goes out, and a row is
+  stored, only when an approved account with that address exists, is not
+  the caller, is not already a friend and has no open (pending or declined,
+  unexpired) invite with the caller. The only other answer is 429
+  `rate_limited` when the caller is past their own cap (10 per UTC day in
+  `invite_usage`, counting every attempt alike, so the budget reveals
+  nothing). Invites expire after 30 days; a declined one stays until then so
+  the same person cannot re-invite daily. The invitee sees pending invites in
+  the Account card (`GET /v1/friends`) and acts there; the mail says only
+  "<Name> invited you ... open the Account card on the Settings tab". There
+  is no outgoing-invites list, because it would reveal which addresses exist.
+- **Deletion:** `POST /v1/me/delete` (session, strict empty body) runs one
+  SQLite transaction over `shared_species`, `friendship`, `friend_invite`,
+  `invite_usage`, the user's `ask_usage` scope, `login_challenge`, `session`,
+  `account` and `user`. Better Auth 1.7 does have `auth.api.deleteUser`
+  behind `user.deleteUser.enabled`, but it demands a fresh session (default
+  `freshAge` 24 h) or the password and would not touch the app's own tables,
+  so the direct transaction is simpler and complete. The admin account is
+  refused (`admin_account`): it is the only one that can approve people.
+  The Account card confirms inline (no pop-up); the client drops the local
+  session either way. Recordings and detections on the device are untouched.
+- **Gating:** every friend endpoint needs an approved member (401 without a
+  session, 403 `not_approved` otherwise). A friend who is disabled or
+  rejected disappears from lists and species answers at once (the join
+  filters on `status = 'approved'`), without deleting their rows. Remove is
+  idempotent (200 for strangers and unknown ids) so ids cannot be probed;
+  accept/decline answer 404 alike for foreign, unknown and expired ids.
+- **Tables:** `friend_invite` (id, from, to, status pending/declined,
+  created, expires), `friendship` (ordered pair, since), `shared_species`
+  (user, scientific, last_seen), `invite_usage` (day, user, count). No new
+  environment variables.
+- **Alternatives:** sharing full sightings with positions (rejected: the
+  heat map is the most sensitive data the app holds, see #29); server-side
+  invite tokens in the mail link (rejected: a link that logs you in is a
+  phishing pattern, and the in-app list needs no token); push notifications
+  (out of scope for this change); storing the consent in Settings (rejected:
+  settings are per device, not per account, and a shared phone would leak
+  the switch between accounts); a DELETE method (rejected to keep the CORS
+  method list unchanged).
+- **Tests:** `server/test/friends.test.ts` (name validation, invite
+  sent/not-sent cases returning the same body, cap and reset, accept,
+  decline, expiry, remove, upload replace/clear, validation, body limit,
+  deletion) and `server/test/adversarial-friends.test.ts` (who can read a
+  list: stranger, pending invitee, declined invitee, removed friend, signed
+  out, disabled; a friend sees only display name and (sci, lastSeen) pairs;
+  byte-identical invite answers; invite-id and remove probing; writing for
+  someone else; header smuggling in names). Front end: `tests/sharing.test.ts`
+  (what leaves the device, debounce, off/signed-out/pending/offline, per-user
+  consent) and `tests/friends.test.ts` (index, cache per user, offline copy,
+  sign-out), plus the API-client paths.
+- **Not verified:** the whole flow against the live server and Gmail (the
+  fake mailer stands in); the Species tab with real friends' data on a
+  phone; the Account card at 320 px with long display names (the width test
+  runs signed out).
+
+## 45. Listen layout picker: preview tiles instead of a dropdown
+
+- **Decision:** Settings → Listen layout is a row of three preview tiles
+  (Consolidated, Bottom dock, Focus) instead of a `<select>` with a helper
+  sentence. Each tile (`src/ui/components/layout-picker.ts`) is a button with
+  a 52×73 phone wireframe (inline SVG, coloured through CSS classes and the
+  theme tokens `--muted`, `--accent`, `--surface-2`, `--card`, so it works in
+  both themes without style attributes under the strict CSP) and the layout
+  name. A tap switches immediately through `settings.update({ listenLayout })`
+  and the store change is mirrored back into the tiles.
+- **Selected state:** 3 px accent border (2 px border plus a 1 px ring, so
+  nothing shifts) and a check badge on the wireframe; never colour alone.
+- **Accessibility:** `role="radiogroup"` / `role="radio"` with
+  `aria-checked`; roving tabindex (selected tile 0, others −1); Left/Right
+  and Up/Down move focus and selection with wrap-around, Home/End jump,
+  Space/Enter select (native button activation); 3 px `--focus` ring; tiles
+  are at least 44 px on both sides (about 102×119 px at 375 px).
+- **Height budget:** the card must stay within 1.5× the dropdown card it
+  replaced. Measured on main (efc0a2a) at a 375 px viewport the old card was
+  210.59 px (h2 + 44 px select + a two-line hint); the picker card is
+  183.4 px (tiles 98×113 px). `e2e/app.spec.ts` records that baseline as a
+  constant and asserts the new card ≤ 1.5× it. At 320 px the test asserts
+  the Settings view and every tile stay inside the viewport (tiles 79 px
+  wide; "Consolidated" carries a soft hyphen, `hyphens: manual`, so it breaks
+  cleanly there instead of mid-word). The check is on `main.view`, not the
+  document root, because the sticky header's status pill ("Model ready ·
+  wasm") alone exceeds 320 px by about 5 px once the model has loaded, a
+  pre-existing header issue outside this change.
+- **Removed:** the dropdown, its helper text ("Same components and states in
+  every layout…"); the layout descriptions now live in each tile's
+  `aria-label` and in DESIGN_GUIDE.md §6.
+- **Not verified:** on a phone or with VoiceOver; checked in Chromium with
+  Playwright and in both theme screenshots (`docs/screenshots/settings-*.png`).
+
+## 46. Sighting card: title, map preview, confidence text, About this bird, Ask box
 
 - **What the user saw:** the recording detail opened from Recordings carried
   the recording's stored name as its title: `Auto clip: <bird>` for
@@ -750,8 +986,6 @@ Sabih's approval and a baseline check of the other sites after every reload.
   "Sign in to ask"; the member test checks the Ask form on the card.
   Screenshots: `scripts/sighting-card-screenshots.ts` →
   `docs/screenshots/sighting-card-{dark,light}-{signed-in,signed-out}.png`.
-  `playwright.config.ts` now reads `PREVIEW_PORT` (default 4173) so several
-  worktrees can run the suite side by side, each against its own preview.
-- **Not verified:** a live TextExtracts response in the browser (429 here;
+  - **Not verified:** a live TextExtracts response in the browser (429 here;
   the fixture follows the documented format and the server's parser) and the
   map cover on a real touch screen.

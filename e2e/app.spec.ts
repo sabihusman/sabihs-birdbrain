@@ -136,6 +136,24 @@ test('imports a recording, analyses it and explains an identification', async ({
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('species-id-card-gate')).toContainText('Sign in to unlock the species ID card.');
 
+  // Species tab: the spotted species carries a tick; "Spotted by me" narrows the list to it; the tick says "Sign in to unlock" (DECISIONS.md #41).
+  await page.goto('./#/species');
+  // The manual position set above narrows the list to local species; show all so the search can find the redpoll.
+  await page.getByTestId('show-all-species').check();
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
+  const redpollRow = page.getByTestId('spotted-row').filter({ hasText: 'Lesser Redpoll' });
+  await expect(redpollRow).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('');
+  const spottedFilter = page.getByTestId('spotted-filter');
+  await spottedFilter.click();
+  await expect(spottedFilter).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('local-count')).toContainText(/\d+ species spotted by you/);
+  await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
+  await expect(page.getByTestId('species-list').locator('.chip')).toHaveCount(await page.getByTestId('spotted-tick').count());
+  await redpollRow.getByTestId('spotted-tick').click();
+  await expect(redpollRow).toContainText('Sign in to unlock the species ID card.');
+  await expect(page).toHaveURL(/#\/species$/);
+
   // The recording shows up in the list with its species summary, and on the species page.
   await page.goto('./#/recordings');
   await expect(page.getByTestId('recordings-list')).toContainText('birdnet-sample');
@@ -164,18 +182,57 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('ask-box').getByTestId('ask-locked')).toHaveCount(0);
   await expect(page.getByTestId('sighting-location')).toHaveCount(0); // no position in this test
 
-  await page.goto('./#/species/Acanthis%20cabaret');
+  // The tick on the Species tab opens this species' ID card for a member (DECISIONS.md #41).
+  await page.goto('./#/species');
+  await page.getByTestId('spotted-filter').click();
+  await page.getByTestId('spotted-row').filter({ hasText: 'Lesser Redpoll' }).getByTestId('spotted-tick').click();
+  await page.waitForURL(/#\/species\/Acanthis%20cabaret$/);
   const card = page.getByTestId('species-id-card');
   await expect(card).toBeVisible();
+  await expect(card).toBeFocused();
   await expect(card.getByTestId('clip-play')).toBeVisible({ timeout: 30_000 });
   await expect(card.getByTestId('clip-meta')).toContainText(/\d+% confidence · imported file/);
   await expect(card).toContainText('none with a position yet');
 
-  await card.click();
+  // ID clip: spectrogram drawn from the stored audio, the identifying window listed with its confidence, the wording, and tap-to-run "Why this ID".
+  await expect(card.getByTestId('clip-spectrogram')).toBeVisible();
+  await expect(card.getByTestId('clip-windows')).toContainText(/Identified in 1 window of 3 s: 0:00–0:03 \(\d+%\)/);
+  await expect(card.getByTestId('clip-meaning')).toContainText('BirdNET marks when a species is heard, not which of the overlapping sounds it is.');
+  await expect(card.getByTestId('clip-why-result')).toHaveCount(0); // nothing ran on its own
+  // Tapping the spectrogram seeks; it must not open the history (the card is a link).
+  await card.locator('.viz canvas.overlay').click({ position: { x: 40, y: 40 } });
+  await expect(page).toHaveURL(/#\/species\/Acanthis%20cabaret$/);
+  await card.getByTestId('clip-why-run').click();
+  await expect(card.getByTestId('clip-why-result')).toContainText(/Lesser Redpoll: baseline \d+% on this window/, { timeout: 240_000 });
+
+  // Tap the card's own text (the spectrogram at the card's centre seeks instead; the header row sits under the sticky app header after the tick's scroll).
+  await card.getByText('none with a position yet').click();
   await page.waitForURL(/#\/species\/Acanthis%20cabaret\/history/);
   await expect(page.getByTestId('history-summary')).toContainText(/1 sighting \(1 analysed window\), 0 with a position/);
   await expect(page.getByTestId('history-list')).toContainText('No position recorded');
   await expect(page.getByTestId('history-map')).toBeHidden();
+
+  // Account card for a member: display name with the email under it, the friends panel with the exact consent text, sharing off by default, delete with an inline confirmation (DECISIONS.md #43).
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('account-name')).toHaveText('member');
+  await expect(page.getByTestId('account-email')).toHaveText('member@example.com');
+  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
+  await expect(page.getByTestId('share-species')).not.toBeChecked();
+  await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
+  await expect(page.getByTestId('invite-send')).toBeVisible();
+  await page.getByTestId('delete-account').click();
+  await expect(page.getByTestId('delete-account-confirm')).toBeVisible();
+  await page.getByRole('button', { name: 'Keep my account' }).click();
+  await expect(page.getByTestId('delete-account-confirm')).toBeHidden();
+  // The species page shows the "Spotted by" card with the member's own row (friends unreachable: only "You").
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await expect(page.getByTestId('spotted-by-me')).toContainText(/You · /);
+  await expect(page.getByTestId('spotted-by-friend')).toHaveCount(0);
+  await expect(page.getByTestId('friends-filter')).toBeHidden(); // not on the species page
+  await page.goto('./#/species');
+  await expect(page.getByTestId('friends-filter')).toBeVisible();
+  await page.goto('./#/species/Acanthis%20cabaret/history');
+  await expect(page.getByTestId('history-summary')).toBeVisible();
 
   // Sign-out hides the features but keeps the data.
   await page.evaluate(() => {
@@ -184,6 +241,8 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   });
   await page.reload();
   await expect(page.getByTestId('history-gate')).toContainText('Sign in to unlock Sighting history.');
+  await page.goto('./#/species');
+  await expect(page.getByTestId('friends-filter')).toBeHidden();
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('wiki')).toBeVisible();
   await expect(page.getByText('Your sightings')).toBeVisible();
@@ -234,6 +293,87 @@ test('no horizontal scrolling and the primary control visible at 320, 375, 390 a
     expect(b!.x + b!.width, `start button inside ${width}px`).toBeLessThanOrEqual(width);
     await context.close();
   }
+});
+
+/**
+ * Height of the previous Settings → "Listen layout" card (h2 + dropdown + two-line helper text),
+ * measured with getBoundingClientRect() at a 375 px viewport on main (commit efc0a2a) before the
+ * preview-tile picker replaced it. The picker's card must stay within 1.5× of it (DECISIONS.md #44).
+ */
+const BASELINE_DROPDOWN_CARD_HEIGHT_PX = 210.59;
+
+test('Listen layout picker: tiles select and persist, arrow keys move, height budget, no overflow at 320 px', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.goto('./#/settings');
+  const group = page.getByTestId('listen-layout');
+  await expect(group).toHaveAttribute('role', 'radiogroup');
+  await expect(page.locator('select[aria-label="Listen layout"]')).toHaveCount(0);
+  const tiles = group.getByRole('radio');
+  await expect(tiles).toHaveCount(3);
+  // Visible names (the first may carry a soft hyphen for 320 px) and clean accessible names.
+  await expect(tiles).toHaveText([/^Consoli\u00AD?dated$/, 'Bottom dock', 'Focus']);
+  for (const name of [/^Consolidated: /, /^Bottom dock: /, /^Focus: /]) await expect(group.getByRole('radio', { name })).toHaveAttribute('aria-checked', /true|false/);
+  // Default selection and roving tabindex: the checked tile is the only one in the tab order.
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('tabindex', '0');
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('tabindex', '-1');
+  // Height budget: the whole card is no taller than 1.5× the old dropdown card at 375 px.
+  const card = group.locator('xpath=ancestor::section[contains(@class, "card")][1]');
+  const cardBox = await card.boundingBox();
+  expect(cardBox!.height).toBeLessThanOrEqual(1.5 * BASELINE_DROPDOWN_CARD_HEIGHT_PX);
+  // Every tile is a 44 px target and fits inside the viewport in one row.
+  const firstTile = await page.getByTestId('listen-layout-consolidated').boundingBox();
+  for (const l of ['consolidated', 'dock', 'focus']) {
+    const b = await page.getByTestId(`listen-layout-${l}`).boundingBox();
+    expect(b!.width, `${l} width`).toBeGreaterThanOrEqual(44);
+    expect(b!.height, `${l} height`).toBeGreaterThanOrEqual(44);
+    expect(b!.x + b!.width, `${l} inside 375px`).toBeLessThanOrEqual(375);
+    expect(b!.y, `${l} in one row`).toBeCloseTo(firstTile!.y, 0);
+  }
+  // Tap switches at once, is written to the store and survives a reload; the Listen view uses it.
+  await page.getByTestId('listen-layout-dock').click();
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'false');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').listenLayout)).toBe('dock');
+  await page.reload();
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('tabindex', '0');
+  // Keyboard: arrows move focus and selection with wrap-around; Space/Enter select the focused tile.
+  await page.getByTestId('listen-layout-dock').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('listen-layout-focus')).toBeFocused();
+  await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('listen-layout-consolidated')).toBeFocused();
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowUp');
+  await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').listenLayout)).toBe('focus');
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'focus');
+  await context.close();
+
+  // No horizontal overflow at 320 px with the Settings tab open: the Settings content and every tile
+  // stay inside the viewport. (The document width is measured on the view, not on the root, because the
+  // sticky header's status pill alone exceeds 320 px by a few px once it reads "Model ready · wasm",
+  // a pre-existing header issue that this picker neither causes nor can fix.)
+  const narrow = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const np = await narrow.newPage();
+  await np.goto('./#/settings');
+  await expect(np.getByTestId('listen-layout')).toBeVisible();
+  const widths = await np.evaluate(() => {
+    const view = document.querySelector('main.view')!;
+    return { view: view.scrollWidth, cards: Math.max(...[...document.querySelectorAll('main.view .card')].map((c) => c.getBoundingClientRect().right)) };
+  });
+  expect(widths.view, 'settings view scrollWidth at 320px').toBeLessThanOrEqual(320);
+  expect(widths.cards, 'cards inside 320px').toBeLessThanOrEqual(320);
+  for (const l of ['consolidated', 'dock', 'focus']) {
+    const b = await np.getByTestId(`listen-layout-${l}`).boundingBox();
+    expect(b!.x + b!.width, `${l} inside 320px`).toBeLessThanOrEqual(320);
+    expect(b!.width, `${l} width at 320px`).toBeGreaterThanOrEqual(44);
+  }
+  await narrow.close();
 });
 
 for (const layout of ['consolidated', 'dock', 'focus'] as const) {

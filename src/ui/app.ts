@@ -10,6 +10,8 @@ import { settingsView } from './views/settings';
 import { helpView } from './views/help';
 import { adminView } from './views/admin';
 import type { ApiClient } from '../api/client';
+import { FriendsCache } from '../species/friends';
+import { SpeciesSharer } from '../species/sharing';
 import { applyTheme, currentTheme, otherTheme, storeTheme } from '../theme/theme';
 import { listenStatus } from './status';
 
@@ -22,6 +24,10 @@ export interface ViewContext {
   controller: AppController;
   api: ApiClient;
   notify: (n: Notice) => void;
+  /** Uploads my species-only list while sharing is on (DECISIONS.md #44). */
+  sharing: SpeciesSharer;
+  /** Friends' shared lists for the Species tab. */
+  friends: FriendsCache;
 }
 
 const ICONS: Record<string, string> = {
@@ -141,7 +147,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   };
   if (pendingUpdate) showUpdateBanner(pendingUpdate);
 
-  const ctx: ViewContext = { controller, api, notify };
+  const ctx: ViewContext = { controller, api, notify, sharing: new SpeciesSharer(api, controller), friends: new FriendsCache(api) };
   let current: View | null = null;
 
   const render = () => {

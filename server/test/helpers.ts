@@ -79,3 +79,22 @@ export async function signUpAndLogin(t: TestApp, email: string, password = 'corr
   if (ve.status !== 200) throw new Error(`verify ${ve.status}`);
   return ((await ve.json()) as { token: string }).token;
 }
+
+export const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+
+/** Approve `email` through the admin endpoint; returns the member's id. */
+export async function approveByEmail(t: TestApp, adminToken: string, email: string): Promise<string> {
+  const list = (await (await get(t.app, '/v1/admin/users', bearer(adminToken))).json()) as { users: Array<{ id: string; email: string }> };
+  const u = list.users.find((x) => x.email === email);
+  if (!u) throw new Error(`no user ${email}`);
+  const res = await post(t.app, `/v1/admin/users/${u.id}/approve`, {}, bearer(adminToken));
+  if (res.status !== 200) throw new Error(`approve ${res.status}`);
+  return u.id;
+}
+
+/** Sign up, log in and approve: an approved member ready for member endpoints. */
+export async function approvedMember(t: TestApp, adminToken: string, email: string): Promise<{ token: string; id: string }> {
+  const token = await signUpAndLogin(t, email);
+  const id = await approveByEmail(t, adminToken, email);
+  return { token, id };
+}

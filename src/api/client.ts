@@ -25,6 +25,33 @@ export interface AskAnswer {
   context?: 'article' | 'summary';
 }
 
+/** A friend as the server lists it: id, display name, since when. */
+export interface Friend {
+  id: string;
+  name: string;
+  since: number;
+}
+
+/** An invite addressed to me, pending and unexpired; only the inviter's display name travels. */
+export interface FriendInvite {
+  id: string;
+  fromName: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+/** One species in a shared list: scientific name and the local calendar day it was last spotted. */
+export interface SharedSpecies {
+  sci: string;
+  lastSeen: string;
+}
+
+export interface FriendSpecies {
+  id: string;
+  displayName: string;
+  species: SharedSpecies[];
+}
+
 interface StoredSession {
   token: string;
   expiresAt: string | null;
@@ -71,6 +98,14 @@ export function describeApiError(e: unknown): string {
       return 'Please sign in again.';
     case 'payload_too_large':
       return 'That request is too large.';
+    case 'invalid_request':
+      return 'The server did not accept that. Check what you typed and try again.';
+    case 'not_found':
+      return 'That invite is no longer open.';
+    case 'unknown_species':
+      return 'The server did not recognise a species in your list. Update the app and try again.';
+    case 'admin_account':
+      return 'The admin account cannot be deleted from the app.';
     default:
       return `Request failed (${e.status}).`;
   }
@@ -176,6 +211,53 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
 
   ask(species: string, question: string): Promise<AskAnswer> {
     return this.call('/v1/ask', { species, question });
+  }
+
+  /** Set the display name friends see; the cached session is updated so the Account card shows it at once. */
+  async setName(name: string): Promise<AuthUser> {
+    const res = await this.call<{ ok: boolean; user: AuthUser }>('/v1/me/name', { name });
+    if (this.session) this.setSession({ ...this.session, user: res.user });
+    return res.user;
+  }
+
+  /** Delete the account and everything the server holds for it; the local session is dropped either way. */
+  async deleteAccount(): Promise<void> {
+    try {
+      await this.call('/v1/me/delete', {});
+    } finally {
+      this.setSession(null);
+    }
+  }
+
+  /** Always resolves with "Invite sent" (the server never says whether the address has an account). */
+  inviteFriend(email: string): Promise<{ ok: boolean; message: string }> {
+    return this.call('/v1/friends/invite', { email });
+  }
+
+  listFriends(): Promise<{ friends: Friend[]; invites: FriendInvite[] }> {
+    return this.call('/v1/friends');
+  }
+
+  respondToInvite(id: string, action: 'accept' | 'decline'): Promise<{ ok: boolean }> {
+    return this.call(`/v1/friends/invites/${encodeURIComponent(id)}/${action}`, {});
+  }
+
+  removeFriend(id: string): Promise<{ ok: boolean }> {
+    return this.call(`/v1/friends/${encodeURIComponent(id)}/remove`, {});
+  }
+
+  /** Each accepted friend's display name and (scientific name, last-seen day) pairs. */
+  friendsSpecies(): Promise<{ friends: FriendSpecies[] }> {
+    return this.call('/v1/friends/species');
+  }
+
+  /** Replace my shared list with the full current set (scientific name + last-seen day only). */
+  uploadSharedSpecies(species: SharedSpecies[]): Promise<{ ok: boolean; count: number }> {
+    return this.call('/v1/me/species', { species });
+  }
+
+  clearSharedSpecies(): Promise<{ ok: boolean }> {
+    return this.call('/v1/me/species/clear', {});
   }
 
   adminListUsers(): Promise<{ users: AdminUser[] }> {
