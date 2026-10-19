@@ -891,3 +891,36 @@ Sabih's approval and a baseline check of the other sites after every reload.
   phone; the Account card at 320 px with long display names (the width test
   runs signed out).
 
+## 45. Listen layout picker: preview tiles instead of a dropdown
+
+- **Decision:** Settings → Listen layout is a row of three preview tiles
+  (Consolidated, Bottom dock, Focus) instead of a `<select>` with a helper
+  sentence. Each tile (`src/ui/components/layout-picker.ts`) is a button with
+  a 52×73 phone wireframe (inline SVG, coloured through CSS classes and the
+  theme tokens `--muted`, `--accent`, `--surface-2`, `--card`, so it works in
+  both themes without style attributes under the strict CSP) and the layout
+  name. A tap switches immediately through `settings.update({ listenLayout })`
+  and the store change is mirrored back into the tiles.
+- **Selected state:** 3 px accent border (2 px border plus a 1 px ring, so
+  nothing shifts) and a check badge on the wireframe; never colour alone.
+- **Accessibility:** `role="radiogroup"` / `role="radio"` with
+  `aria-checked`; roving tabindex (selected tile 0, others −1); Left/Right
+  and Up/Down move focus and selection with wrap-around, Home/End jump,
+  Space/Enter select (native button activation); 3 px `--focus` ring; tiles
+  are at least 44 px on both sides (about 102×119 px at 375 px).
+- **Height budget:** the card must stay within 1.5× the dropdown card it
+  replaced. Measured on main (efc0a2a) at a 375 px viewport the old card was
+  210.59 px (h2 + 44 px select + a two-line hint); the picker card is
+  183.4 px (tiles 98×113 px). `e2e/app.spec.ts` records that baseline as a
+  constant and asserts the new card ≤ 1.5× it. At 320 px the test asserts
+  the Settings view and every tile stay inside the viewport (tiles 79 px
+  wide; "Consolidated" carries a soft hyphen, `hyphens: manual`, so it breaks
+  cleanly there instead of mid-word). The check is on `main.view`, not the
+  document root, because the sticky header's status pill ("Model ready ·
+  wasm") alone exceeds 320 px by about 5 px once the model has loaded, a
+  pre-existing header issue outside this change.
+- **Removed:** the dropdown, its helper text ("Same components and states in
+  every layout…"); the layout descriptions now live in each tile's
+  `aria-label` and in DESIGN_GUIDE.md §6.
+- **Not verified:** on a phone or with VoiceOver; checked in Chromium with
+  Playwright and in both theme screenshots (`docs/screenshots/settings-*.png`).
