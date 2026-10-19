@@ -69,7 +69,7 @@ export interface LocalSpeciesEntry {
 export class LocalSpeciesCache {
   private entry: LocalSpeciesEntry | null = null;
 
-  constructor(private storage: StorageLike | null = defaultStorage()) {
+  constructor(private readonly storage: StorageLike | null = defaultStorage()) {
     this.entry = LocalSpeciesCache.load(storage);
   }
 

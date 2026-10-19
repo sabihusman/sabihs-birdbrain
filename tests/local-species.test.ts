@@ -1,28 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Species } from '../src/model/labels';
 import { describeLocalCount, filterLocal, haversineKm, LOCAL_RECOMPUTE_KM, localIndices, LocalSpeciesCache, maxOverWeeks } from '../src/species/local';
-
-class MemoryStorage implements Storage {
-  private m = new Map<string, string>();
-  get length() {
-    return this.m.size;
-  }
-  clear() {
-    this.m.clear();
-  }
-  getItem(k: string) {
-    return this.m.get(k) ?? null;
-  }
-  key(i: number) {
-    return Array.from(this.m.keys())[i] ?? null;
-  }
-  removeItem(k: string) {
-    this.m.delete(k);
-  }
-  setItem(k: string, v: string) {
-    this.m.set(k, v);
-  }
-}
+import { MemoryStorage } from './helpers/memory-storage';
 
 const sp = (index: number, name: string): Species => ({ index, label: `${name}_${name}`, scientific: name, common: name, isBird: true });
 const ALL = [sp(0, 'A a'), sp(1, 'B b'), sp(2, 'C c'), sp(3, 'D d')];
@@ -61,13 +40,13 @@ describe('local species: what the Species tab shows', () => {
     expect(describeLocalCount(r)).toBe('2 local species · 4 total');
     expect(r.note).toBeNull();
     const all = filterLocal(ALL, local, true, null);
-    expect(all.shown.length).toBe(4);
+    expect(all.shown).toHaveLength(4);
     expect(describeLocalCount(all)).toBe('2 local species · 4 total');
   });
 
   it('falls back to every species with a note when no location is available', () => {
     const r = filterLocal(ALL, null, false, 'Showing all species: no location is available (denied).');
-    expect(r.shown.length).toBe(4);
+    expect(r.shown).toHaveLength(4);
     expect(r.localCount).toBeNull();
     expect(r.note).toMatch(/no location/);
     expect(describeLocalCount(r)).toBe('4 species');

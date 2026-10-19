@@ -1,27 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, LEGACY_DEFAULT_THRESHOLD, migrate, sanitize, SETTINGS_VERSION, SettingsStore } from '../src/app/settings';
-
-class MemoryStorage implements Storage {
-  private m = new Map<string, string>();
-  get length() {
-    return this.m.size;
-  }
-  clear() {
-    this.m.clear();
-  }
-  getItem(k: string) {
-    return this.m.get(k) ?? null;
-  }
-  key(i: number) {
-    return Array.from(this.m.keys())[i] ?? null;
-  }
-  removeItem(k: string) {
-    this.m.delete(k);
-  }
-  setItem(k: string, v: string) {
-    this.m.set(k, v);
-  }
-}
+import { MemoryStorage } from './helpers/memory-storage';
 
 describe('SettingsStore', () => {
   it('persists the threshold and clamps bad values', () => {

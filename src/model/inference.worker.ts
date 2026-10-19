@@ -200,14 +200,15 @@ async function handleLocalSpecies(msg: Extract<WorkerRequest, { type: 'local-spe
     input.dispose();
     out.dispose();
   } catch {
-    const parts: Float32Array[] = [];
-    for (const row of rows) {
+    // One prediction per week, read back together (predictions are synchronous on the backend; only the reads await).
+    const outs = rows.map((row) => {
       const input = tf.tensor2d([row]);
-      const out = geoModel.predict(input) as tf.Tensor;
-      parts.push((await out.data()) as Float32Array);
+      const out = geoModel!.predict(input) as tf.Tensor;
       input.dispose();
-      out.dispose();
-    }
+      return out;
+    });
+    const parts = (await Promise.all(outs.map((o) => o.data()))) as Float32Array[];
+    outs.forEach((o) => o.dispose());
     all = new Float32Array(parts.length * parts[0].length);
     parts.forEach((p, i) => all.set(p, i * p.length));
   }
