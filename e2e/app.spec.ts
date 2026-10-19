@@ -449,3 +449,62 @@ test('mic blocked state explains the iPhone steps and offers Try again and impor
   await context.close();
 });
 
+
+for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+  test(`Recent sightings (${layout}): one card per species, best + Heard once + last, expands to the lumped detections and collapses`, async ({ page }) => {
+    await page.addInitScript((l) => {
+      const raw = localStorage.getItem('birdbrain.settings.v1');
+      const s = raw ? JSON.parse(raw) : {};
+      s.listenLayout = l;
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify(s));
+    }, layout);
+    await page.goto('./#/listen');
+    await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+    await expect(page.getByTestId('recent-empty')).toBeVisible();
+    await page.getByTestId('demo').click();
+    await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
+    // The live results list shows the best confidence labelled "best" and the count.
+    if (layout !== 'focus') {
+      const result = page.getByTestId('result-card').first();
+      await expect(result).toContainText(/best\s*\d+%/);
+      await expect(result).toContainText('Heard once');
+    } else {
+      await expect(page.getByTestId('focus-latest')).toContainText('Heard once');
+    }
+    // Recent sightings: one card per species, a real button with aria-expanded, at least 44 px tall.
+    const fold = page.getByTestId('recent-fold');
+    await expect(page.getByTestId('recent-summary')).toHaveText(/^\d+ birds? · \d+ detections?$/);
+    await fold.locator('summary').click();
+    const cards = page.getByTestId('recent-card');
+    const n = await cards.count();
+    expect(n).toBeGreaterThanOrEqual(1);
+    const keys = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-species')));
+    expect(new Set(keys).size, 'no duplicate species cards').toBe(keys.length);
+    const card = cards.first();
+    await expect(card).toHaveAttribute('aria-expanded', 'false');
+    await expect(card).toHaveAttribute('aria-label', /^.+, heard once, best \d+%, last at .+$/);
+    await expect(card).toContainText(/Acanthis/);
+    await expect(card).toContainText(/best\s*\d+%/);
+    await expect(card.getByTestId('recent-count')).toHaveText('Heard once');
+    await expect(card).toContainText(/last\s*\d/);
+    const box = await card.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await expect(page.getByTestId('recent-rows').first()).toBeHidden();
+    // Tap expands: the lumped detections, newest first, each with time (or range), hit count and best.
+    await card.click();
+    const expandedCard = page.getByTestId('recent-card').first();
+    await expect(expandedCard).toHaveAttribute('aria-expanded', 'true');
+    const rows = page.getByTestId('recent-rows').first();
+    await expect(rows).toBeVisible();
+    await expect(rows.locator('.recent-row').first()).toContainText(/\d{1,2}:\d{2}:\d{2}/);
+    await expect(rows.locator('.recent-row').first()).toContainText(/\d+ hits? · best \d+%/);
+    // Tap again collapses.
+    await expandedCard.click();
+    await expect(page.getByTestId('recent-card').first()).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('recent-rows').first()).toBeHidden();
+    // Nothing on the screen overflows the phone width.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+}

@@ -8,7 +8,7 @@ import { DB_NAME, DB_VERSION, getClip, getDB, listClips } from '../src/storage/d
  * database must exist before the app opens the database for the first time.
  */
 describe('clips: upgrade from DB version 3 keeps clips without windows', () => {
-  it('opens at version 4 and reads the old clip as "unknown windows"', async () => {
+  it('opens at the current version and reads the old clip as "unknown windows"', async () => {
     await deleteDB(DB_NAME);
     const v3 = await openDB(DB_NAME, 3, {
       upgrade(db) {
@@ -30,8 +30,8 @@ describe('clips: upgrade from DB version 3 keeps clips without windows', () => {
     v3.close();
 
     const db = await getDB();
-    expect(DB_VERSION).toBe(4);
-    expect(db.version).toBe(4);
+    expect(DB_VERSION).toBe(5);
+    expect(db.version).toBe(5);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(['clips', 'detections', 'recordings', 'sightings', 'wiki']);
     const clips = await listClips();
     expect(clips.length).toBe(1);

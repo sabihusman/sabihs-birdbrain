@@ -296,7 +296,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
           records.push({ id: newId(), time: rec.createdAt + w.offsetSec * 1000, label: sp.label, scientific: sp.scientific, common: sp.common, confidence: d.prob, lat: rec.lat, lon: rec.lon, accuracy: rec.accuracy, recordingId: id, offsetSec: w.offsetSec, source: rec.source === 'import' ? 'import' : 'recording', sessionId: `rec-${id}` });
         }
       }
-      await recordDetections(records, controller.settings.get().sightingGapSeconds * 1000);
+      await recordDetections(records);
       rec.summary = controller.summarize(summaryEntries);
       rec.analyzedAt = Date.now();
       await putRecording(rec);

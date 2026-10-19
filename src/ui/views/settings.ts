@@ -17,7 +17,7 @@ export function settingsView(ctx: ViewContext): View {
 
   // Sliders re-read the store after every change, so a value the store clamped (auto-save never below the detection threshold) shows its real value.
   const syncs: Array<() => void> = [];
-  const slider = (label: string, key: 'threshold' | 'overlapSeconds' | 'geoThreshold' | 'autoSaveMinConfidence' | 'sightingGapSeconds', min: number, max: number, step: number, fmt: (v: number) => string, hint?: string) => {
+  const slider = (label: string, key: 'threshold' | 'overlapSeconds' | 'geoThreshold' | 'autoSaveMinConfidence', min: number, max: number, step: number, fmt: (v: number) => string, hint?: string) => {
     const value = el('span', null, fmt(s[key]));
     const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step), value: String(s[key]), 'aria-label': label });
     const sync = () => {
@@ -140,7 +140,6 @@ export function settingsView(ctx: ViewContext): View {
       el('div', { class: 'small muted', 'data-testid': 'threshold-help' }, 'Lower catches faint or distant birds but adds false IDs.'),
       slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
       toggle('Show non-bird classes', 'includeNonBird', 'Dog, engine, siren, human voice and similar.'),
-      slider('New sighting after', 'sightingGapSeconds', 5, 600, 5, (v) => `${v} s`, 'Consecutive detections of a species count as one sighting until this long passes without it.'),
     ),
     el(
       'section',

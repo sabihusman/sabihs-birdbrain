@@ -29,7 +29,7 @@ interface BirdbrainDB extends DBSchema {
 }
 
 export const DB_NAME = 'sabihs-birdbrain';
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 let dbPromise: Promise<IDBPDatabase<BirdbrainDB>> | null = null;
 
@@ -54,23 +54,37 @@ export function getDB(): Promise<IDBPDatabase<BirdbrainDB>> {
           st.createIndex('by-scientific', 'scientific');
           st.createIndex('by-last', 'lastTime');
           st.createIndex('by-recording', 'recordingId');
-          // One-time migration: merge the existing per-window detections into sightings (default 60 s gap).
-          if (oldVersion >= 1) {
-            const detStore = tx.objectStore('detections');
-            const all = await detStore.getAll();
-            const { sightings, assignments } = buildSightings(all, DEFAULT_SIGHTING_GAP_SECONDS * 1000);
-            for (const sgt of sightings) await st.put(sgt);
-            for (const d of all) await detStore.put({ ...d, sightingId: assignments.get(d.id) });
-          }
+          // One-time migration: merge the existing per-window detections into sightings.
+          if (oldVersion >= 1) await rebuildSightings(tx);
         }
         if (oldVersion < 4) {
           // Clips gain `windows` (the 3 s windows that triggered the ID). Existing records stay as they
           // are: a clip without `windows` is read as "unknown windows" (DECISIONS.md #42).
         }
+        if (oldVersion < 5 && oldVersion >= 3) {
+          // The sighting gap became the single 30 s rule shared with the Listen screen (was 60 s):
+          // re-lump the stored sightings from the (unchanged) per-window hits.
+          await rebuildSightings(tx);
+        }
       },
     });
   }
   return dbPromise;
+}
+
+/**
+ * Rebuild the `sightings` store from every stored detection with the current
+ * gap, inside an upgrade transaction that includes both stores. Detections are
+ * never dropped or merged; only their `sightingId` links change.
+ */
+export async function rebuildSightings(tx: { objectStore(name: 'detections' | 'sightings'): { getAll(): Promise<unknown[]>; clear(): Promise<void>; put(v: unknown): Promise<unknown> } }, gapMs = DEFAULT_SIGHTING_GAP_SECONDS * 1000): Promise<void> {
+  const detStore = tx.objectStore('detections');
+  const st = tx.objectStore('sightings');
+  const all = (await detStore.getAll()) as DetectionRecord[];
+  const { sightings, assignments } = buildSightings(all, gapMs);
+  await st.clear();
+  for (const sgt of sightings) await st.put(sgt);
+  for (const d of all) await detStore.put({ ...d, sightingId: assignments.get(d.id) });
 }
 
 export function newId(): string {
