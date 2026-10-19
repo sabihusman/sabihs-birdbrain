@@ -6,9 +6,9 @@ the device, using the BirdNET V2.4 neural network running in TensorFlow.js
 inside a Web Worker. It records, re-analyses, explains its own identifications,
 looks species up, maps where you heard them, and works offline once installed.
 
-Live app: Vercel (`*.vercel.app`, connected by Sabih) with GitHub Pages at
-**https://sabihusman.github.io/sabihs-birdbrain/** kept as a fallback until the
-Vercel deployment is verified. API: `https://bird-brain.duckdns.org` (`server/`).
+Live app: **https://sabihs-birdbrain.vercel.app** (verified 2026-10-19). GitHub
+Pages at https://sabihusman.github.io/sabihs-birdbrain/ stays published as a
+fallback for now. API: `https://bird-brain.duckdns.org` (`server/`).
 
 | Listen (light) | Listen (dark) | Species | Map |
 | --- | --- | --- | --- |
