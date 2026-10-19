@@ -7,10 +7,14 @@ import { mountApp } from './ui/app';
 import { registerPwa } from './pwa';
 import { ApiClient } from './api/client';
 import { API_BASE_URL } from './api/config';
+import { isMember } from './app/access';
 
 const baseUrl = import.meta.env.BASE_URL;
 const controller = new AppController(baseUrl);
 const api = new ApiClient(API_BASE_URL);
+// Species clips are collected only while an approved member is signed in (decided from the cached session, so it works offline).
+controller.setClipsEnabled(isMember(api.user));
+api.on('change', (user) => controller.setClipsEnabled(isMember(user)));
 mountApp(document.getElementById('app')!, controller, api);
 void api.refresh();
 registerPwa((notice) => controller.emit('notice', notice));

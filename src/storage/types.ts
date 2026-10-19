@@ -50,3 +50,27 @@ export interface WikiCacheEntry {
   fetchedAt: number;
   data: unknown;
 }
+
+/**
+ * One saved clip per species (member feature). Raw, unfiltered 16-bit WAV at
+ * 48 kHz, at most 10 s, centred on the detection window(s). Replaced only by a
+ * clip with a higher confidence. Kept on the device; never uploaded.
+ */
+export interface ClipRecord {
+  /** Scientific name; one clip per species. */
+  scientific: string;
+  common: string;
+  blob: Blob;
+  sampleRate: number;
+  durationSec: number;
+  confidence: number;
+  /** Epoch ms of the detection the clip is centred on. */
+  time: number;
+  savedAt: number;
+  lat: number | null;
+  lon: number | null;
+  accuracy: number | null;
+  source: DetectionSource;
+  recordingId: string | null;
+}
+

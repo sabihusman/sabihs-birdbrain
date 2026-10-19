@@ -101,6 +101,12 @@ The name is always shown next to the colour.
   3 s clip per detection.
 - **Location sharing:** every located detection shows coordinates and a
   10-character Plus Code with copy buttons and an "Open in Google Maps" link.
+- **Species ID card and sighting history (members):** on each species page, a
+  card with the most recent sighting (Plus Code, coordinates, mini map, Google
+  Maps link) and a play button for the species' saved clip; tap it for the
+  full sighting history with a heat map / pin map of your own detections. One
+  raw 10-second clip is kept per species and replaced only by a more confident
+  detection. Free users see a short "Sign in to unlock" note instead.
 - **Accounts (optional):** email + password + emailed code; approved members
   can ask AI questions about a species, answered only from its Wikipedia
   summary; Sabih approves members on an admin page.
@@ -141,6 +147,14 @@ What does leave the phone, and why:
   answer from that text alone; the answer comes back as plain text with the
   source link. Questions are not logged. There are daily limits per person and
   overall.
+
+Member features keep everything on the device too: the species ID card,
+sighting history, heat map and the one saved clip per species are read from
+IndexedDB and are never uploaded. The heat map in particular is sensitive
+location data (it shows where you have been listening); it is built from your
+own detections only, is not part of the exports, and signing out hides it
+without deleting anything. Whether you are a member is decided from the
+session cached on the device, so no request is made to check it.
 
 No analytics, no ads, no third-party trackers. The API's design and its review
 against the OWASP LLM Top 10 and ASVS are in [docs/SECURITY.md](docs/SECURITY.md).

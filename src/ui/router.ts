@@ -4,6 +4,7 @@ export type Route =
   | { name: 'recording'; id: string }
   | { name: 'species' }
   | { name: 'species-detail'; scientific: string }
+  | { name: 'species-history'; scientific: string }
   | { name: 'map' }
   | { name: 'settings' }
   | { name: 'admin' }
@@ -16,8 +17,11 @@ export function parseHash(hash: string): Route {
   switch (head) {
     case 'recordings':
       return tail ? { name: 'recording', id: tail } : { name: 'recordings' };
-    case 'species':
-      return tail ? { name: 'species-detail', scientific: tail } : { name: 'species' };
+    case 'species': {
+      if (!tail) return { name: 'species' };
+      if (rest.length >= 2 && rest[rest.length - 1] === 'history') return { name: 'species-history', scientific: rest.slice(0, -1).map(decodeURIComponent).join('/') };
+      return { name: 'species-detail', scientific: tail };
+    }
     case 'map':
       return { name: 'map' };
     case 'settings':
@@ -43,6 +47,8 @@ export function hrefFor(route: Route): string {
       return '#/species';
     case 'species-detail':
       return `#/species/${encodeURIComponent(route.scientific)}`;
+    case 'species-history':
+      return `#/species/${encodeURIComponent(route.scientific)}/history`;
     case 'map':
       return '#/map';
     case 'settings':
