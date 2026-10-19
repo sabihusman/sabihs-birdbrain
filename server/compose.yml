@@ -2,7 +2,8 @@
 # Secrets come from /opt/birdbrain/.env (root:root, mode 600); nothing here is secret.
 services:
   api:
-    image: ghcr.io/sabihusman/birdbrain-api:latest
+    # Pin with BIRDBRAIN_IMAGE_TAG in /opt/birdbrain/.env (compose reads it from there), e.g. sha-1cc01d4.
+    image: ghcr.io/sabihusman/birdbrain-api:${BIRDBRAIN_IMAGE_TAG:-latest}
     container_name: birdbrain-api
     restart: unless-stopped
     env_file: /opt/birdbrain/.env

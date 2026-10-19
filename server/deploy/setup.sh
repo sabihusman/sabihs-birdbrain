@@ -24,6 +24,9 @@ NGINX_AVAIL=/etc/nginx/sites-available/birdbrain
 NGINX_ENABLED=/etc/nginx/sites-enabled/birdbrain
 ACME_WEBROOT=/var/www/acme
 UNIT_DIR=/etc/systemd/system
+LEGO_ENV=/etc/lego/lego-birdbrain.env
+SENTINEL_LEGO_ENV_DEFAULT=/etc/lego/lego-sentinel.env
+LEGO_BIN_DEFAULT=/usr/local/bin/lego
 DEPLOY_USER=birdbrain-deploy
 DEPLOY_SCRIPT=/usr/local/sbin/birdbrain-deploy.sh
 SUDOERS_FILE=/etc/sudoers.d/birdbrain-deploy
@@ -63,14 +66,15 @@ need_conf() {
   if [ -f "$CONF" ]; then
     # shellcheck disable=SC1090
     . "$CONF"
-  elif [ "$DRY_RUN" = 0 ]; then
-    echo "setup.conf not found ($CONF). Copy setup.conf.example and fill it from Sentinel's unit." >&2; exit 78
   fi
-  for v in LEGO_BIN LEGO_PATH ACME_EMAIL; do
-    if [ -z "${!v:-}" ]; then
-      if [ "$DRY_RUN" = 1 ]; then printf '   [dry-run] %s is not set in setup.conf; using placeholder\n' "$v"; printf -v "$v" '%s' "<$v>"; else echo "setup.conf: $v is empty" >&2; exit 78; fi
-    fi
-  done
+  SENTINEL_LEGO_ENV="${SENTINEL_LEGO_ENV:-$SENTINEL_LEGO_ENV_DEFAULT}"
+  LEGO_BIN="${LEGO_BIN:-$LEGO_BIN_DEFAULT}"
+}
+# LEGO_PATH as Sentinel's env file defines it (certificates live under $LEGO_PATH/certificates/).
+lego_path() {
+  local f="$LEGO_ENV"; [ -f "$f" ] || f="$SENTINEL_LEGO_ENV"
+  local v; v="$(grep -E '^LEGO_PATH=' "$f" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"'"'"' ')"
+  echo "${v:-/etc/lego}"
 }
 nginx_apply() {
   # The only way this script ever touches the running Nginx.
@@ -113,18 +117,33 @@ step3_nginx_http() {
 }
 
 step4_cert() {
-  log "Step 4/8: issue the certificate with lego (HTTP-01 via $ACME_WEBROOT), as Sentinel's was"
+  log "Step 4/8: $LEGO_ENV (copy of Sentinel's env with only LEGO_DOMAINS changed), then lego run"
   need_conf
-  if [ -e "$LEGO_PATH/certificates/$DOMAIN.crt" ]; then echo "   certificate already exists; skipping"; return; fi
-  run "$LEGO_BIN" --accept-tos --email "$ACME_EMAIL" --path "$LEGO_PATH" --http --http.webroot "$ACME_WEBROOT" --domains "$DOMAIN" run
-  echo "   rollback: lego --path $LEGO_PATH --domains $DOMAIN revoke  (optional; or just delete $LEGO_PATH/certificates/$DOMAIN.*)"
+  if [ ! -f "$SENTINEL_LEGO_ENV" ] && [ "$DRY_RUN" = 0 ]; then echo "$SENTINEL_LEGO_ENV not found; set SENTINEL_LEGO_ENV in setup.conf" >&2; exit 78; fi
+  if [ -e "$LEGO_ENV" ]; then
+    echo "   $LEGO_ENV already exists; leaving it alone"
+  else
+    if [ "$DRY_RUN" = 1 ]; then
+      echo "   [dry-run] sed 's/^LEGO_DOMAINS=.*/LEGO_DOMAINS=$DOMAIN/' $SENTINEL_LEGO_ENV > $LEGO_ENV (mode 0600; refuse if no LEGO_DOMAINS line)"
+    else
+      grep -qE '^LEGO_DOMAINS=' "$SENTINEL_LEGO_ENV" || { echo "$SENTINEL_LEGO_ENV has no LEGO_DOMAINS line; compare by hand" >&2; exit 78; }
+      sed "s/^LEGO_DOMAINS=.*/LEGO_DOMAINS=$DOMAIN/" "$SENTINEL_LEGO_ENV" | write_file "$LEGO_ENV" 0600
+      echo "   diff vs Sentinel (only LEGO_DOMAINS should differ):"; diff "$SENTINEL_LEGO_ENV" "$LEGO_ENV" || true
+    fi
+  fi
+  local lp; lp="$(lego_path)"
+  if [ -e "$lp/certificates/$DOMAIN.crt" ]; then echo "   certificate already exists; skipping"; return; fi
+  if [ "$DRY_RUN" = 1 ]; then echo "   [dry-run] set -a; . $LEGO_ENV; set +a; $LEGO_BIN run"; else ( set -a; . "$LEGO_ENV"; set +a; run "$LEGO_BIN" run ); fi
+  echo "   rollback: rm $LEGO_ENV; delete $lp/certificates/$DOMAIN.* (or lego revoke)"
 }
 
 step5_renew_units() {
-  log "Step 5/8: lego-renew-birdbrain.service/.timer (copied from Sentinel's, domain changed), run once"
+  log "Step 5/8: lego-renew-birdbrain.service/.timer (Sentinel's pattern: EnvironmentFile + lego run + reload), run once"
   need_conf
   refuse_if_exists "$UNIT_DIR/lego-renew-birdbrain.service" "$UNIT_DIR/lego-renew-birdbrain.timer"
-  sed -e "s#__LEGO_BIN__#$LEGO_BIN#g" -e "s#__LEGO_PATH__#$LEGO_PATH#g" -e "s#__ACME_EMAIL__#$ACME_EMAIL#g" "$HERE/systemd/lego-renew-birdbrain.service" | write_file "$UNIT_DIR/lego-renew-birdbrain.service" 0644
+  [ -f "$LEGO_ENV" ] || [ "$DRY_RUN" = 1 ] || { echo "$LEGO_ENV missing; run step 4 first" >&2; exit 78; }
+  if [ -f "$UNIT_DIR/lego-renew-sentinel.service" ]; then echo "   compare with Sentinel's unit:"; diff "$UNIT_DIR/lego-renew-sentinel.service" "$HERE/systemd/lego-renew-birdbrain.service" || true; fi
+  write_file "$UNIT_DIR/lego-renew-birdbrain.service" 0644 < "$HERE/systemd/lego-renew-birdbrain.service"
   write_file "$UNIT_DIR/lego-renew-birdbrain.timer" 0644 < "$HERE/systemd/lego-renew-birdbrain.timer"
   run systemctl daemon-reload
   run systemctl enable --now lego-renew-birdbrain.timer
@@ -136,8 +155,9 @@ step5_renew_units() {
 step6_nginx_full() {
   log "Step 6/8: Nginx port-443 block (proxy to 127.0.0.1:8010, limits, headers), nginx -t, reload"
   need_conf
-  [ -e "$LEGO_PATH/certificates/$DOMAIN.crt" ] || [ "$DRY_RUN" = 1 ] || { echo "certificate missing; run step 4 first" >&2; exit 1; }
-  sed -e "s#__LEGO_PATH__#$LEGO_PATH#g" "$HERE/nginx/birdbrain" | write_file "$NGINX_AVAIL" 0644 stage1-ok
+  local lp; lp="$(lego_path)"
+  [ -e "$lp/certificates/$DOMAIN.crt" ] || [ "$DRY_RUN" = 1 ] || { echo "certificate missing ($lp/certificates/$DOMAIN.crt); run step 4 first" >&2; exit 1; }
+  sed -e "s#__LEGO_PATH__#$lp#g" "$HERE/nginx/birdbrain" | write_file "$NGINX_AVAIL" 0644 stage1-ok
   [ -L "$NGINX_ENABLED" ] || run ln -s "$NGINX_AVAIL" "$NGINX_ENABLED"
   nginx_apply
   echo "   rollback: reinstall nginx/birdbrain.http-only over $NGINX_AVAIL (or remove both files), nginx -t, reload"
@@ -151,6 +171,7 @@ step7_deploy_user() {
   fi
   refuse_if_exists "$DEPLOY_SCRIPT" "$SUDOERS_FILE"
   if ! id "$DEPLOY_USER" >/dev/null 2>&1; then run useradd --system --create-home --shell /bin/sh "$DEPLOY_USER"; else echo "   user exists"; fi
+  if id -nG "$DEPLOY_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then echo "REFUSING: $DEPLOY_USER is in the docker group (it must only reach Docker via the sudo rule)" >&2; exit 73; fi
   run install -o root -g root -m 0750 "$HERE/birdbrain-deploy.sh" "$DEPLOY_SCRIPT"
   run visudo -cf "$HERE/sudoers-birdbrain-deploy"
   run install -o root -g root -m 0440 "$HERE/sudoers-birdbrain-deploy" "$SUDOERS_FILE"
@@ -166,6 +187,7 @@ step7_deploy_user() {
 step8_container() {
   log "Step 8/8: pull the image and start the container (127.0.0.1:8010), wait for /health"
   [ -s "$ENV_FILE" ] || [ "$DRY_RUN" = 1 ] || { echo "$ENV_FILE is empty; add the variables first" >&2; exit 78; }
+  grep -qE '^BIRDBRAIN_IMAGE_TAG=' "$ENV_FILE" 2>/dev/null && echo "   image tag: $(grep -E '^BIRDBRAIN_IMAGE_TAG=' "$ENV_FILE" | cut -d= -f2)" || echo "   note: BIRDBRAIN_IMAGE_TAG not set in $ENV_FILE; compose falls back to :latest"
   ( cd "$APP_DIR" && run docker compose pull api && run docker compose up -d api )
   if [ "$DRY_RUN" = 0 ]; then
     for _ in $(seq 1 30); do curl -fsS --max-time 3 http://127.0.0.1:8010/health >/dev/null 2>&1 && { echo "   healthy"; break; }; sleep 2; done

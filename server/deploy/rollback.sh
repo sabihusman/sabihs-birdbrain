@@ -31,7 +31,8 @@ run systemctl disable --now lego-renew-birdbrain.timer
 run rm -f /etc/systemd/system/lego-renew-birdbrain.service /etc/systemd/system/lego-renew-birdbrain.timer
 run systemctl daemon-reload
 
-log "4. certificate: left in place (revoke/delete by hand under \$LEGO_PATH/certificates/bird-brain.duckdns.org.* if wanted)"
+log "4. lego env file (ours) removed; certificate left in place (delete by hand under <LEGO_PATH>/certificates/bird-brain.duckdns.org.* if wanted)"
+run rm -f /etc/lego/lego-birdbrain.env
 
 log "2. app dir"
 if [ "$PURGE" = 1 ]; then run rm -rf /opt/birdbrain; else echo "   keeping /opt/birdbrain (.env holds secrets); remove with --purge"; fi

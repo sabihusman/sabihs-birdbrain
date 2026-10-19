@@ -1,8 +1,5 @@
-# Copy to server/deploy/setup.conf on the server (or /opt/birdbrain/setup.conf) and fill in
-# from Sentinel's working configuration BEFORE running setup.sh:
-#   systemctl cat lego-renew-sentinel.service   -> lego binary path, --path value, --email value
-#   cat /etc/nginx/sites-available/sentinel     -> confirm the ACME webroot is /var/www/acme
-LEGO_BIN=/usr/local/bin/lego          # ExecStart binary in lego-renew-sentinel.service
-LEGO_PATH=/etc/lego                   # value of --path in that unit; certificates live under $LEGO_PATH/certificates/
-ACME_EMAIL=                           # value of --email in that unit
+# Copy to server/deploy/setup.conf (or /opt/birdbrain/setup.conf) before running setup.sh.
 DEPLOY_PUBKEY_FILE=                   # path to the CI public key (ssh-ed25519 ...) for the birdbrain-deploy user
+# Optional overrides (defaults match Sentinel's layout):
+# SENTINEL_LEGO_ENV=/etc/lego/lego-sentinel.env
+# LEGO_BIN=/usr/local/bin/lego

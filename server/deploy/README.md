@@ -9,11 +9,11 @@ reverse action listed next to it.
 | File | Purpose |
 | --- | --- |
 | `setup.sh` | Numbered steps 1-8 (preflight, /opt/birdbrain + .env, Nginx port-80 block, lego certificate, renew service/timer, Nginx port-443 block, deploy user, container). `--dry-run` prints every command and writes nothing; `--only N` / `--from N` to resume. Refuses to overwrite any target file it did not create (the stage-1 Nginx file is the one exception, recognised by its `# birdbrain-stage: http-only` marker). Only ever `nginx -t` then `systemctl reload nginx`. |
-| `setup.conf.example` | Copy to `setup.conf`; fill `LEGO_BIN`, `LEGO_PATH`, `ACME_EMAIL` from `systemctl cat lego-renew-sentinel.service`, and `DEPLOY_PUBKEY_FILE`. The script refuses steps 4-7 without them. |
+| `setup.conf.example` | Copy to `setup.conf`; set `DEPLOY_PUBKEY_FILE` (step 7 refuses without it). Lego settings are not configured here: step 4 copies `/etc/lego/lego-sentinel.env` to `/etc/lego/lego-birdbrain.env` changing only `LEGO_DOMAINS`, exactly Sentinel's pattern. |
 | `rollback.sh` | Reverse order: container, deploy user, Nginx site (checked for our marker), renewal units. Keeps `.env`, the data volumes and the certificate unless `--purge`. |
 | `verify.sh` | `baseline` records the status codes of `/`, `/vault`, `/wellmark/` and `sabih-sentinel.duckdns.org`; `check` diffs them, checks Birdbrain's `/health`, the HTTP→HTTPS redirect and security headers, and that port 8010 is **not** reachable on the public address (curl to `95.216.159.93:8010` must get no response; `ss -tln` must show only `127.0.0.1:8010`). Run `baseline` before step 1 and `check` after step 8. |
 | `nginx/birdbrain.http-only`, `nginx/birdbrain` | Stage-1 (ACME + redirect) and final (proxy to `127.0.0.1:8010`, `limit_req` 6 r/min burst 5 → 429, `limit_conn` 3, 16 KB bodies, HSTS/nosniff/no-referrer, no CORS) site files. `__LEGO_PATH__` is substituted from `setup.conf`. |
-| `systemd/lego-renew-birdbrain.service`, `.timer` | Copy of Sentinel's renewal pattern with only the domain changed; placeholders filled from `setup.conf`. Compare the generated `ExecStart` with Sentinel's before step 5 (`lego` flags may differ by version). |
+| `systemd/lego-renew-birdbrain.service`, `.timer` | Sentinel's pattern: `EnvironmentFile=/etc/lego/lego-birdbrain.env`, `ExecStart=/usr/local/bin/lego run`, `ExecStartPost` runs `nginx -t && systemctl reload nginx`. Step 5 prints a diff against `lego-renew-sentinel.service` before installing. |
 | `birdbrain-deploy.sh`, `sudoers-birdbrain-deploy`, `authorized_keys.example` | The forced-command deploy user (section 1). |
 
 Suggested order: `verify.sh baseline` → `setup.sh --dry-run` → `setup.sh` → add
@@ -76,10 +76,12 @@ Docker stores it in `/root/.docker/config.json` (make sure it is mode 600 and
 not in any backup you share). Rotate the token when it expires and never put it
 in `.env` or the repository. Everything else is unchanged.
 
-**Pinning.** `compose.yml` tracks `:latest`; every push also tags
-`sha-<commit>`, so to roll back or pin, edit the `image:` line to a `sha-` tag
-and run the deploy script. Digest pinning (`@sha256:...`) is the stricter
-option once the image is stable.
+**Pinning.** `compose.yml` uses `ghcr.io/sabihusman/birdbrain-api:${BIRDBRAIN_IMAGE_TAG:-latest}`;
+compose reads that variable from `/opt/birdbrain/.env`, so pin with
+`BIRDBRAIN_IMAGE_TAG=sha-1cc01d4` there. The forced-command deploy pulls whatever
+tag is pinned, so promoting a new build means editing that one line (or setting
+`latest`) and running the deploy script. Digest pinning (`@sha256:...`) is the
+stricter option once the image is stable.
 
 ## 4. Daily backup
 
@@ -90,7 +92,6 @@ volume). Install it as a root cron job; see the comment in the script.
 ## 5. Manual deploy / rollback of the app itself
 
 - Manual deploy: `sudo /usr/local/sbin/birdbrain-deploy.sh` as root.
-- Roll back to a previous image: edit `/opt/birdbrain/compose.yml` to pin
-  `image: ghcr.io/sabihusman/birdbrain-api:sha-<previous>` and run the deploy
-  script; the SQLite schema is additive, so older images keep working with a
+- Roll back to a previous image: set `BIRDBRAIN_IMAGE_TAG=sha-<previous>` in
+  `/opt/birdbrain/.env` and run the deploy script; the SQLite schema is additive, so older images keep working with a
   newer database.

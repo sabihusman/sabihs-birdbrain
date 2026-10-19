@@ -39,6 +39,10 @@ case "$MODE" in
       l="$(ss -tln 2>/dev/null | awk '$4 ~ /:8010$/ {print $4}' | tr '\n' ' ')"; echo "   listeners on 8010: ${l:-none}"
       case "$l" in *0.0.0.0:8010*|*\[::\]:8010*|*\*:8010*) echo "   BAD: 8010 bound to a public address"; rc=1 ;; esac
     fi
+    if id birdbrain-deploy >/dev/null 2>&1; then
+      echo "== deploy user"
+      if id -nG birdbrain-deploy | tr ' ' '\n' | grep -qx docker; then echo "   BAD: birdbrain-deploy is in the docker group"; rc=1; else echo "   birdbrain-deploy not in docker group (good)"; fi
+    fi
     [ "$rc" = 0 ] && echo "== OK" || echo "== PROBLEMS FOUND"; exit $rc ;;
   *) echo "usage: $0 baseline|check" >&2; exit 64 ;;
 esac
