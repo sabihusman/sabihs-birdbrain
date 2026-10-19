@@ -687,3 +687,42 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone (swipe, safe areas with the dock, real
   microphone states); the "paused" state needs a real backgrounding.
 
+
+## 41. Species ticks: on-device "spotted" marks and the "Spotted by me" chip
+
+- **Decision:** on the Species tab every species with at least one sighting
+  on this device shows a tick (`✓`, accent colour, a 48 px button beside the
+  chip with the words "spotted by you" in its label). Tapping the tick opens
+  that species' ID card for members (the species page, scrolled to and
+  focused on the card: the card is where the ID card lives today, and tapping
+  it still opens the sighting history) and, for everyone else, shows the
+  same one-line "Sign in to unlock the species ID card." note under the row
+  (`lockedNoteEl`, split out of `member-gate.ts` so both places render it
+  the same way). A pressable "✓ Spotted by me · N" chip above the list keeps
+  only spotted species; the choice is remembered on the device
+  (`speciesSpottedOnly`).
+- **Where the set comes from:** `listSightedSpecies()` walks the unique keys
+  of the sightings store's `by-scientific` index (`openKeyCursor(null,
+  'nextunique')`), so no sighting rows are loaded however many there are.
+  `src/species/spotted.ts` turns that into a `Set` and holds the pure filter;
+  the view rebuilds the set on `detections-changed` (new detections, deleted
+  recordings, "clear all data") and re-renders on session changes. Nothing is
+  fetched: the ticks are decided from IndexedDB and the cached session only.
+- **Scope of the chip:** while it is on, the local / "Show all species" scope
+  is bypassed and the line reads "N species spotted by you · M total" with a
+  note saying so. A bird you heard on a trip is still one you spotted; hiding
+  it because it is not expected at home would make the list lie.
+- **Alternatives:** a tick inside the chip link (`<a>`) would nest a button in
+  a link, which is invalid and would make the chip tap ambiguous; a separate
+  "my species" route would duplicate the list, search and local toggle; a
+  persisted "spotted" flag on the species would drift from the sightings
+  when recordings are deleted. Counting per species (`by-scientific` count)
+  was not needed: the tick is binary and the species page has the numbers.
+- **Tests:** `tests/spotted.test.ts` (fake-indexeddb: unique keys across
+  repeated and separate sightings; the filter on/off, count, empty names).
+  Playwright: the free-user import test checks the tick, the chip narrowing
+  the list to ticked rows only, the count line and the inline sign-in note;
+  the member test opens the ID card from the tick and checks it is focused.
+- **Not verified:** on a phone; the tick row beside a long name at 320 px is
+  not covered by the width test, which runs with no sightings (the CSS keeps
+  the row from wrapping: the chip shrinks, the 48 px tick does not).

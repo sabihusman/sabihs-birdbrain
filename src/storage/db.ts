@@ -140,6 +140,23 @@ export async function listSightingsForSpecies(scientific: string): Promise<Sight
   return all.sort((a, b) => a.firstTime - b.firstTime);
 }
 
+/**
+ * Scientific names with at least one sighting, read from the unique keys of
+ * the `by-scientific` index (no sighting rows are loaded). Used for the
+ * "spotted" ticks on the Species tab.
+ */
+export async function listSightedSpecies(): Promise<string[]> {
+  const db = await getDB();
+  const index = db.transaction('sightings').store.index('by-scientific');
+  const out: string[] = [];
+  let cursor = await index.openKeyCursor(null, 'nextunique');
+  while (cursor) {
+    out.push(cursor.key);
+    cursor = await cursor.continue();
+  }
+  return out;
+}
+
 export async function countSightings(): Promise<number> {
   const db = await getDB();
   return db.count('sightings');

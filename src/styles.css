@@ -141,6 +141,19 @@ main.view { flex: 1; padding: var(--space-3) calc(var(--space-3) + var(--sar)) c
 .conf-text { font-size: var(--text-sm); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); }
 .chip-sub { font-size: 0.78rem; color: var(--muted); }
 .chip-list { display: flex; flex-direction: column; gap: 6px; }
+/* Species tab: a spotted species gets a tick beside its chip (DECISIONS.md #41). The chip keeps its width; the tick is a 48 px target. */
+.spotted-row { display: flex; flex-direction: column; gap: 4px; }
+.spotted-row > .row { gap: 6px; align-items: stretch; flex-wrap: nowrap; }
+.spotted-row .chip { flex: 1; min-width: 0; }
+.tick-btn { flex: none; width: 48px; min-height: 48px; border-radius: var(--radius-control); border: 1px solid var(--line); background: var(--surface-2); color: var(--accent); font-size: var(--text-lg); font-weight: var(--weight-bold); display: flex; align-items: center; justify-content: center; }
+.spotted-row .locked-note { margin: 0 0 4px; padding-left: 10px; }
+/* Filter chip: a pressable pill, 44 px tall, filled with the accent while on. */
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 16px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.filter-chip .tick { color: var(--accent); }
+.filter-chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.filter-chip[aria-pressed="true"] .tick { color: inherit; }
+.filter-chip-count { font-variant-numeric: tabular-nums; opacity: 0.85; }
+.filter-chip-count:not(:empty)::before { content: '·'; margin-right: 6px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 0.8rem; margin-top: 4px; }
 .legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .viz { position: relative; width: 100%; border-radius: var(--radius-control); overflow: hidden; background: var(--viz-bg); }
