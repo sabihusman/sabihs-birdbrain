@@ -10,6 +10,8 @@ import { hrefFor } from '../router';
 import { createMiniMap } from './map';
 import { askBox } from '../components/ask-box';
 import { locationBlock } from '../components/location-block';
+import { speciesIdCard } from '../components/species-id-card';
+import { isMember } from '../../app/access';
 
 const PAGE = 60;
 
@@ -62,9 +64,12 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const wikiBox = el('div', { 'data-testid': 'wiki' }, el('p', { class: 'muted' }, 'Loading Wikipedia summary…'));
     const ask = askBox(ctx.api, sp);
     disposers.push(ask.dispose);
+    const idCard = speciesIdCard(ctx, sp);
+    disposers.push(idCard.dispose);
     const myBox = el('div', null, el('p', { class: 'muted' }, 'Loading your detections…'));
     root.replaceChildren(
       el('section', { class: 'card' }, el('div', { class: 'row' }, el('span', { class: 'swatch', style: `background:${color.css};width:22px;height:22px`, 'aria-hidden': 'true' }), el('div', null, el('h2', { style: 'margin:0' }, sp.common), el('div', { class: 'muted', style: 'font-style:italic' }, sp.scientific))), el('p', { class: 'small muted' }, 'Colour used for this species everywhere in the app.')),
+      idCard.el,
       el('section', { class: 'card' }, wikiBox),
       ask.el,
       el('section', { class: 'card' }, el('h2', null, 'Your detections'), myBox),
@@ -138,19 +143,22 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
       if (rec) recList.appendChild(el('a', { class: 'list-item', href: hrefFor({ name: 'recording', id }) }, el('div', { class: 'title' }, rec.name), el('div', { class: 'small muted' }, fmtDateTime(rec.createdAt))));
     }
     const mapBox = el('div', { class: 'map mini' });
+    // Members get the latest location and map in the ID card above; free users keep them here.
+    const showLocation = !isMember(ctx.api.user);
     box.replaceChildren(el('div', null,
       el('dl', { class: 'kv' }, el('dt', null, 'Count'), el('dd', null, String(dets.length)), el('dt', null, 'First seen'), el('dd', null, fmtDateTime(first.time)), el('dt', null, 'Last seen'), el('dd', null, fmtDateTime(last.time)), el('dt', null, 'Best confidence'), el('dd', null, pct(best.confidence))),
-      located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located detection'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
+      !showLocation ? null : located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located detection'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
       recIds.length ? el('h3', null, 'Recordings') : null,
       recList,
     ));
-    if (located.length) {
+    if (showLocation && located.length) {
       requestAnimationFrame(() => disposers.push(createMiniMap(mapBox, located, controller)));
     }
   };
 
   build();
   disposers.push(controller.on('species-loaded', build));
+  disposers.push(ctx.api.on('change', build));
   return {
     el: root,
     dispose() {

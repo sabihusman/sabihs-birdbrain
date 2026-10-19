@@ -3,9 +3,8 @@
 Sabih’s Birdbrain is a mobile-first PWA that identifies bird sounds on-device
 with BirdNET V2.4 running in TensorFlow.js inside a Web Worker. Audio never
 leaves the phone. Front end on Vercel at `https://sabihs-birdbrain.vercel.app`
-(base path `/`; verified live with the strict CSP on 2026-10-19). GitHub Pages
-(`https://sabihusman.github.io/sabihs-birdbrain/`, base `/sabihs-birdbrain/`) is
-still published as a fallback until Sabih turns it off. Optional back end (`server/`) at
+(base path `/`; verified live with the strict CSP on 2026-10-19; the former
+GitHub Pages site was switched off the same day). Optional back end (`server/`) at
 `https://bird-brain.duckdns.org`: accounts with an emailed login code, admin
 approval, and member-only "Ask about this bird" answered by Gemini from the
 Wikipedia summary.
@@ -34,12 +33,24 @@ Key modules:
   `src/model/protocol.ts`. Jobs are serialised; `cancel` is handled out of band.
 - `src/app/controller.ts` — session state, persistence, wake lock, visibility,
   auto-save clips, demo clip. Views subscribe to its events.
+  `prepareForAnalysis()` applies the low-cut to clips before inference.
+- `src/audio/engine.ts` — two worklet taps: raw (recording, viz, conditions)
+  and analysis (through a 150 Hz `BiquadFilterNode` when `lowCut` is on).
+  Saved audio is always raw. `src/audio/mic-constraints.ts` classifies
+  `track.getSettings()` into the "Voice processing" status; `highpass.ts`,
+  `conditions.ts`, `ring-buffer.ts` hold the filter, the indicator thresholds
+  and the raw sample ring (see DECISIONS.md #24–26).
 - `src/app/settings.ts` — localStorage settings; `src/app/location.ts` — GPS /
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.
 - `src/species/colors.ts` — deterministic OKLCH species colours;
   `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache.
 - `src/export/` — CSV / GeoJSON.
+- Member-only, on-device: `src/app/access.ts` (gating from the cached
+  session), `src/species/clips.ts` (one raw clip per species, replace-if-higher,
+  10 s cap), `src/ui/components/{member-gate,species-id-card,clip-player}.ts`,
+  `src/ui/views/species-history.ts` (list + `leaflet.heat` / pins map). DB
+  version 2 adds the `clips` store. See DECISIONS.md #27–29.
 - `src/api/client.ts` — bearer-token client for the API (`src/api/config.ts`
   holds the base URL from `VITE_API_BASE_URL`); `src/ui/views/account.ts`,
   `admin.ts`, `src/ui/components/ask-box.ts`, `location-block.ts`,
@@ -93,19 +104,19 @@ docs/                         BUILD_SPEC.md (original brief), SOURCES.md, screen
 
 ```
 npm install
-npm run dev          # http://localhost:5173/sabihs-birdbrain/
+npm run dev          # http://localhost:5173/
 npm run typecheck    # tsconfig.json (DOM) + tsconfig.worker.json (WebWorker lib)
 npm run lint
 npm test             # vitest
 npm run build        # typecheck + vite build → dist/ (includes sw.js)
-npm run preview      # serve dist/ at http://localhost:4173/sabihs-birdbrain/
+npm run preview      # serve dist/ at http://localhost:4173/
 npm run test:e2e     # playwright (starts preview itself); needs Chromium installed
 npx tsx scripts/validate-model.ts <modelDir> real <file.wav> [windows]   # Node sanity check
 ```
 
-Deploy: Vercel builds from the repo with base `/` (Sabih connected it);
-`.github/workflows/deploy.yml` still publishes to GitHub Pages with
-`VITE_BASE_PATH=/sabihs-birdbrain/`. `ci.yml` runs lint, typecheck, unit tests,
+Deploy: Vercel builds from the repo with base `/` (Sabih connected it); the
+GitHub Pages workflow is gone (Pages switched off 2026-10-19). `VITE_BASE_PATH`
+remains as a generic override for serving under a sub-path. `ci.yml` runs lint, typecheck, unit tests,
 build and the e2e test on every push. `server-image.yml` tests the API, pushes
 the image to GHCR, and on `main` triggers the server's forced-command deploy
 over SSH (secrets `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`). The CSP in

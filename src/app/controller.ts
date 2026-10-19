@@ -1,5 +1,10 @@
 import { AudioEngine, describeMicError, type EngineState } from '../audio/engine';
 import { Recorder } from '../audio/recorder';
+import { ConditionsMeter, type ConditionsAssessment } from '../audio/conditions';
+import { renderLowCut } from '../audio/highpass';
+import type { VoiceProcessingReport } from '../audio/mic-constraints';
+import { SampleRing } from '../audio/ring-buffer';
+import { CLIP_MAX_SECONDS, clipRange, saveClipIfBetter, shouldReplaceClip, type ClipCandidate } from '../species/clips';
 import { decodeWav, encodeWav, toMono } from '../audio/wav';
 import { resampleLinear } from '../audio/resample';
 import { LABELS_JSON, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
@@ -7,8 +12,8 @@ import { parseLabels, type Species } from '../model/labels';
 import { selectDetections, type Score } from '../model/postprocess';
 import { InferenceClient, type ModelStatus } from '../model/worker-client';
 import { Emitter } from '../shared/emitter';
-import { addDetections, newId, putRecording } from '../storage/db';
-import type { DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
+import { addDetections, getClip, newId, putRecording } from '../storage/db';
+import type { ClipRecord, DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
 import { LocationManager, type LocationState } from './location';
 import { SettingsStore, type Settings } from './settings';
 
@@ -65,6 +70,21 @@ interface ControllerEvents extends Record<string, unknown> {
   stage: PipelineStage;
   'species-loaded': Species[];
   'detections-changed': undefined;
+  /** Listening conditions from the raw microphone audio, about once a second. */
+  conditions: ConditionsAssessment;
+  /** Voice-processing settings the browser applied to the microphone track. */
+  mic: VoiceProcessingReport;
+  /** A species clip was saved or replaced. */
+  'clip-saved': ClipRecord;
+}
+
+/** Seconds of raw live audio kept so a species clip can be centred on its detection window. */
+const LIVE_RING_SECONDS = 24;
+
+interface PendingLiveClip {
+  candidate: ClipCandidate;
+  /** Detection window start, in session samples. */
+  offsetSamples: number;
 }
 
 /** Orchestrates microphone capture, inference, persistence and device APIs. */
@@ -85,11 +105,16 @@ export class AppController extends Emitter<ControllerEvents> {
   private lastAutoClip = new Map<string, number>();
   private geoCount = 0;
   private modelReady = false;
+  private conditions = new ConditionsMeter(SAMPLE_RATE, (a) => this.emit('conditions', a));
+  /** Raw (unfiltered) live audio for species clips; member feature, see setClipsEnabled. */
+  private liveRing = new SampleRing(SAMPLE_RATE * LIVE_RING_SECONDS);
+  private pendingClips = new Map<string, PendingLiveClip>();
+  private clipsEnabled = false;
 
   constructor(readonly baseUrl: string) {
     super();
     this.location = new LocationManager(this.settings);
-    this.engine = new AudioEngine(`${baseUrl}worklet/capture-processor.js`, this.settings.get().overlapSeconds);
+    this.engine = new AudioEngine(`${baseUrl}worklet/capture-processor.js`, this.settings.get().overlapSeconds, this.settings.get().lowCut);
     this.inference.on('status', (s) => {
       this.modelReady = s.state === 'ready';
       this.emit('model', s);
@@ -98,7 +123,8 @@ export class AppController extends Emitter<ControllerEvents> {
     this.engine.on('state', (s) => this.emit('engine', s));
     this.engine.on('chunk', (c) => this.onChunk(c));
     this.engine.on('level', (l) => this.emit('level', l));
-    this.engine.on('window', (w) => void this.onWindow(w.audio, w.offsetSamples));
+    this.engine.on('window', (w) => void this.onWindow(w.audio, w.raw, w.offsetSamples));
+    this.engine.on('mic', (r) => this.emit('mic', r));
     this.engine.on('error', (text) => this.emit('notice', { kind: 'error', text }));
     this.location.on('change', (l) => {
       this.emit('location', l);
@@ -152,7 +178,27 @@ export class AppController extends Emitter<ControllerEvents> {
 
   private onSettings(s: Settings): void {
     this.engine.setOverlap(s.overlapSeconds);
+    this.engine.setLowCut(s.lowCut);
     void this.pushGeo();
+  }
+
+  /** Last known microphone voice-processing report ('unknown' until a session has started). */
+  getMicReport(): VoiceProcessingReport {
+    return this.engine.getMicReport();
+  }
+
+  /** Latest conditions assessment of the current session, if any. */
+  getConditions(): ConditionsAssessment | null {
+    return this.conditions.current;
+  }
+
+  /**
+   * Apply the same low-cut the live path uses to a clip that is about to be
+   * analysed (import, re-analyse, demo, "Why this ID"). Returns the input
+   * untouched when the setting is off. Never used for audio that gets saved.
+   */
+  async prepareForAnalysis(audio: Float32Array): Promise<Float32Array> {
+    return this.settings.get().lowCut ? renderLowCut(audio, SAMPLE_RATE) : audio;
   }
 
   private async pushGeo(): Promise<void> {
@@ -182,6 +228,9 @@ export class AppController extends Emitter<ControllerEvents> {
     this.sessionId = newId();
     this.sessionStartedAt = Date.now();
     this.windowCounter = 0;
+    this.conditions.reset();
+    this.liveRing.reset();
+    this.pendingClips.clear();
     this.stats = { listening: true, startedAt: this.sessionStartedAt, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: this.engine.contextSampleRate };
     this.emit('stats', this.stats);
     this.timer = window.setInterval(() => {
@@ -194,6 +243,7 @@ export class AppController extends Emitter<ControllerEvents> {
 
   async stopListening(): Promise<void> {
     await this.engine.stop();
+    await this.flushPendingClips(true);
     if (this.timer != null) {
       clearInterval(this.timer);
       this.timer = null;
@@ -212,6 +262,11 @@ export class AppController extends Emitter<ControllerEvents> {
     this.emit('stage', 'mic');
     if (this.engine.contextSampleRate !== SAMPLE_RATE) this.emit('stage', 'resample');
     this.emit('chunk', chunk);
+    this.conditions.push(chunk);
+    if (this.clipsEnabled) {
+      this.liveRing.push(chunk);
+      if (this.pendingClips.size) void this.flushPendingClips(false);
+    }
     this.recorder?.push(chunk);
     if (this.recorder?.full) {
       this.emit('notice', { kind: 'warn', text: 'Recording reached the 10 minute limit and was saved.' });
@@ -219,14 +274,15 @@ export class AppController extends Emitter<ControllerEvents> {
     }
   }
 
-  private async onWindow(audio: Float32Array, offsetSamples: number): Promise<void> {
+  private async onWindow(audio: Float32Array, raw: Float32Array | null, offsetSamples: number): Promise<void> {
     this.emit('stage', 'window');
     if (!this.modelReady || this.inference.busy) {
       this.stats = { ...this.stats, dropped: this.stats.dropped + 1 };
       return;
     }
     const s = this.settings.get();
-    const copy = s.autoSaveClips ? audio.slice() : null;
+    // Auto-save clips keep the raw (unfiltered) audio so they can be re-analysed later.
+    const copy = s.autoSaveClips ? raw : null;
     const windowId = ++this.windowCounter;
     const offsetSec = offsetSamples / SAMPLE_RATE;
     const time = (this.sessionStartedAt ?? Date.now()) + offsetSec * 1000;
@@ -277,6 +333,72 @@ export class AppController extends Emitter<ControllerEvents> {
     });
     await addDetections(records);
     this.emit('detections-changed', undefined);
+    if (this.clipsEnabled) {
+      const offsetSamples = Math.round(result.offsetSec * SAMPLE_RATE);
+      for (const r of records) await this.queueLiveClip(r, offsetSamples);
+    }
+  }
+
+  // Species clips (member feature) ------------------------------------------
+
+  /** Clips are only collected while an approved member is signed in. Existing clips are never deleted here. */
+  setClipsEnabled(on: boolean): void {
+    this.clipsEnabled = on;
+    if (!on) this.pendingClips.clear();
+  }
+
+  get clipsCollected(): boolean {
+    return this.clipsEnabled;
+  }
+
+  /**
+   * Remember a live detection whose clip should be cut once the audio after
+   * the window has arrived. A later, more confident detection of the same
+   * species replaces the pending one.
+   */
+  private async queueLiveClip(det: DetectionRecord, offsetSamples: number): Promise<void> {
+    const candidate: ClipCandidate = { scientific: det.scientific, common: det.common, confidence: det.confidence, time: det.time, lat: det.lat, lon: det.lon, accuracy: det.accuracy, source: 'live', recordingId: null };
+    const pending = this.pendingClips.get(det.scientific);
+    if (pending && !shouldReplaceClip(pending.candidate, candidate)) return;
+    if (!pending) {
+      const existing = await getClip(det.scientific).catch(() => undefined);
+      if (!shouldReplaceClip(existing, candidate)) return;
+    }
+    this.pendingClips.set(det.scientific, { candidate, offsetSamples });
+  }
+
+  /** Cut and save pending clips whose tail has arrived (or everything, when the session ends). */
+  private async flushPendingClips(final: boolean): Promise<void> {
+    const padSamples = Math.round(((CLIP_MAX_SECONDS - WINDOW_SECONDS) / 2) * SAMPLE_RATE);
+    for (const [scientific, p] of Array.from(this.pendingClips.entries())) {
+      const windowEnd = p.offsetSamples + WINDOW_SAMPLES;
+      if (!final && windowEnd + padSamples > this.liveRing.end) continue;
+      this.pendingClips.delete(scientific);
+      const available = { start: this.liveRing.start / SAMPLE_RATE, end: this.liveRing.end / SAMPLE_RATE };
+      const range = clipRange({ start: p.offsetSamples / SAMPLE_RATE, end: windowEnd / SAMPLE_RATE }, available);
+      const startSamples = Math.round(range.start * SAMPLE_RATE);
+      const length = Math.round((range.end - range.start) * SAMPLE_RATE);
+      const audio = this.liveRing.slice(startSamples, length);
+      if (!audio) continue;
+      try {
+        const saved = await saveClipIfBetter(p.candidate, audio);
+        if (saved) this.emit('clip-saved', saved);
+      } catch (e) {
+        this.emit('notice', { kind: 'warn', text: `Could not save the species clip: ${(e as Error).message}` });
+      }
+    }
+  }
+
+  /**
+   * Offer a clip cut from a recording or import (raw audio, already sliced to
+   * at most 10 s). Saved only when clips are enabled and the confidence beats
+   * the stored clip. Returns the saved record or null.
+   */
+  async offerClip(candidate: ClipCandidate, audio: Float32Array): Promise<ClipRecord | null> {
+    if (!this.clipsEnabled) return null;
+    const saved = await saveClipIfBetter(candidate, audio);
+    if (saved) this.emit('clip-saved', saved);
+    return saved;
   }
 
   // Recording -------------------------------------------------------------
@@ -366,7 +488,7 @@ export class AppController extends Emitter<ControllerEvents> {
     for (const c of chunksOf(padded, 2048)) this.emit('chunk', c);
     this.emit('stage', 'window');
     const s = this.settings.get();
-    const out = await this.inference.analyze(padded);
+    const out = await this.inference.analyze(await this.prepareForAnalysis(padded));
     const detections = selectDetections(out.scores, this.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird });
     this.emit('stage', 'result');
     const result: WindowResult = { windowId: ++this.windowCounter, time: Date.now(), offsetSec: 0, scores: out.scores, detections, inferMs: out.inferMs, geoApplied: false, ephemeral: true };
