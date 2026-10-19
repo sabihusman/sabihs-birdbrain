@@ -227,3 +227,39 @@ invite cap bounds growth to 10 per day).
   actually follows an injected instruction is not measured.
 - The CSP on the real Vercel edge (it was verified locally by serving the
   build with the exact `vercel.json` headers in Chromium; see `scripts/csp-check.mts`).
+
+## Account deletion (2026-10-19)
+
+`POST /v1/me/delete` (DECISIONS.md #51) deletes the account immediately and
+permanently: no grace period, no undo. Controls:
+
+- **Re-authentication.** The body must carry the password again and
+  `confirm: "DELETE"` (strict schema). The password is checked by Better
+  Auth's `signInEmail` (scrypt verify in the library, never a hash
+  comparison in app code); the session it creates is deleted with the rest.
+  Wrong password → 400 `wrong_password`, wrong word → 400
+  `confirm_mismatch`, and in both cases nothing changes (tested by
+  enumerating every table in `sqlite_master` before and after). The route
+  is behind the per-IP auth limiter like the other sensitive routes.
+- **Completeness.** `server/src/account-deletion.ts` runs one
+  `BEGIN IMMEDIATE` transaction over `shared_species`, `friendship`
+  (both directions), `friend_invite` (both directions), `invite_usage`,
+  `ask_usage` (`user:<id>`), `login_challenge`, Better Auth's
+  `verification`, `session`, `account` and `user`. The test asserts that no
+  column in any table still equals the user id, the address or the ask
+  scope. The three source caches (`wiki_article_cache`, `natureserve_cache`,
+  `ebird_cache`) are keyed by species, not person; the seven-day
+  `answer_cache` is keyed by species + region + rounded position +
+  normalised question and `ask_cost` by day, neither by person; there are
+  no per-user files on disk. Sightings, clips,
+  detections and ticks never reach the server (IndexedDB only).
+- **Admin.** The `ADMIN_EMAIL` account answers 400 `admin_account` before
+  the password is looked at (it is the only account that can approve
+  people); the app shows the reason instead of the form.
+- **Notification (ASVS 6.3.5).** A short confirmation mail goes to the
+  address after the commit; it carries no secrets, and a mail failure is
+  logged by kind only and does not change the 200.
+- **Backups.** `VACUUM INTO` backups keep a copy until they age out; the
+  user-facing text says "Copies in server backups are removed when those
+  backups expire". The retention period on the server must be confirmed
+  (see the PR).

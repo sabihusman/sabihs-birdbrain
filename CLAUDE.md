@@ -77,8 +77,9 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   region + position + question → 7-day reuse), `src/pricing.ts` (list prices
   and thinking level per model, verified dates in the comment) and
   `src/ask-cost.ts` (per-day token/cost totals, `GET /v1/admin/ask-costs`;
-  DECISIONS #48); `src/users.ts` admin SQL; `src/backup.ts` `VACUUM INTO`
-  backups.
+  DECISIONS #48); `src/users.ts` admin SQL; `src/account-deletion.ts` the
+  one-transaction account wipe (DECISIONS.md #50); `src/backup.ts`
+  `VACUUM INTO` backups.
 - Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or
   Better Auth logs a schema mismatch.
 - Tests: `cd server && npm test` (Vitest, in-memory SQLite, `FakeMailer`).

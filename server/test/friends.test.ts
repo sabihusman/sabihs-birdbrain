@@ -240,7 +240,7 @@ describe('account deletion', () => {
     await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-12' }] }, bearer(sam.token));
     await post(t.app, '/v1/ask', { species: 'Turdus merula', question: 'What?' }, bearer(sam.token));
     const token2 = await signUpAndLogin(t, 'sam@example.com'); // a second session
-    const del = await post(t.app, '/v1/me/delete', {}, bearer(sam.token));
+    const del = await post(t.app, '/v1/me/delete', { password: PASSWORD, confirm: 'DELETE' }, bearer(sam.token));
     expect(del.status).toBe(200);
     expect(await del.json()).toEqual({ ok: true });
     expect((await get(t.app, '/v1/me', bearer(sam.token))).status).toBe(401);
@@ -256,18 +256,18 @@ describe('account deletion', () => {
     expect(((await (await get(t.app, '/v1/me', bearer(again))).json()) as { user: { status: string } }).user.status).toBe('pending');
   });
 
-  it('needs a session and a strict empty body, and never deletes the admin account', async () => {
+  it('needs a session, the password and the word DELETE, and never deletes the admin account', async () => {
     const { t, admin } = await setup();
-    expect((await post(t.app, '/v1/me/delete', {})).status).toBe(401);
+    expect((await post(t.app, '/v1/me/delete', { password: PASSWORD, confirm: 'DELETE' })).status).toBe(401);
     const pending = await signUpAndLogin(t, 'pending@example.com');
     expect((await post(t.app, '/v1/me/delete', { confirm: true }, bearer(pending))).status).toBe(400);
     expect((await get(t.app, '/v1/me', bearer(pending))).status).toBe(200);
-    const res = await post(t.app, '/v1/me/delete', {}, bearer(admin));
+    const res = await post(t.app, '/v1/me/delete', { password: PASSWORD, confirm: 'DELETE' }, bearer(admin));
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'admin_account' });
     expect((await get(t.app, '/v1/me', bearer(admin))).status).toBe(200);
     // a pending (unapproved) user may delete their own account
-    expect((await post(t.app, '/v1/me/delete', {}, bearer(pending))).status).toBe(200);
+    expect((await post(t.app, '/v1/me/delete', { password: PASSWORD, confirm: 'DELETE' }, bearer(pending))).status).toBe(200);
     expect((await get(t.app, '/v1/me', bearer(pending))).status).toBe(401);
   });
 });
