@@ -4,12 +4,19 @@
 #   sudo server/deploy/rollback.sh --dry-run
 #   sudo server/deploy/rollback.sh                 # keeps /opt/birdbrain/.env, data volumes and the certificate
 #   sudo server/deploy/rollback.sh --purge         # also removes the data/backup volumes and /opt/birdbrain (not the certificate)
+#   sudo server/deploy/rollback.sh --only-alert    # undo only step 9 (renewal-failure alert), keep everything else
 set -euo pipefail
-DRY_RUN=0; PURGE=0
-for a in "$@"; do case "$a" in --dry-run) DRY_RUN=1 ;; --purge) PURGE=1 ;; *) echo "unknown option $a" >&2; exit 64 ;; esac; done
+DRY_RUN=0; PURGE=0; ONLY_ALERT=0
+for a in "$@"; do case "$a" in --dry-run) DRY_RUN=1 ;; --purge) PURGE=1 ;; --only-alert) ONLY_ALERT=1 ;; *) echo "unknown option $a" >&2; exit 64 ;; esac; done
 run() { if [ "$DRY_RUN" = 1 ]; then printf '   [dry-run] %s\n' "$*"; else printf '   + %s\n' "$*"; "$@" || true; fi; }
 log() { printf '\n==> %s\n' "$*"; }
 [ "$DRY_RUN" = 1 ] || [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 77; }
+
+log "9. renewal-failure alert (drop-in, unit, script)"
+run rm -rf /etc/systemd/system/lego-renew-birdbrain.service.d
+run rm -f /etc/systemd/system/birdbrain-renew-alert.service /usr/local/sbin/birdbrain-renew-alert.sh
+run systemctl daemon-reload
+if [ "$ONLY_ALERT" = 1 ]; then log "done (alert only)"; exit 0; fi
 
 log "8. container"
 [ -f /opt/birdbrain/compose.yml ] && ( cd /opt/birdbrain && run docker compose down --remove-orphans )
