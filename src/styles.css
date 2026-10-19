@@ -134,3 +134,8 @@ details summary { cursor: pointer; font-weight: 600; min-height: 44px; display: 
 code { font-size: 0.85em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
 .level { height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .level > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width 0.08s linear; }
+.location-block { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); margin: 8px 0; }
+.location-block.compact { padding: 6px 8px; font-size: 0.85rem; }
+.location-block code { word-break: break-all; }
+.leaflet-popup-content .location-block .btn { min-height: 32px; padding: 2px 8px; }
+textarea { color: inherit; }

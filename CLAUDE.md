@@ -1,9 +1,13 @@
 # CLAUDE.md — notes for future sessions
 
 Sabih’s Birdbrain is a mobile-first PWA that identifies bird sounds on-device
-with BirdNET V2.4 running in TensorFlow.js inside a Web Worker. No backend;
-audio never leaves the phone. Live at `https://sabihusman.github.io/sabihs-birdbrain/`
-after a merge to `main`.
+with BirdNET V2.4 running in TensorFlow.js inside a Web Worker. Audio never
+leaves the phone. Front end on Vercel (base path `/`), with GitHub Pages
+(`https://sabihusman.github.io/sabihs-birdbrain/`, base `/sabihs-birdbrain/`)
+kept until Vercel is verified. Optional back end (`server/`) at
+`https://bird-brain.duckdns.org`: accounts with an emailed login code, admin
+approval, and member-only "Ask about this bird" answered by Gemini from the
+Wikipedia summary.
 
 ## Architecture
 
@@ -35,10 +39,31 @@ Key modules:
 - `src/species/colors.ts` — deterministic OKLCH species colours;
   `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache.
 - `src/export/` — CSV / GeoJSON.
+- `src/api/client.ts` — bearer-token client for the API (`src/api/config.ts`
+  holds the base URL from `VITE_API_BASE_URL`); `src/ui/views/account.ts`,
+  `admin.ts`, `src/ui/components/ask-box.ts`, `location-block.ts`,
+  `src/geo/pluscode.ts`, `src/audio/import-cap.ts`.
+
+Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
+
+- `src/app.ts` routes; `src/auth.ts` Better Auth options (bearer plugin,
+  `status`/`role` user fields, admin via `ADMIN_EMAIL`); `src/login-codes.ts`
+  the email second factor; `src/ask.ts` the Gemini pipeline and caps;
+  `src/users.ts` admin SQL; `src/backup.ts` `VACUUM INTO` backups.
+- Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or
+  Better Auth logs a schema mismatch.
+- Tests: `cd server && npm test` (Vitest, in-memory SQLite, `FakeMailer`).
+- Image: `server/Dockerfile` (context = repo root, copies `labels.json`),
+  built by `.github/workflows/server-image.yml` to
+  `ghcr.io/sabihusman/birdbrain-api`; `server/compose.yml` is the hardened
+  production compose file; `server/deploy/` holds the forced-command deploy
+  user files. Env variable names: `server/.env.example`.
 
 Folder map:
 
 ```
+server/                       API (see above); server/deploy/ server-side install files
+vercel.json                   Vercel headers (strict CSP) and build settings; .env.example front-end vars
 public/models/birdnet-v2.4/   BirdNET TF.js export (CC BY-NC-SA 4.0, ~78 MiB) + labels.json
 public/samples/               3 s sample clip from the BirdNET repo (demo + e2e)
 public/worklet/               AudioWorklet processor (plain JS, served as-is)
@@ -64,11 +89,14 @@ npm run test:e2e     # playwright (starts preview itself); needs Chromium instal
 npx tsx scripts/validate-model.ts <modelDir> real <file.wav> [windows]   # Node sanity check
 ```
 
-Deploy: `.github/workflows/deploy.yml` builds and publishes `dist/` to GitHub
-Pages on every push to `main` (Pages is configured to deploy from Actions).
-`ci.yml` runs lint, typecheck, unit tests, build and the e2e test on every push.
-Vite `base` is `/sabihs-birdbrain/`; the service worker scope and manifest
-`start_url` use the same base.
+Deploy: Vercel builds from the repo with base `/` (Sabih connected it);
+`.github/workflows/deploy.yml` still publishes to GitHub Pages with
+`VITE_BASE_PATH=/sabihs-birdbrain/`. `ci.yml` runs lint, typecheck, unit tests,
+build and the e2e test on every push. `server-image.yml` tests the API, pushes
+the image to GHCR, and on `main` triggers the server's forced-command deploy
+over SSH (secrets `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`). The CSP in
+`vercel.json` lists the API host; `scripts/csp-check.mts` serves the build with
+those headers and fails on any violation.
 
 ## Key decisions and known issues
 
@@ -87,6 +115,11 @@ See DECISIONS.md for the full list. The ones that bite:
 - The three TF.js WASM binaries are precached (~1.2 MB); model shards are
   runtime-cached on first use (cache `birdnet-models-v2.4`).
 - Playwright here runs Chromium only; iOS behaviour must be tested on a device.
+- `el()` sets styles through `style.cssText` (CSSOM), never the `style`
+  attribute, because the CSP has no `'unsafe-inline'`. Keep it that way.
+- Changing the API domain later: `VITE_API_BASE_URL` (or the default in
+  `src/api/config.ts`), the `connect-src` in `vercel.json`, and on the server
+  `ALLOWED_ORIGINS`, `BETTER_AUTH_URL`, `MAIL_FROM`.
 
 ## V2 plan: native iOS app
 

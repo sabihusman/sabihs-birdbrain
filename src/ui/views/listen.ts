@@ -9,6 +9,7 @@ import { PipelineView } from '../viz/pipeline';
 import { SpectrogramView } from '../viz/spectrogram';
 import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { WaveformView } from '../viz/waveform';
+import { locationBlock } from '../components/location-block';
 
 export function listenView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -49,6 +50,12 @@ export function listenView(ctx: ViewContext): View {
   const threshold = el('div', { class: 'slider' }, el('div', { class: 'row' }, el('span', null, 'Confidence threshold'), thresholdValue), thresholdInput);
 
   const locationLine = el('div', { class: 'small muted', 'data-testid': 'location-status' }, '');
+  const locationBox = el('div', { 'data-testid': 'location-block' });
+  const renderLocation = () => {
+    const l = controller.location.get();
+    locationBox.replaceChildren();
+    if (l.location) locationBox.appendChild(locationBlock(l.location.lat, l.location.lon, { accuracy: l.location.accuracy }));
+  };
   const wakeLine = el('div', { class: 'small muted' }, '');
 
   // Results ----------------------------------------------------------------
@@ -73,7 +80,7 @@ export function listenView(ctx: ViewContext): View {
     'div',
     null,
     el('section', { class: 'card' }, el('div', { class: 'row' }, startBtn, recordBtn), level, el('div', { class: 'row between' }, status, demoBtn), modelBox, el('div', { class: 'small muted' }, 'Keep the screen on and the app in front: iOS pauses the microphone in the background.')),
-    el('section', { class: 'card' }, el('h2', null, 'Heard now'), resultsList, resultsEmpty, threshold, locationLine, wakeLine, stats),
+    el('section', { class: 'card' }, el('h2', null, 'Heard now'), resultsList, resultsEmpty, threshold, locationLine, locationBox, wakeLine, stats),
     el(
       'section',
       { class: 'card' },
@@ -240,6 +247,7 @@ export function listenView(ctx: ViewContext): View {
     }),
     controller.on('location', (l) => {
       locationLine.textContent = `Location filter: ${l.message || l.status}${l.location ? ` · week ${l.week > 0 ? l.week : 'off'}` : ''}`;
+      renderLocation();
     }),
     controller.on('geo-count', (n) => {
       geoStat.textContent = n > 0 ? String(n) : 'all';
@@ -253,6 +261,7 @@ export function listenView(ctx: ViewContext): View {
     modelBar.style.display = s.state === 'ready' ? 'none' : '';
     const l = controller.location.get();
     locationLine.textContent = `Location filter: ${l.message || l.status}`;
+    renderLocation();
     const n = controller.getGeoCount();
     geoStat.textContent = n > 0 ? String(n) : 'all';
     if (controller.listening) status.textContent = 'Listening…';

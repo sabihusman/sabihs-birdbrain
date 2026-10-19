@@ -1,0 +1,48 @@
+# Production compose file for the Birdbrain API (Phase 2).
+# Secrets come from /opt/birdbrain/.env (root:root, mode 600); nothing here is secret.
+services:
+  api:
+    image: ghcr.io/sabihusman/birdbrain-api:latest
+    container_name: birdbrain-api
+    restart: unless-stopped
+    env_file: /opt/birdbrain/.env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "8010"
+      DATABASE_PATH: /data/birdbrain.db
+      LABELS_PATH: /app/data/labels.json
+      BACKUP_DIR: /backups
+    ports:
+      - "127.0.0.1:8010:8010"
+    volumes:
+      - birdbrain-data:/data
+      - birdbrain-backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - birdbrain
+
+networks:
+  birdbrain:
+    name: birdbrain
+
+volumes:
+  birdbrain-data:
+    name: birdbrain-data
+  birdbrain-backups:
+    name: birdbrain-backups

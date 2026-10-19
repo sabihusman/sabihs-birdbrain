@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
+import process from 'node:process';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const BASE = '/sabihs-birdbrain/';
+/** '/' on Vercel; the GitHub Pages workflow sets VITE_BASE_PATH=/sabihs-birdbrain/. */
+const BASE = (process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/');
 
 export default defineConfig({
   base: BASE,

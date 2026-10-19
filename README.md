@@ -6,7 +6,9 @@ the device, using the BirdNET V2.4 neural network running in TensorFlow.js
 inside a Web Worker. It records, re-analyses, explains its own identifications,
 looks species up, maps where you heard them, and works offline once installed.
 
-Live app (after merging to `main`): **https://sabihusman.github.io/sabihs-birdbrain/**
+Live app: Vercel (`*.vercel.app`, connected by Sabih) with GitHub Pages at
+**https://sabihusman.github.io/sabihs-birdbrain/** kept as a fallback until the
+Vercel deployment is verified. API: `https://bird-brain.duckdns.org` (`server/`).
 
 | Listen (light) | Listen (dark) | Species | Map |
 | --- | --- | --- | --- |
@@ -93,6 +95,11 @@ The name is always shown next to the colour.
   MediaRecorder), import audio files, play back, re-analyse with full
   visualisation and seek-by-tap, export WAV, delete, optional auto-save of a
   3 s clip per detection.
+- **Location sharing:** every located detection shows coordinates and a
+  10-character Plus Code with copy buttons and an "Open in Google Maps" link.
+- **Accounts (optional):** email + password + emailed code; approved members
+  can ask AI questions about a species, answered only from its Wikipedia
+  summary; Sabih approves members on an admin page.
 - **Species:** offline browser of all 6,522 BirdNET classes with search by
   common or scientific name; Wikipedia summary (scientific name first, then
   common; disambiguation and not-found handled), image with Commons attribution
@@ -110,11 +117,29 @@ The name is always shown next to the colour.
 
 ## Privacy
 
-Audio is processed on the device and never uploaded. There is no server, no
-account and no analytics. The only network calls the app makes are the one-time
-model download from GitHub Pages, Wikipedia summaries when you open a species
-page, and OpenStreetMap tiles when you open the map. Recordings and detections
-live in your browser’s IndexedDB; you can export or delete them at any time.
+Audio is processed on the device and never uploaded: identification, saving
+recordings and analysing imported clips (capped at 60 seconds) all happen in
+your browser, for everyone, signed in or not. Recordings and detections live in
+your browser's IndexedDB; you can export or delete them at any time.
+
+What does leave the phone, and why:
+
+- The one-time model download from the hosting origin, Wikipedia summaries
+  when you open a species page, and OpenStreetMap tiles when you open the map.
+- If you create an account (optional): your email address and password go to
+  the Birdbrain API at `bird-brain.duckdns.org`, which emails you a 6-digit
+  code on every sign-in and keeps a short-lived session token (the API only
+  accepts requests from `https://sabihs-birdbrain.vercel.app`). New accounts
+  wait for Sabih's approval.
+- If you are an approved member and use "Ask about this bird": only the
+  species' scientific name and your question (up to 500 characters) are sent.
+  The server fetches the Wikipedia summary and asks Google's Gemini model to
+  answer from that text alone; the answer comes back as plain text with the
+  source link. Questions are not logged. There are daily limits per person and
+  overall.
+
+No analytics, no ads, no third-party trackers. The API's design and its review
+against the OWASP LLM Top 10 and ASVS are in [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Known limitations
 
@@ -157,7 +182,13 @@ npm run lint && npm run typecheck && npm test
 npm run build          # typecheck + vite build → dist/
 npm run preview        # serve the build at http://localhost:4173/sabihs-birdbrain/
 npm run test:e2e       # Playwright: loads the model, analyses the bundled sample, goes offline
+cd server && npm install && npm test   # API unit + integration tests (fake mailer, in-memory SQLite)
 ```
+
+Front-end build settings live in `.env.example` (`VITE_API_BASE_URL`,
+`VITE_BASE_PATH`). The API is in `server/` with its own `README`-style notes in
+`server/deploy/README.md`, `server/.env.example` (variable names only) and
+`docs/SECURITY.md`.
 
 Unit tests (Vitest) cover the FFT/STFT, resampling and windowing, threshold and
 multi-label logic, the week-of-year calculation, species colours, WAV encoding

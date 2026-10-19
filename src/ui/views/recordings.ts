@@ -12,21 +12,25 @@ import { hrefFor } from '../router';
 import { SpectrogramView } from '../viz/spectrogram';
 import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { formatBytes } from '../../storage/quota';
+import { capImportedAudio, MAX_IMPORT_SECONDS } from '../../audio/import-cap';
+import { locationBlock } from '../components/location-block';
 
 export function recordingsView(ctx: ViewContext): View {
   const { controller } = ctx;
   const list = el('div', { class: 'list', 'data-testid': 'recordings-list' });
   const fileInput = el('input', { type: 'file', accept: 'audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac', class: 'sr-only', id: 'import-file' });
   const importBtn = el('label', { class: 'btn', for: 'import-file' }, 'Import audio file');
-  const hint = el('p', { class: 'small muted' }, 'Recordings are 16-bit WAV at 48 kHz, stored in this browser only.');
+  const hint = el('p', { class: 'small muted' }, `Recordings are 16-bit WAV at 48 kHz, stored in this browser only. Imported files are analysed on-device and capped at ${MAX_IMPORT_SECONDS} seconds.`);
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
     importBtn.textContent = 'Decoding…';
     try {
-      const audio = await controller.decodeAudioFile(await file.arrayBuffer());
-      const rec = await controller.saveRecording(audio, file.name.replace(/\.[^.]+$/, ''), 'import');
+      const decoded = await controller.decodeAudioFile(await file.arrayBuffer());
+      const capped = capImportedAudio(decoded);
+      if (capped.truncated) ctx.notify({ kind: 'warn', text: `Imported clips are capped at ${MAX_IMPORT_SECONDS} seconds; the first ${MAX_IMPORT_SECONDS} s of this ${Math.round(capped.originalSeconds)} s file were kept.` });
+      const rec = await controller.saveRecording(capped.audio, file.name.replace(/\.[^.]+$/, ''), 'import');
       location.hash = hrefFor({ name: 'recording', id: rec.id });
     } catch (e) {
       ctx.notify({ kind: 'error', text: `Could not import: ${(e as Error).message}` });
@@ -91,7 +95,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     timeline.setThreshold(controller.settings.get().threshold);
 
     root.replaceChildren(
-      el('section', { class: 'card' }, el('h2', null, rec.name), el('div', { class: 'small muted' }, `${fmtDateTime(rec.createdAt)} · ${fmtDuration(rec.durationSec)} · ${formatBytes(rec.bytes)}${rec.lat != null ? ` · ${rec.lat.toFixed(4)}, ${rec.lon?.toFixed(4)}` : ''}`), player, el('div', { class: 'row' }, analyzeBtn, cancelBtn, exportBtn, deleteBtn), progress, progressText),
+      el('section', { class: 'card' }, el('h2', null, rec.name), el('div', { class: 'small muted' }, `${fmtDateTime(rec.createdAt)} · ${fmtDuration(rec.durationSec)} · ${formatBytes(rec.bytes)}${rec.lat != null ? ` · ${rec.lat.toFixed(4)}, ${rec.lon?.toFixed(4)}` : ''}`), player, el('div', { class: 'row' }, analyzeBtn, cancelBtn, exportBtn, deleteBtn), progress, progressText, rec.lat != null && rec.lon != null ? locationBlock(rec.lat, rec.lon, { accuracy: rec.accuracy }) : null),
       el('section', { class: 'card' }, el('h2', null, 'Spectrogram'), specBox, el('div', { class: 'viz-label' }, 'Our own FFT, an approximation of what the model sees. Colour strips mark species per analysed window. Tap to seek.'), timelineCanvas, legend),
       el('section', { class: 'card' }, el('h2', null, 'Detections'), detectionsBox),
       el('section', { class: 'card' }, el('h2', null, 'Why this ID'), el('p', { class: 'small muted' }, 'Occlusion analysis: silence parts of the spectrogram, re-run the model and see which parts the confidence depends on.'), whyBox),

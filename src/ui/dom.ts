@@ -9,7 +9,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props |
     for (const [k, v] of Object.entries(props)) {
       if (v == null || v === false) continue;
       if (k === 'class') node.className = String(v);
-      else if (k === 'style') node.setAttribute('style', String(v));
+      else if (k === 'style') node.style.cssText = String(v);
       else if (k === 'dataset') for (const [dk, dv] of Object.entries(v as Record<string, string>)) node.dataset[dk] = dv;
       else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v as EventListener);
       else if (k in node && typeof v !== 'string') (node as unknown as Record<string, unknown>)[k] = v;

@@ -6,6 +6,7 @@ import { clearAllData, countDetections, listDetections } from '../../storage/db'
 import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
+import { accountSection } from './account';
 
 export function settingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -92,10 +93,12 @@ export function settingsView(ctx: ViewContext): View {
   });
 
   const modelStatus = controller.inference.getStatus();
+  const account = accountSection(ctx.api);
 
   const root = el(
     'div',
     null,
+    account.el,
     el('section', { class: 'card' }, el('h2', null, 'Detection'), slider('Confidence threshold', 'threshold', 0.05, 0.95, 0.05, pct), slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`), toggle('Show non-bird classes', 'includeNonBird', 'Dog, engine, siren, human voice and similar.')),
     el(
       'section',
@@ -148,6 +151,7 @@ export function settingsView(ctx: ViewContext): View {
     el: root,
     dispose() {
       unsubLoc();
+      account.dispose();
     },
   };
 }

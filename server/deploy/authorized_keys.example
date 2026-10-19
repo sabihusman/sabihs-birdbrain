@@ -1,0 +1,5 @@
+# ~birdbrain-deploy/.ssh/authorized_keys  (owner birdbrain-deploy, mode 0600; ~/.ssh mode 0700)
+# One line. "restrict" disables port/agent/X11 forwarding and the pty on modern OpenSSH;
+# the explicit options are repeated for clarity and for older servers. The forced command
+# ignores whatever the client asks to run, so this key can only trigger a deploy.
+restrict,command="sudo /usr/local/sbin/birdbrain-deploy.sh",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty ssh-ed25519 AAAA...REPLACE_WITH_THE_CI_PUBLIC_KEY... birdbrain-deploy@github-actions
