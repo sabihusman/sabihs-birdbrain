@@ -152,7 +152,7 @@ describe('answer cache', () => {
     expect(fresh.body).not.toHaveProperty('cached');
     expect(calls).toBe(2);
     // the same question from another region is not the same answer (eBird sections differ)
-    const regional = await answerQuestion(deps, { id: 'u2', status: 'approved' }, { species: 'Turdus merula', question: 'What does it eat?', region: 'US-IA' }, now);
+    const regional = await answerQuestion(deps, { id: 'u7', status: 'approved' }, { species: 'Turdus merula', question: 'What does it eat?', region: 'US-IA' }, now);
     expect(regional.status).toBe(200);
     expect(regional.body).not.toHaveProperty('cached');
     expect(regional.body).toHaveProperty('region', 'US-IA');
