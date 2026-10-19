@@ -15,9 +15,11 @@ export default defineConfig({
     // iPhone portrait viewport; Chromium engine because only its binaries are installed here.
     ...devices['iPhone 13'],
     browserName: 'chromium',
+    permissions: ['microphone'],
     defaultBrowserType: 'chromium',
     launchOptions: {
-      args: ['--autoplay-policy=no-user-gesture-required', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+      // Fake microphone so the Listening state is testable without a device.
+      args: ['--autoplay-policy=no-user-gesture-required', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
     },
   },
   webServer: {

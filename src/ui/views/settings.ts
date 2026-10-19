@@ -1,7 +1,7 @@
 import { sightingsToCsv } from '../../export/csv';
 import { downloadBlob, timestampForFilename } from '../../export/download';
 import { sightingsToGeoJson } from '../../export/geojson';
-import type { BackendPreference, LocationMode, OcclusionResolution } from '../../app/settings';
+import type { BackendPreference, ListenLayout, LocationMode, OcclusionResolution } from '../../app/settings';
 import { clearAllData, countDetections, countSightings, listSightings } from '../../storage/db';
 import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
@@ -40,10 +40,10 @@ export function settingsView(ctx: ViewContext): View {
     return el('label', { class: 'switch' }, el('span', null, label, hint ? el('div', { class: 'small muted' }, hint) : null), input);
   };
 
-  const select = <T extends string>(label: string, key: 'locationMode' | 'backend' | 'occlusionResolution', options: Array<[T, string]>, hint?: string) => {
+  const select = <T extends string>(label: string, key: 'locationMode' | 'backend' | 'occlusionResolution' | 'listenLayout', options: Array<[T, string]>, hint?: string) => {
     const sel = el('select', { 'aria-label': label });
     for (const [v, text] of options) sel.appendChild(el('option', { value: v, selected: s[key] === v }, text));
-    sel.addEventListener('change', () => settings.update({ [key]: sel.value as LocationMode & BackendPreference & OcclusionResolution }));
+    sel.addEventListener('change', () => settings.update({ [key]: sel.value as LocationMode & BackendPreference & OcclusionResolution & ListenLayout }));
     return el('div', { class: 'field' }, el('label', null, label), sel, hint ? el('div', { class: 'small muted' }, hint) : null);
   };
 
@@ -124,9 +124,24 @@ export function settingsView(ctx: ViewContext): View {
     el(
       'section',
       { class: 'card' },
+      el('h2', null, 'Listen layout'),
+      select(
+        'Listen layout',
+        'listenLayout',
+        [
+          ['consolidated', 'Consolidated (default): panel on top, results below'],
+          ['dock', 'Bottom dock: results fill the screen, controls above the tabs'],
+          ['focus', 'Focus mode: one large card for the latest bird'],
+        ],
+        'Same components and states in every layout; only the arrangement differs. Remembered on this device.',
+      ),
+    ),
+    el(
+      'section',
+      { class: 'card' },
       el('h2', null, 'Detection'),
       slider('Confidence threshold', 'threshold', 0.05, 0.95, 0.05, pct),
-      el('div', { class: 'small muted' }, 'Lower catches faint or distant birds but adds false IDs.'),
+      el('div', { class: 'small muted', 'data-testid': 'threshold-help' }, 'Lower catches faint or distant birds but adds false IDs.'),
       slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
       toggle('Show non-bird classes', 'includeNonBird', 'Dog, engine, siren, human voice and similar.'),
       slider('New sighting after', 'sightingGapSeconds', 5, 600, 5, (v) => `${v} s`, 'Consecutive detections of a species count as one sighting until this long passes without it.'),

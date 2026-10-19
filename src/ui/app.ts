@@ -11,6 +11,7 @@ import { helpView } from './views/help';
 import { adminView } from './views/admin';
 import type { ApiClient } from '../api/client';
 import { applyTheme, currentTheme, otherTheme, storeTheme } from '../theme/theme';
+import { listenStatus } from './status';
 
 export interface View {
   el: HTMLElement;
@@ -54,6 +55,31 @@ function tabGroup(route: Route): string {
   }
 }
 
+let updateBannerHost: { mount: (node: HTMLElement) => void; listening: () => boolean } | null = null;
+let pendingUpdate: (() => Promise<void>) | null = null;
+
+/**
+ * "New version available — tap to update" banner. The reload happens only on
+ * the tap, and never while listening: the banner then asks to stop first and
+ * stays until the session ends.
+ */
+export function showUpdateBanner(apply: () => Promise<void>): void {
+  pendingUpdate = apply;
+  if (!updateBannerHost) return;
+  const text = el('span', null, 'New version available — tap to update');
+  const btn = el('button', { class: 'update-banner', type: 'button', 'data-testid': 'update-banner', 'aria-live': 'polite' }, text);
+  btn.addEventListener('click', () => {
+    if (updateBannerHost?.listening()) {
+      text.textContent = 'New version ready. Stop listening first, then tap to update.';
+      return;
+    }
+    text.textContent = 'Updating…';
+    btn.disabled = true;
+    void pendingUpdate?.();
+  });
+  updateBannerHost.mount(btn);
+}
+
 export function mountApp(root: HTMLElement, controller: AppController, api: ApiClient): void {
   const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status' }, 'Loading model…');
   const themeToggle = el('button', { class: 'theme-toggle', type: 'button', 'data-testid': 'theme-toggle' });
@@ -92,10 +118,28 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     setTimeout(() => node.remove(), n.kind === 'error' ? 12000 : 6000);
   };
   controller.on('notice', notify);
-  controller.on('model', (s) => {
-    modelPill.textContent = s.state === 'ready' ? `Model ready · ${s.backend}` : s.state === 'error' ? 'Model error' : s.state === 'loading' ? `${Math.round(s.progress * 100)}% ${s.phase === 'warmup' ? 'warming up' : 'loading'}` : 'Model idle';
-    modelPill.className = `model-pill ${s.state}`;
-  });
+  // Status pill (DESIGN_GUIDE.md §5): text always present, dot colour by tone.
+  const renderPill = () => {
+    const st = listenStatus(controller);
+    const model = controller.inference.getStatus();
+    modelPill.textContent = st.status === 'ready' && model.backend ? `${st.pill} · ${model.backend}` : st.pill;
+    modelPill.className = `model-pill ${st.status} tone-${st.tone}`;
+  };
+  controller.on('model', renderPill);
+  controller.on('engine', renderPill);
+  controller.on('notice', renderPill);
+  window.addEventListener('online', renderPill);
+  window.addEventListener('offline', renderPill);
+  renderPill();
+
+  updateBannerHost = {
+    mount: (node) => {
+      notices.querySelector('[data-testid="update-banner"]')?.remove();
+      notices.prepend(node);
+    },
+    listening: () => controller.listening,
+  };
+  if (pendingUpdate) showUpdateBanner(pendingUpdate);
 
   const ctx: ViewContext = { controller, api, notify };
   let current: View | null = null;

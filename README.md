@@ -82,7 +82,7 @@ The name is always shown next to the colour.
 
 ## Features
 
-- **Listen:** Start/Stop continuous listening, multi-species results with
+- **Listen:** three layouts (Consolidated, Bottom dock, Focus mode; Settings → Listen layout) around one Start/Stop action, result cards with Wikipedia thumbnails, a status line with words and an icon for every state (loading, ready, listening, paused, mic blocked with iPhone steps, error, offline), and the waveform, spectrogram, pipeline and timeline folded into "How it works". Also: multi-species results with
   confidences, confidence threshold slider, elapsed time, inference time,
   dropped-window count, screen wake lock (with a notice when unsupported),
   resume after returning to the foreground, a “Try the sample clip” demo,

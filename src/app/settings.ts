@@ -5,6 +5,8 @@ export type { BackendPreference } from '../model/protocol';
 import type { BackendPreference } from '../model/protocol';
 export type LocationMode = 'auto' | 'manual' | 'off';
 export type OcclusionResolution = 'coarse' | 'medium' | 'fine';
+/** Listen screen arrangement (docs/DESIGN_GUIDE.md §6). */
+export type ListenLayout = 'consolidated' | 'dock' | 'focus';
 
 export interface Settings {
   /** Stored-settings schema version; bumped when a saved default is migrated (see migrate()). */
@@ -28,6 +30,7 @@ export interface Settings {
   sightingGapSeconds: number;
   /** Species tab: list every species instead of the local ones. */
   speciesShowAll: boolean;
+  listenLayout: ListenLayout;
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
@@ -53,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lowCut: true,
   sightingGapSeconds: 60,
   speciesShowAll: false,
+  listenLayout: 'consolidated',
 };
 
 const KEY = 'birdbrain.settings.v1';
@@ -117,6 +121,7 @@ export function sanitize(s: Settings): Settings {
     overlapSeconds: clamp(s.overlapSeconds, 0, 2.5, DEFAULT_SETTINGS.overlapSeconds),
     geoThreshold: clamp(s.geoThreshold, 0, 1, DEFAULT_SETTINGS.geoThreshold),
     sightingGapSeconds: clamp(s.sightingGapSeconds, 5, 600, DEFAULT_SETTINGS.sightingGapSeconds),
+    listenLayout: s.listenLayout === 'dock' || s.listenLayout === 'focus' ? s.listenLayout : 'consolidated',
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),
