@@ -1,4 +1,5 @@
 import { WINDOW_SAMPLES, WINDOW_SECONDS, SAMPLE_RATE } from '../../model/constants';
+import type { Species } from '../../model/labels';
 import { OCCLUSION_GRIDS } from '../../model/occlusion';
 import { selectDetections, type Score } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
@@ -10,11 +11,15 @@ import { speciesChip } from '../components/species-chip';
 import { el, fmtDateTime, fmtDuration, pct } from '../dom';
 import { hrefFor } from '../router';
 import { SpectrogramView } from '../viz/spectrogram';
-import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { formatBytes } from '../../storage/quota';
 import { capImportedAudio, MAX_IMPORT_SECONDS } from '../../audio/import-cap';
+import { aboutBird } from '../components/about-bird';
+import { askBox } from '../components/ask-box';
 import { locationBlock } from '../components/location-block';
+import { mapPreview } from '../components/map-preview';
 import { bestByConfidence, clipFocus, clipRange, sliceClip, windowsInClip } from '../../species/clips';
+import { confidenceLine, windowLines } from '../confidence-text';
+import { cssToken } from '../../theme/theme';
 
 export function recordingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -87,20 +92,59 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     const specCanvas = el('canvas', { style: 'height:200px', 'aria-label': 'Spectrogram of the recording' });
     const specOverlay = el('canvas', { class: 'overlay' });
     const specBox = el('div', { class: 'viz' }, specCanvas, specOverlay);
-    const timelineCanvas = el('canvas', { class: 'timeline' });
-    const legend = el('div', { class: 'legend' });
+    const confidenceBox = el('div', { class: 'confidence-text', 'data-testid': 'confidence-text' }, el('p', { class: 'small muted' }, 'Not analysed yet.'));
     const detectionsBox = el('div', { class: 'stack', 'data-testid': 'recording-detections' });
     const whyBox = el('div', { class: 'stack' });
     const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10, 256);
-    const timeline = new TimelineView(timelineCanvas, legend, () => controller.species, 400);
-    timeline.setThreshold(controller.settings.get().threshold);
+
+    // Sighting card title: the top bird's common name with its scientific name beneath;
+    // "Recording" until something is detected. The recording's own name moves to the meta line.
+    const title = el('h2', { 'data-testid': 'recording-title', style: 'margin:0' }, 'Recording');
+    const sciName = el('div', { class: 'sci-name', 'data-testid': 'recording-sci', style: 'display:none' }, '');
+    const metaLine = el('div', { class: 'small muted' }, `${rec.name} · ${fmtDateTime(rec.createdAt)} · ${fmtDuration(rec.durationSec)} · ${formatBytes(rec.bytes)}`);
+    const located = rec.lat != null && rec.lon != null;
+    const preview = located ? mapPreview(rec.lat!, rec.lon!, { color: cssToken('accent', '#5FCB97'), label: 'this sighting' }) : null;
+    if (preview) disposers.push(preview.dispose);
+    const locationPart = located ? el('div', { class: 'stack', 'data-testid': 'sighting-location' }, el('h3', { style: 'margin:8px 0 0' }, 'Location'), preview!.el, locationBlock(rec.lat!, rec.lon!, { accuracy: rec.accuracy })) : el('p', { class: 'small muted' }, 'No position was recorded for this sighting.');
+    // "About this bird" and "Ask about this bird" follow the top species; built once it is known.
+    const aboutSlot = el('div', { 'data-testid': 'about-slot' }, el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse the recording to see which bird this is.')));
+    const askSlot = el('div', { 'data-testid': 'ask-slot' });
+    let topSpecies: Species | null = null;
+    const topDisposers: Array<() => void> = [];
+    const setTopSpecies = (sp: Species | null) => {
+      if (sp?.scientific === topSpecies?.scientific) return;
+      topSpecies = sp;
+      for (const d of topDisposers.splice(0)) d();
+      title.textContent = sp ? sp.common : 'Recording';
+      sciName.textContent = sp ? sp.scientific : '';
+      sciName.style.display = sp ? '' : 'none';
+      preview?.setColor(sp ? speciesColor(sp.scientific).css : cssToken('accent', '#5FCB97'));
+      if (!sp) {
+        aboutSlot.replaceChildren(el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse the recording to see which bird this is.')));
+        askSlot.replaceChildren();
+        return;
+      }
+      const about = aboutBird(sp);
+      const ask = askBox(ctx.api, sp);
+      topDisposers.push(about.dispose, ask.dispose);
+      aboutSlot.replaceChildren(about.el);
+      askSlot.replaceChildren(ask.el);
+    };
+    disposers.push(() => {
+      for (const d of topDisposers) d();
+    });
 
     root.replaceChildren(
-      el('section', { class: 'card' }, el('h2', null, rec.name), el('div', { class: 'small muted' }, `${fmtDateTime(rec.createdAt)} · ${fmtDuration(rec.durationSec)} · ${formatBytes(rec.bytes)}${rec.lat != null ? ` · ${rec.lat.toFixed(4)}, ${rec.lon?.toFixed(4)}` : ''}`), player, el('div', { class: 'row' }, analyzeBtn, cancelBtn, exportBtn, deleteBtn), progress, progressText, rec.lat != null && rec.lon != null ? locationBlock(rec.lat, rec.lon, { accuracy: rec.accuracy }) : null),
-      el('section', { class: 'card' }, el('h2', null, 'Spectrogram'), specBox, el('div', { class: 'viz-label' }, 'Our own FFT, an approximation of what the model sees. Colour strips mark species per analysed window. Tap to seek.'), timelineCanvas, legend),
+      el('section', { class: 'card sighting-card', 'data-testid': 'sighting-card' }, title, sciName, metaLine, player, el('div', { class: 'row' }, analyzeBtn, cancelBtn, exportBtn, deleteBtn), progress, progressText, locationPart),
+      el('section', { class: 'card' }, el('h2', null, 'Spectrogram'), specBox, el('div', { class: 'viz-label' }, 'Our own FFT, an approximation of what the model sees. Colour strips mark species per analysed window. Tap to seek.'), confidenceBox),
       el('section', { class: 'card' }, el('h2', null, 'Detections'), detectionsBox),
       el('section', { class: 'card' }, el('h2', null, 'Why this ID'), el('p', { class: 'small muted' }, 'Occlusion analysis: silence parts of the spectrogram, re-run the model and see which parts the confidence depends on.'), whyBox),
+      aboutSlot,
+      askSlot,
     );
+    // Stored summary gives the title straight away; the per-window results refine it below.
+    const fromSummary = rec.summary.slice().sort((a, b) => b.maxConfidence - a.maxConfidence)[0];
+    if (fromSummary) setTopSpecies(controller.speciesByScientific(fromSummary.scientific) ?? null);
 
     // Decode once for analysis and drawing.
     const audio = await controller.decodeAudioFile(await rec.blob.arrayBuffer());
@@ -111,7 +155,6 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     const loop = () => {
       spectrogram.setCursor(player.paused && player.currentTime === 0 ? null : player.currentTime);
       spectrogram.draw();
-      timeline.draw();
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -145,10 +188,29 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       if (perSpecies.size === 0) {
         detectionsBox.appendChild(el('p', { class: 'muted' }, windows.length ? 'Nothing above the threshold.' : 'Not analysed yet.'));
         whyBox.replaceChildren(el('p', { class: 'muted' }, 'Analyse the recording first.'));
+        confidenceBox.replaceChildren(el('p', { class: 'small muted' }, windows.length ? `Nothing above your minimum of ${pct(s.threshold)}.` : 'Not analysed yet.'));
+        // Keep the title while windows are still arriving; the final render after the analysis settles it.
+        if (!cancelCurrent) setTopSpecies(null);
         return;
       }
       whyBox.replaceChildren();
-      for (const [index, info] of Array.from(perSpecies.entries()).sort((a, b) => b[1].best - a[1].best)) {
+      const ranked = Array.from(perSpecies.entries()).sort((a, b) => b[1].best - a[1].best);
+      const top = controller.species[ranked[0][0]] ?? null;
+      setTopSpecies(top);
+      if (top) {
+        // Text instead of the old confidence chart: best confidence vs the minimum, then each matched 3 s window.
+        const matched = windows
+          .map((w) => ({ offsetSec: w.offsetSec, confidence: selectDetections(w.scores, controller.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird }).find((d) => d.index === top.index)?.prob ?? null }))
+          .filter((w): w is { offsetSec: number; confidence: number } => w.confidence != null);
+        const lines = windowLines(matched, duration);
+        confidenceBox.replaceChildren(
+          el('p', { class: 'tabular', style: 'margin:0', 'data-testid': 'confidence-line' }, confidenceLine(ranked[0][1].best, s.threshold)),
+          lines.length > 1
+            ? el('div', null, el('p', { class: 'small muted', style: 'margin:4px 0 0' }, `${top.common} matched in ${lines.length} windows:`), el('ul', { class: 'windows-list small tabular', 'data-testid': 'confidence-windows' }, ...lines.map((t) => el('li', null, t))))
+            : el('p', { class: 'small muted', style: 'margin:4px 0 0' }, lines.length === 1 ? `${top.common} matched in one 3 s window (${lines[0].split(' · ')[0]}).` : ''),
+        );
+      }
+      for (const [index, info] of ranked) {
         const sp = controller.species[index];
         if (!sp) continue;
         const seek = el('button', { class: 'btn small' }, `▶ ${fmtDuration(info.bestOffset)}`);
@@ -163,10 +225,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       }
     };
 
-    const applyWindows = () => {
-      timeline.setPoints(windows.map((w): TimelinePoint => ({ sec: w.offsetSec, probs: new Map(w.scores.slice(0, 20).map((x) => [x.index, x.prob])) })));
-      renderDetections();
-    };
+    const applyWindows = () => renderDetections();
 
     // Load stored detections to seed the view.
     {
@@ -217,6 +276,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         return true;
       });
       cancelCurrent = null;
+      renderDetections();
       cancelBtn.style.display = 'none';
       progress.style.display = 'none';
       progressText.textContent = cancelled ? 'Cancelled.' : `Analysed ${windows.length} windows.`;
@@ -310,10 +370,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       controller.emit('detections-changed', undefined);
       location.hash = hrefFor({ name: 'recordings' });
     });
-    disposers.push(controller.settings.on('change', (s) => {
-      timeline.setThreshold(s.threshold);
-      renderDetections();
-    }));
+    disposers.push(controller.settings.on('change', () => renderDetections()));
     if (rec.analyzedAt == null && rec.source !== 'autoclip' && controller.inference.getStatus().state === 'ready') void analyze();
   })();
 

@@ -96,10 +96,17 @@ The name is always shown next to the colour.
   the official geo model; manual coordinates or off when location is denied.
   The strongest filtered-out species is shown greyed so the filter is visible.
 - **Recordings:** record WAV straight from the AudioWorklet stream (no
-  MediaRecorder), import audio files, play back, re-analyse with full
-  visualisation and seek-by-tap, export WAV, delete, optional auto-save of
-  each 3 s detection window as a recording ("Auto-save 3-second detection
-  windows as recordings", not to be confused with the species ID clip below).
+  MediaRecorder), import audio files, play back, re-analyse, export WAV,
+  delete, optional auto-save of each 3 s detection window as a recording
+  ("Auto-save 3-second detection windows as recordings", not to be confused
+  with the species ID clip below). Opening a recording shows its **sighting
+  card**: the bird's common and scientific names as the title, a map preview
+  with one dot (tap to explore) above the coordinates, Copy and Google Maps
+  buttons, the Plus Code under "More location details", the spectrogram with
+  seek-by-tap, "Confidence 96% · your minimum 60%" and the matched 3 s windows
+  as text, per-species detections, "Why this ID", an "About this bird" box
+  (Wikipedia summary plus collapsed Description, Song and calls, Habitat and
+  Diet sections, cached for offline) and, for members, "Ask about this bird".
 - **Location sharing:** every located detection shows coordinates and a
   10-character Plus Code with copy buttons and an "Open in Google Maps" link.
 - **Sightings:** consecutive detections of a species are merged into one
@@ -108,8 +115,9 @@ The name is always shown next to the colour.
   the species pages, the clips and the CSV/GeoJSON exports all work in
   sightings; the per-window detections stay stored underneath.
 - **Species ID card and sighting history (members):** on each species page, a
-  card with the most recent sighting (Plus Code, coordinates, mini map, Google
-  Maps link) and the species' saved ID clip: up to 10 s of raw audio around
+  card with the most recent sighting (map preview, coordinates, Google Maps
+  link, Plus Code under "More location details", the same block as the
+  sighting card) and the species' saved ID clip: up to 10 s of raw audio around
   the detection, with a spectrogram drawn from the clip, the 3 s window(s)
   that triggered the ID outlined and labelled with their confidence, a
   playback cursor, tap-to-seek and a tap-to-run "Why this ID" occlusion heat
@@ -120,8 +128,9 @@ The name is always shown next to the colour.
   confident detection. Free users see a short "Sign in to unlock" note
   instead.
 - **Accounts (optional):** email + password + emailed code; approved members
-  can ask AI questions about a species, answered only from its Wikipedia
-  summary; Sabih approves members on an admin page.
+  can ask AI questions about a species (on the species page and on each
+  sighting card), answered only from its Wikipedia article with section
+  citations; Sabih approves members on an admin page.
 - **Species:** offline browser of the BirdNET classes, listing by default the
   species the location model expects near you in some week of the year
   ("312 local species · 6,511 total", with a "Show all species" toggle and a

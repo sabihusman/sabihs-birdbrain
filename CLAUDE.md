@@ -44,7 +44,16 @@ Key modules:
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.
 - `src/species/colors.ts` — deterministic OKLCH species colours;
-  `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache.
+  `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache;
+  `src/species/wiki-sections.ts` — Description / Song / Habitat / Diet
+  excerpts from the full article via TextExtracts (same request as the
+  server, plus `origin=*`), cached in the same `wiki` store.
+- Sighting card (`src/ui/views/recordings.ts`, `recordingDetailView`): title
+  = top species, `src/ui/components/map-preview.ts` (non-interactive Leaflet
+  preview, "Tap to explore") above `location-block.ts` (Plus Code folded under
+  "More location details"), confidence as text (`src/ui/confidence-text.ts`),
+  `about-bird.ts` (summary + sections, also used by the species page) and
+  `ask-box.ts` for members. See DECISIONS.md #46.
 - `src/export/` — CSV / GeoJSON.
 - Member-only, on-device: `src/app/access.ts` (gating from the cached
   session), `src/species/clips.ts` (one raw clip per species, replace-if-higher,
