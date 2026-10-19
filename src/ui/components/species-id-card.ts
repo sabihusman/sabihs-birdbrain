@@ -4,17 +4,19 @@ import type { ClipRecord, SightingRecord } from '../../storage/types';
 import type { ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor } from '../router';
-import { createMiniMap } from '../views/map';
+import { speciesColor } from '../../species/colors';
 import { clipCard } from './clip-card';
 import { locationBlock } from './location-block';
+import { mapPreview } from './map-preview';
 import { memberGate } from './member-gate';
 
 /**
- * Member-only species ID card: most recent sighting location (Plus Code,
- * coordinates, mini map, Google Maps link) and the species' saved ID clip
+ * Member-only species ID card: most recent sighting location (map preview,
+ * coordinates, Google Maps link, Plus Code under "More location details",
+ * the same block as the sighting card) and the species' saved ID clip
  * (player, spectrogram with the identifying windows outlined, tap-to-run
  * "Why this ID"). Tapping the card opens the sighting history. Everything is
- * read from IndexedDB; nothing is fetched except OSM tiles for the mini map.
+ * read from IndexedDB; nothing is fetched except OSM tiles for the map preview.
  */
 export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLElement; dispose: () => void } {
   const { controller, api } = ctx;
@@ -57,11 +59,9 @@ export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLEle
         const latest = located[located.length - 1];
         const parts: HTMLElement[] = [];
         if (latest) {
-          const mapBox = el('div', { class: 'map mini' });
-          parts.push(el('div', { class: 'stack' }, el('div', { class: 'small muted' }, `Most recent sighting · ${fmtDateTime(latest.lastTime)} · peak ${pct(latest.peakConfidence)} · ${latest.hits} window${latest.hits === 1 ? '' : 's'}`), locationBlock(latest.lat!, latest.lon!, { accuracy: latest.accuracy }), mapBox));
-          requestAnimationFrame(() => {
-            if (mapBox.isConnected) disposers.push(createMiniMap(mapBox, [latest], controller));
-          });
+          const preview = mapPreview(latest.lat!, latest.lon!, { color: speciesColor(species.scientific).css, label: species.common });
+          disposers.push(preview.dispose);
+          parts.push(el('div', { class: 'stack' }, el('div', { class: 'small muted' }, `Most recent sighting · ${fmtDateTime(latest.lastTime)} · peak ${pct(latest.peakConfidence)} · ${latest.hits} window${latest.hits === 1 ? '' : 's'}`), preview.el, locationBlock(latest.lat!, latest.lon!, { accuracy: latest.accuracy })));
         } else {
           parts.push(el('p', { class: 'small muted' }, dets.length ? `${dets.length} sighting${dets.length === 1 ? '' : 's'}, none with a position yet.` : 'No sightings of this species yet.'));
         }
