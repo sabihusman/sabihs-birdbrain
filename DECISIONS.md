@@ -1149,7 +1149,7 @@ Sabih's approval and a baseline check of the other sites after every reload.
   /v1/admin/ask-costs` (admin only) returns the last 30 days and the
   configured model; the Admin page shows them as a table with totals
   (`src/ui/views/admin.ts`, `adminAskCosts()` in `src/api/client.ts`).
-- **Eval (`scripts/eval-models.ts`, pieces in `server/src/eval-models.ts`):**
+- **Eval (`server/scripts/eval-models.ts`, pieces in `server/src/eval-models.ts`):**
   20 fixed questions over 5 species (blackbird, great tit, robin, blue jay,
   house finch; one off-topic control), the real `answerQuestion` pipeline
   with the article fetched once per species so both models see the same
@@ -1287,7 +1287,7 @@ other open branches, so this may be renumbered at merge.)
   `provider_error`, `empty`, `cut_off`, `leak`, `injected`, `markup`; the
   totals table counts flagged answers per model. The plan prices Gemini only
   and lists Ollama as plan allowance. Run on the server or locally:
-  `GEMINI_API_KEY=… OLLAMA_API_KEY=… npx tsx scripts/eval-models.ts --models gemini-3.5-flash-lite --ollama gemma4:31b`
+  `cd server && GEMINI_API_KEY=… OLLAMA_API_KEY=… npm run eval -- --models gemini-3.5-flash-lite --ollama gemma4:31b`
   (`--dry-run` first; no key in this environment, so only the dry run was
   executed here).
 - **Alternatives:** the OpenAI-compatible `https://ollama.com/v1` endpoint

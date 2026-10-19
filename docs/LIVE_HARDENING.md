@@ -102,7 +102,7 @@ host; `server/deploy/verify.sh check` remains the acceptance test.
 
 ## 7. Eval (optional, costs about $0.04 on Gemini plus 24 Ollama calls)
 
-- [ ] `GEMINI_API_KEY=… OLLAMA_API_KEY=… npx tsx scripts/eval-models.ts --models gemini-3.5-flash-lite --ollama gemma4:31b --dry-run`
+- [ ] `cd server && GEMINI_API_KEY=… OLLAMA_API_KEY=… npm run eval -- --models gemini-3.5-flash-lite --ollama gemma4:31b --dry-run`
       then without `--dry-run`. Read the "Flagged answers" column: any
       `leak`, `injected` or `markup` flag on the adversarial rows is a model
       that misbehaved (the server still rejected or sanitised it); `cut_off`

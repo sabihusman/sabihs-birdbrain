@@ -6,7 +6,7 @@
  * Markdown table (server/src/eval-models.ts and eval-adversarial.ts have the
  * pieces).
  *
- *   GEMINI_API_KEY=… OLLAMA_API_KEY=… npx tsx scripts/eval-models.ts [--dry-run] [--models a,b] [--ollama gemma4:31b | --no-ollama] [--budget 0.10]
+ *   cd server && GEMINI_API_KEY=… OLLAMA_API_KEY=… npm run eval -- [--dry-run] [--models a,b] [--ollama gemma4:31b | --no-ollama] [--budget 0.10]
  *
  * Keys are read from the environment only. Gemini models are priced and the
  * run is refused above the budget (default $0.10); the Ollama Cloud model
@@ -16,13 +16,13 @@
  * printed to stdout on purpose: this is an evaluation, not the server log.
  * Flags in the table: provider_error, empty, cut_off, leak, injected, markup.
  */
-import { createGeminiModel } from '../server/src/ask';
-import { ADVERSARIAL_CASES } from '../server/src/eval-adversarial';
-import { EVAL_BUDGET_USD, EVAL_MODELS, EVAL_QUESTIONS, formatPlan, formatResults, planRun, runEval, UsageCollector } from '../server/src/eval-models';
-import { loadLabels } from '../server/src/labels';
-import { createChain } from '../server/src/providers/index';
-import { createOllamaGenerator } from '../server/src/providers/ollama';
-import { fetchWikipediaArticle } from '../server/src/wiki-article';
+import { createGeminiModel } from '../src/ask';
+import { ADVERSARIAL_CASES } from '../src/eval-adversarial';
+import { EVAL_BUDGET_USD, EVAL_MODELS, EVAL_QUESTIONS, formatPlan, formatResults, planRun, runEval, UsageCollector } from '../src/eval-models';
+import { loadLabels } from '../src/labels';
+import { createChain } from '../src/providers/index';
+import { createOllamaGenerator } from '../src/providers/ollama';
+import { fetchWikipediaArticle } from '../src/wiki-article';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -68,7 +68,7 @@ async function main() {
     process.exitCode = 2;
     return;
   }
-  const labels = loadLabels('public/models/birdnet-v2.4/labels.json');
+  const labels = loadLabels(process.env.LABELS_PATH ?? '../public/models/birdnet-v2.4/labels.json');
   // Per-call lines go to stderr so stdout stays a clean Markdown document.
   const runs = geminiModels.map((model) => {
     const collector = new UsageCollector();

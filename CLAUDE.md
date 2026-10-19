@@ -142,7 +142,7 @@ npm run build        # typecheck + vite build → dist/ (includes sw.js)
 npm run preview      # serve dist/ at http://localhost:4173/
 npm run test:e2e     # playwright (starts preview itself); needs Chromium installed
 npx tsx scripts/validate-model.ts <modelDir> real <file.wav> [windows]   # Node sanity check
-npx tsx scripts/eval-models.ts --dry-run   # plan only; with GEMINI_API_KEY set it runs (refuses above $0.10)
+cd server && npm run eval -- --dry-run   # plan only; with GEMINI_API_KEY set it runs (refuses above $0.10)
 ```
 
 Deploy: Vercel builds from the repo with base `/` (Sabih connected it); the
