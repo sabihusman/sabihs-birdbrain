@@ -1076,3 +1076,53 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** live eBird observation responses (no key here); how well
   Gemini keeps to the role rules and the "sources differ" wording; the
   bounding boxes on a device near a border.
+
+## 51. Account deletion: password + DELETE, one transaction, no grace period
+
+- **Decision:** Settings › Account › "Delete my account" asks for the
+  password again and the word DELETE (button disabled until both are
+  filled; a wrong word is caught on the device and again on the server).
+  `POST /v1/me/delete` takes `{ password, confirm: 'DELETE' }` (strict),
+  refuses the admin account first (400 `admin_account`, message "The admin
+  account can’t be deleted from the app, because it approves other members.
+  Ask Sabih."), verifies the password with `auth.api.signInEmail`, then
+  runs `deleteUserCompletely` (`server/src/account-deletion.ts`): one
+  `BEGIN IMMEDIATE` transaction over `shared_species`, `friendship`,
+  `friend_invite`, `invite_usage`, `ask_usage`, `login_challenge`,
+  `verification`, `session`, `account`, `user`. After the commit a short
+  confirmation mail goes to the address (failure logged, not returned).
+  The app then shows a confirmation screen (`account-deleted`) with "Also
+  clear sightings saved on this phone" unchecked; Done with it checked runs
+  `clearAllData()` on the device. Listening keeps working either way.
+- **Better Auth checked (1.7.11, `@better-auth/core` types and
+  `dist/api/routes/update-user.mjs`, and the docs page "Delete User",
+  2026-10-19):** `user.deleteUser.enabled`, `sendDeleteAccountVerification`,
+  `beforeDelete`, `afterDelete`, `deleteTokenExpiresIn` exist, and
+  `auth.api.deleteUser` accepts `password` (verified with
+  `ctx.context.password.verify`) or else needs a session younger than
+  `session.freshAge` (24 h). Its deletion is `internalAdapter.deleteUser`
+  then `deleteUserSessions`, two separate adapter calls outside any
+  transaction, and the hooks run before and after them, so the app's own
+  tables could not be wiped atomically with the user row. Not used; the
+  password check it does is the same scrypt verify that `signInEmail`
+  performs, so that documented call is used instead and the extra session
+  row dies in the transaction.
+- **What is not on the server:** sightings, clips, detections and ticks
+  (IndexedDB only; the ticks are derived from the sightings store); clip
+  files (none exist on the server, so there is no file step); stored
+  questions or answers (only the per-day counters); an answer cache (none
+  on main). The source caches are keyed by species.
+- **"What we store":** `src/ui/components/what-we-store.ts`, one paragraph
+  derived from the code, on the sign-up form and in the Account card,
+  ending with "Copies in server backups are removed when those backups
+  expire." It names Gemini only: there is no Ollama in the code.
+- **Tests:** `server/test/account-deletion.test.ts` (every table from
+  `sqlite_master` free of the id, the address and the ask scope; both tokens
+  401; the former friend's and invitee's lists empty; admin 400; wrong
+  password / wrong word / missing field / extra field 400 with the snapshot
+  unchanged; mail sent, mail failure harmless; pending account may delete),
+  `tests/what-we-store.test.ts`, `tests/api-client.test.ts`, and the e2e
+  member test (disabled button, wrong word does nothing, stubbed success
+  shows the confirmation screen, session gone, sighting kept).
+- **Not verified:** the live mail and the retention of `VACUUM INTO`
+  backups on the server (the PR asks the PC session to confirm it).

@@ -106,14 +106,25 @@ describe('ApiClient: account and friends', () => {
     expect(seen[1].body).toEqual({ email: 'sam@example.com' });
   });
 
-  it('deleteAccount drops the local session even when the server fails', async () => {
+  it('deleteAccount sends the password and the word, keeps the session on a refusal and drops it on success', async () => {
     const storage = new MemoryStorage();
     storage.setItem(SESSION_KEY, JSON.stringify({ token: 'tok', expiresAt: null, user }));
-    const api = new ApiClient('https://api.test', storage, fakeFetch(() => ({ status: 500, body: { error: 'internal_error' } })));
-    await expect(api.deleteAccount()).rejects.toBeInstanceOf(ApiError);
+    const bodies: unknown[] = [];
+    let status = 400;
+    const api = new ApiClient('https://api.test', storage, fakeFetch((_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return status === 200 ? { status, body: { ok: true } } : { status, body: { error: 'wrong_password' } };
+    }));
+    await expect(api.deleteAccount('secret', 'DELETE')).rejects.toBeInstanceOf(ApiError);
+    expect(api.signedIn).toBe(true);
+    expect(bodies).toEqual([{ password: 'secret', confirm: 'DELETE' }]);
+    status = 200;
+    await api.deleteAccount('secret', 'DELETE');
     expect(api.signedIn).toBe(false);
     expect(storage.getItem(SESSION_KEY)).toBeNull();
-    expect(describeApiError(new ApiError(400, 'admin_account'))).toMatch(/admin/);
+    expect(describeApiError(new ApiError(400, 'admin_account'))).toMatch(/approves other members/);
+    expect(describeApiError(new ApiError(400, 'wrong_password'))).toMatch(/password/);
+    expect(describeApiError(new ApiError(400, 'confirm_mismatch'))).toMatch(/DELETE/);
     expect(describeApiError(new ApiError(404, 'not_found'))).toMatch(/invite/);
     expect(describeApiError(new ApiError(400, 'unknown_species'))).toMatch(/species/);
   });

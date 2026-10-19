@@ -220,10 +220,17 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('share-species')).not.toBeChecked();
   await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
   await expect(page.getByTestId('invite-send')).toBeVisible();
+  await expect(page.getByTestId('what-we-store')).toContainText('Copies in server backups are removed when those backups expire.');
+  // Delete section: the button stays disabled until the password and the word are typed; a wrong word does nothing.
+  await expect(page.getByTestId('delete-account')).toBeDisabled();
+  await page.getByTestId('delete-password').fill('correct horse battery staple');
+  await expect(page.getByTestId('delete-account')).toBeDisabled();
+  await page.getByTestId('delete-word').fill('delete');
+  await expect(page.getByTestId('delete-account')).toBeEnabled();
   await page.getByTestId('delete-account').click();
-  await expect(page.getByTestId('delete-account-confirm')).toBeVisible();
-  await page.getByRole('button', { name: 'Keep my account' }).click();
-  await expect(page.getByTestId('delete-account-confirm')).toBeHidden();
+  await expect(page.getByTestId('account')).toContainText('Type DELETE in capitals to confirm. Your account was not deleted.');
+  await expect(page.getByTestId('account-deleted')).toHaveCount(0);
+  await expect(page.getByTestId('account-name')).toHaveText('member');
   // The species page shows the "Spotted by" card with the member's own row (friends unreachable: only "You").
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('spotted-by-me')).toContainText(/You · /);
@@ -247,6 +254,33 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('wiki')).toBeVisible();
   await expect(page.getByText('Your sightings')).toBeVisible();
   await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // the sighting is still there
+
+  // Deletion with the API stubbed: the right password and word show the confirmation screen, signed out,
+  // with "Also clear sightings saved on this phone" unchecked; Done keeps the sighting.
+  let deleteBody: unknown = null;
+  await page.route(/\/v1\/me\/delete$/, async (route) => {
+    deleteBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+  await page.evaluate(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'member', status: 'approved', role: 'member' } }));
+  });
+  await page.goto('./#/settings');
+  await page.reload();
+  await expect(page.getByTestId('account-name')).toHaveText('member');
+  await page.getByTestId('delete-password').fill('correct horse battery staple');
+  await page.getByTestId('delete-word').fill('DELETE');
+  await page.getByTestId('delete-account').click();
+  await expect(page.getByTestId('account-deleted')).toBeVisible();
+  await expect(page.getByTestId('account-deleted')).toContainText('Your account was deleted.');
+  expect(deleteBody).toEqual({ password: 'correct horse battery staple', confirm: 'DELETE' });
+  await expect(page.getByTestId('wipe-phone')).not.toBeChecked();
+  expect(await page.evaluate(() => localStorage.getItem('birdbrain.auth.v1'))).toBeNull();
+  await page.getByTestId('deleted-done').click();
+  await expect(page.getByTestId('account-deleted')).toHaveCount(0);
+  await expect(page.getByTestId('account').getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // kept: the box was unchecked
 });
 
 test('theme: dark by default whatever the device prefers, toggle persists, no wrong-theme flash', async ({ browser }) => {
