@@ -13,6 +13,7 @@ import type { SpeciesLabels } from './labels.js';
 import { LoginChallenges } from './login-codes.js';
 import { MailError, type Mailer } from './mailer.js';
 import { RateLimiter } from './rate-limit.js';
+import { SignupNotifier } from './signup-notify.js';
 import { Users } from './users.js';
 import type { WikiFetcher } from './wiki.js';
 import type { ArticleFetcher } from './wiki-article.js';
@@ -28,7 +29,9 @@ export interface AppDeps {
   article?: ArticleFetcher;
   model: AnswerModel | null;
   /** Override limits in tests. */
-  limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number };
+  limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number; signupNotifyWindowMs?: number };
+  /** Clock for the sign-up notifier (tests). */
+  now?: () => number;
 }
 
 export const BODY_LIMIT_BYTES = 16 * 1024;
@@ -50,6 +53,8 @@ export function createApp(deps: AppDeps) {
   const authByIp = new RateLimiter(deps.limits?.ipPerWindow ?? 20, windowMs);
   const loginByEmail = new RateLimiter(deps.limits?.emailPerWindow ?? 6, windowMs);
   const askByIp = new RateLimiter(deps.limits?.askPerMinute ?? 10, 60 * 1000);
+  // Admin page lives on the first allowed origin (the production front end).
+  const signups = new SignupNotifier(mailer, config.adminEmail, `${config.allowedOrigins[0]}/#/admin`, deps.limits?.signupNotifyWindowMs, deps.now);
 
   const app = new Hono();
 
@@ -159,10 +164,13 @@ export function createApp(deps: AppDeps) {
     if (!body) return json(c, 400, { error: 'invalid_request' });
     const ch = challenges.verify(body.challenge, body.code);
     if (!ch) return json(c, 401, { error: 'invalid_code' });
+    const before = users.get(ch.user_id);
     users.markEmailVerified(ch.user_id);
     const user = users.get(ch.user_id);
     const expiresAt = users.sessionExpiry(ch.session_token);
     if (!user || !expiresAt) return json(c, 401, { error: 'invalid_code' });
+    // First successful verification of a pending account: tell the admin (rate-limited, address only).
+    if (before && !before.emailVerified && user.status === 'pending') await signups.notify(user.email);
     return json(c, 200, { token: ch.session_token, expiresAt: expiresAt.toISOString(), user: publicUser(user) });
   });
 

@@ -32,7 +32,7 @@ export interface TestApp {
   modelCalls: Array<{ systemInstruction: string; prompt: string }>;
 }
 
-export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerModel | null; env?: Partial<NodeJS.ProcessEnv>; limits?: Parameters<typeof createApp>[0]['limits']; mailer?: Mailer } = {}): Promise<TestApp> {
+export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerModel | null; env?: Partial<NodeJS.ProcessEnv>; limits?: Parameters<typeof createApp>[0]['limits']; mailer?: Mailer; now?: () => number } = {}): Promise<TestApp> {
   const config = testConfig(opts.env);
   const db = openDatabase(':memory:');
   await migrateAuth(db, config);
@@ -48,7 +48,7 @@ export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerMod
           return 'A plain answer from the source text.';
         }));
   const wiki: WikiFetcher = opts.wiki ?? (async (sci) => ({ title: sci, extract: `${sci} is a bird. It eats seeds.`, url: `https://en.wikipedia.org/wiki/${sci.replace(' ', '_')}` }));
-  const app = createApp({ config, db, auth, mailer: opts.mailer ?? mailer, labels: LABELS, wiki, model, limits: opts.limits });
+  const app = createApp({ config, db, auth, mailer: opts.mailer ?? mailer, labels: LABELS, wiki, model, limits: opts.limits, now: opts.now });
   return { app, mailer, config, modelCalls };
 }
 

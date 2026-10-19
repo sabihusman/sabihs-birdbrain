@@ -585,3 +585,21 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** a live TextExtracts response for a bird page (fixture
   only); how well Gemini follows the citation format.
 
+## 38. Admin is told about new sign-ups, at most once per 10 minutes
+
+- **Decision:** when a pending account verifies its e-mail code for the
+  first time, the API mails `ADMIN_EMAIL` "New Birdbrain sign-up:
+  name@example.com is waiting for approval" with the admin page link
+  (`<first allowed origin>/#/admin`). Nothing else about the user goes into
+  the mail. The admin's own account (approved at creation) and repeat logins
+  never trigger it.
+- **Rate limit:** `SignupNotifier` keeps an in-memory window of 10 minutes:
+  the first sign-up of a quiet period is mailed at once; sign-ups inside the
+  window are held and sent as one summary ("6 new Birdbrain sign-ups are
+  waiting for approval", addresses listed) when the window closes, by a
+  timer or by the next sign-up after it. A spam burst therefore costs at
+  most one mail per 10 minutes. The state is per process (a restart may
+  send one extra mail), which matches the in-memory rate limiters (#17).
+- **Failure:** a mailer error is logged and never surfaces to the
+  signing-up user; approval is still possible from the admin page.
+
