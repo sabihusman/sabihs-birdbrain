@@ -13,7 +13,7 @@ reverse action listed next to it.
 | `rollback.sh` | Reverse order: container, deploy user, Nginx site (checked for our marker), renewal units. Keeps `.env`, the data volumes and the certificate unless `--purge`. |
 | `verify.sh` | `baseline` records the status codes of `/`, `/vault`, `/wellmark/` and `sabih-sentinel.duckdns.org`; `check` diffs them, checks Birdbrain's `/health`, the HTTP→HTTPS redirect and security headers, and that port 8010 is **not** reachable on the public address (curl to `95.216.159.93:8010` must get no response; `ss -tln` must show only `127.0.0.1:8010`). Run `baseline` before step 1 and `check` after step 8. |
 | `nginx/birdbrain.http-only`, `nginx/birdbrain` | Stage-1 (ACME + redirect) and final (proxy to `127.0.0.1:8010`, `limit_req` 6 r/min burst 5 → 429, `limit_conn` 3, 16 KB bodies, HSTS/nosniff/no-referrer, no CORS) site files. `__LEGO_PATH__` is substituted from `setup.conf`. |
-| `systemd/lego-renew-birdbrain.service`, `.timer` | Sentinel's pattern: `EnvironmentFile=/etc/lego/lego-birdbrain.env`, `ExecStart=/usr/local/bin/lego run`, `ExecStartPost` runs `nginx -t && systemctl reload nginx`. Step 5 prints a diff against `lego-renew-sentinel.service` before installing. |
+| `systemd/lego-renew-birdbrain.service`, `.timer` | Sentinel's pattern: `EnvironmentFile=/etc/lego/lego-birdbrain.env`, `ExecStart=/usr/local/bin/lego run`, `ExecStartPost=/bin/systemctl reload nginx`, `After=network-online.target nginx.service`; timer `OnCalendar=*-*-* 03:00:00`. Only the domain and the env file differ from Sentinel's units; step 5 prints that diff before installing. |
 | `birdbrain-deploy.sh`, `sudoers-birdbrain-deploy`, `authorized_keys.example` | The forced-command deploy user (section 1). |
 
 Suggested order: `verify.sh baseline` → `setup.sh --dry-run` → `setup.sh` → add
@@ -82,6 +82,12 @@ compose reads that variable from `/opt/birdbrain/.env`, so pin with
 tag is pinned, so promoting a new build means editing that one line (or setting
 `latest`) and running the deploy script. Digest pinning (`@sha256:...`) is the
 stricter option once the image is stable.
+
+**Volume ownership.** The image has no `/data` or `/backups` directory, so Docker would
+create the named volumes' mount points as `root:root 0755`, and the container (user 1000,
+read-only root filesystem) could not create its SQLite file. Step 8 therefore runs
+`docker compose create api` first, chowns both volumes to `1000:1000` from a throwaway
+`alpine` container, and only then `docker compose up -d api`. Rerunning is harmless.
 
 ## 4. Daily backup
 

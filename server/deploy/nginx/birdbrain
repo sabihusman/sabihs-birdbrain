@@ -1,17 +1,21 @@
 # /etc/nginx/sites-available/birdbrain  -- STAGE 2 (final)
 # birdbrain-stage: full
 # Birdbrain API only. Never merge with the mba-vault or sentinel files.
+# Never claims default_server: the catch-all in sites-available/mba-vault owns it.
 # Zones must be declared at http level; sites-enabled files are included inside http {}.
 limit_req_zone  $binary_remote_addr zone=birdbrain:10m      rate=6r/m;
 limit_conn_zone $binary_remote_addr zone=birdbrain_conn:10m;
 
 server {
     listen 80;
+    listen [::]:80;
     server_name bird-brain.duckdns.org;
 
+    # ACME HTTP-01 challenges: same webroot and same block as Sentinel (/var/www/acme).
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/acme;
         default_type "text/plain";
+        try_files $uri =404;
     }
 
     location / {
@@ -20,12 +24,17 @@ server {
 }
 
 server {
+    # nginx 1.24: http2 is a listen flag ("http2 on;" needs 1.25.1+).
     listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name bird-brain.duckdns.org;
 
     # Paths are substituted by setup.sh from setup.conf (LEGO_PATH), matching Sentinel's layout.
     ssl_certificate     __LEGO_PATH__/certificates/bird-brain.duckdns.org.crt;
     ssl_certificate_key __LEGO_PATH__/certificates/bird-brain.duckdns.org.key;
+    # Same as Sentinel. Without these the http-level default (TLSv1 TLSv1.1 ...) would apply.
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
 
     # Abuse limits (the app has its own on top).
     limit_req zone=birdbrain burst=5 nodelay;

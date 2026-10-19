@@ -185,10 +185,20 @@ step7_deploy_user() {
 }
 
 step8_container() {
-  log "Step 8/8: pull the image and start the container (127.0.0.1:8010), wait for /health"
+  log "Step 8/8: pull the image, make the volumes writable for uid 1000, start the container (127.0.0.1:8010), wait for /health"
   [ -s "$ENV_FILE" ] || [ "$DRY_RUN" = 1 ] || { echo "$ENV_FILE is empty; add the variables first" >&2; exit 78; }
   grep -qE '^BIRDBRAIN_IMAGE_TAG=' "$ENV_FILE" 2>/dev/null && echo "   image tag: $(grep -E '^BIRDBRAIN_IMAGE_TAG=' "$ENV_FILE" | cut -d= -f2)" || echo "   note: BIRDBRAIN_IMAGE_TAG not set in $ENV_FILE; compose falls back to :latest"
-  ( cd "$APP_DIR" && run docker compose pull api && run docker compose up -d api )
+  (
+    cd "$APP_DIR"
+    run docker compose pull api
+    # `create` builds the container and its named volumes without starting anything. The image
+    # has no /data or /backups directory, so Docker would create those mount points as root:root
+    # 0755 and the app (user 1000, read-only root fs) could not write its SQLite file. Chown the
+    # two volumes from a throwaway container; harmless when repeated.
+    run docker compose create api
+    run docker run --rm --network none -v birdbrain-data:/data -v birdbrain-backups:/backups alpine chown 1000:1000 /data /backups
+    run docker compose up -d api
+  )
   if [ "$DRY_RUN" = 0 ]; then
     for _ in $(seq 1 30); do curl -fsS --max-time 3 http://127.0.0.1:8010/health >/dev/null 2>&1 && { echo "   healthy"; break; }; sleep 2; done
     curl -fsS --max-time 5 "https://$DOMAIN/health" && echo "   public health OK" || echo "   public health FAILED (check nginx/cert)"

@@ -1,13 +1,15 @@
 # /etc/systemd/system/lego-renew-birdbrain.service
-# Same pattern as lego-renew-sentinel.service: all lego settings come from an
-# EnvironmentFile copied from /etc/lego/lego-sentinel.env with only LEGO_DOMAINS changed.
+# Copy of lego-renew-sentinel.service with only the domain and the EnvironmentFile changed.
+# All lego settings come from the EnvironmentFile, which setup.sh step 4 copies from
+# /etc/lego/lego-sentinel.env changing only LEGO_DOMAINS. lego 5.x "run" skips renewal when
+# the certificate is not yet due, so a daily run is safe.
 [Unit]
-Description=Renew Let's Encrypt certificate for bird-brain.duckdns.org (lego)
-After=network-online.target
+Description=Renew Let's Encrypt certificate for bird-brain.duckdns.org via lego
+After=network-online.target nginx.service
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/lego/lego-birdbrain.env
 ExecStart=/usr/local/bin/lego run
-ExecStartPost=/bin/sh -c '/usr/sbin/nginx -t && /bin/systemctl reload nginx'
+ExecStartPost=/bin/systemctl reload nginx

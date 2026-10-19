@@ -1,9 +1,10 @@
 # /etc/systemd/system/lego-renew-birdbrain.timer
+# Copy of lego-renew-sentinel.timer with only the domain changed.
 [Unit]
-Description=Daily certificate renewal check for bird-brain.duckdns.org
+Description=Daily renewal check for bird-brain.duckdns.org certificate
 
 [Timer]
-OnCalendar=daily
+OnCalendar=*-*-* 03:00:00
 RandomizedDelaySec=1h
 Persistent=true
 
