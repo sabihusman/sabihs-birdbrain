@@ -1,6 +1,6 @@
 import type { Species } from '../../model/labels';
-import { getClip, listDetectionsForSpecies } from '../../storage/db';
-import type { ClipRecord, DetectionRecord } from '../../storage/types';
+import { getClip, listSightingsForSpecies } from '../../storage/db';
+import type { ClipRecord, SightingRecord } from '../../storage/types';
 import type { ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor } from '../router';
@@ -43,10 +43,10 @@ export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLEle
       });
 
       const render = async () => {
-        let dets: DetectionRecord[];
+        let dets: SightingRecord[];
         let clip: ClipRecord | undefined;
         try {
-          [dets, clip] = await Promise.all([listDetectionsForSpecies(species.scientific), getClip(species.scientific)]);
+          [dets, clip] = await Promise.all([listSightingsForSpecies(species.scientific), getClip(species.scientific)]);
         } catch {
           body.replaceChildren(el('p', { class: 'muted' }, 'Could not read your data.'));
           return;
@@ -57,7 +57,7 @@ export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLEle
         const parts: HTMLElement[] = [];
         if (latest) {
           const mapBox = el('div', { class: 'map mini' });
-          parts.push(el('div', { class: 'stack' }, el('div', { class: 'small muted' }, `Most recent sighting · ${fmtDateTime(latest.time)} · ${pct(latest.confidence)}`), locationBlock(latest.lat!, latest.lon!, { accuracy: latest.accuracy }), mapBox));
+          parts.push(el('div', { class: 'stack' }, el('div', { class: 'small muted' }, `Most recent sighting · ${fmtDateTime(latest.lastTime)} · peak ${pct(latest.peakConfidence)} · ${latest.hits} window${latest.hits === 1 ? '' : 's'}`), locationBlock(latest.lat!, latest.lon!, { accuracy: latest.accuracy }), mapBox));
           requestAnimationFrame(() => {
             if (mapBox.isConnected) disposers.push(createMiniMap(mapBox, [latest], controller));
           });

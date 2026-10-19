@@ -43,6 +43,33 @@ export interface DetectionRecord {
   offsetSec: number | null;
   source: DetectionSource;
   sessionId: string;
+  /** The sighting this window belongs to (absent on rows written before DB version 3; filled by the migration). */
+  sightingId?: string;
+}
+
+/**
+ * A sighting: consecutive detections of one species merged into one event.
+ * A new sighting starts after `sightingGapSeconds` without that species.
+ * Position, recording and offset are those of the peak-confidence window.
+ */
+export interface SightingRecord {
+  id: string;
+  label: string;
+  scientific: string;
+  common: string;
+  firstTime: number;
+  lastTime: number;
+  peakConfidence: number;
+  /** Number of analysis windows merged into this sighting. */
+  hits: number;
+  lat: number | null;
+  lon: number | null;
+  accuracy: number | null;
+  recordingId: string | null;
+  offsetSec: number | null;
+  source: DetectionSource;
+  sessionId: string;
+  peakDetectionId: string;
 }
 
 export interface WikiCacheEntry {

@@ -1,8 +1,8 @@
 import { searchSpecies, type Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
 import { getSpeciesSummary, type WikiResult } from '../../species/wiki';
-import { listDetectionsForSpecies, getRecording } from '../../storage/db';
-import type { DetectionRecord } from '../../storage/types';
+import { listSightingsForSpecies, getRecording } from '../../storage/db';
+import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
 import { el, fmtDateTime, pct } from '../dom';
@@ -72,7 +72,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
       idCard.el,
       el('section', { class: 'card' }, wikiBox),
       ask.el,
-      el('section', { class: 'card' }, el('h2', null, 'Your detections'), myBox),
+      el('section', { class: 'card' }, el('h2', null, 'Your sightings'), myBox),
     );
     void renderWiki(sp, wikiBox);
     void renderMine(sp, myBox);
@@ -121,11 +121,11 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
   };
 
   const renderMine = async (sp: Species, box: HTMLElement) => {
-    let dets: DetectionRecord[];
+    let dets: SightingRecord[];
     try {
-      dets = await listDetectionsForSpecies(sp.scientific);
+      dets = await listSightingsForSpecies(sp.scientific);
     } catch {
-      box.replaceChildren(el('p', { class: 'muted' }, 'Could not read detections.'));
+      box.replaceChildren(el('p', { class: 'muted' }, 'Could not read sightings.'));
       return;
     }
     if (dets.length === 0) {
@@ -134,7 +134,8 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     }
     const first = dets[0];
     const last = dets[dets.length - 1];
-    const best = dets.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+    const best = dets.reduce((a, b) => (b.peakConfidence > a.peakConfidence ? b : a), dets[0]);
+    const windows = dets.reduce((n, s) => n + s.hits, 0);
     const located = dets.filter((d) => d.lat != null && d.lon != null);
     const recIds = Array.from(new Set(dets.map((d) => d.recordingId).filter((x): x is string => !!x)));
     const recList = el('div', { class: 'list' });
@@ -146,8 +147,8 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     // Members get the latest location and map in the ID card above; free users keep them here.
     const showLocation = !isMember(ctx.api.user);
     box.replaceChildren(el('div', null,
-      el('dl', { class: 'kv' }, el('dt', null, 'Count'), el('dd', null, String(dets.length)), el('dt', null, 'First seen'), el('dd', null, fmtDateTime(first.time)), el('dt', null, 'Last seen'), el('dd', null, fmtDateTime(last.time)), el('dt', null, 'Best confidence'), el('dd', null, pct(best.confidence))),
-      !showLocation ? null : located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located detection'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
+      el('dl', { class: 'kv' }, el('dt', null, 'Sightings'), el('dd', null, `${dets.length} (${windows} analysed window${windows === 1 ? '' : 's'})`), el('dt', null, 'First seen'), el('dd', null, fmtDateTime(first.firstTime)), el('dt', null, 'Last seen'), el('dd', null, fmtDateTime(last.lastTime)), el('dt', null, 'Best confidence'), el('dd', null, pct(best.peakConfidence))),
+      !showLocation ? null : located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located sighting'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
       recIds.length ? el('h3', null, 'Recordings') : null,
       recList,
     ));

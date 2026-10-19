@@ -2,7 +2,7 @@ import { WINDOW_SAMPLES, WINDOW_SECONDS, SAMPLE_RATE } from '../../model/constan
 import { OCCLUSION_GRIDS } from '../../model/occlusion';
 import { selectDetections, type Score } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
-import { addDetections, deleteDetectionsForRecording, deleteRecording, getRecording, listDetectionsForRecording, listRecordings, newId, putRecording } from '../../storage/db';
+import { deleteDetectionsForRecording, deleteRecording, getRecording, listDetectionsForRecording, listRecordings, newId, putRecording, recordDetections } from '../../storage/db';
 import type { DetectionRecord, RecordingRecord } from '../../storage/types';
 import { downloadBlob } from '../../export/download';
 import type { View, ViewContext } from '../app';
@@ -236,7 +236,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
           records.push({ id: newId(), time: rec.createdAt + w.offsetSec * 1000, label: sp.label, scientific: sp.scientific, common: sp.common, confidence: d.prob, lat: rec.lat, lon: rec.lon, accuracy: rec.accuracy, recordingId: id, offsetSec: w.offsetSec, source: rec.source === 'import' ? 'import' : 'recording', sessionId: `rec-${id}` });
         }
       }
-      await addDetections(records);
+      await recordDetections(records, controller.settings.get().sightingGapSeconds * 1000);
       rec.summary = controller.summarize(summaryEntries);
       rec.analyzedAt = Date.now();
       await putRecording(rec);

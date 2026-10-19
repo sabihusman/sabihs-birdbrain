@@ -109,7 +109,7 @@ test('imports a recording, analyses it and explains an identification', async ({
   await expect(page.getByTestId('recordings-list')).toContainText('birdnet-sample');
   await expect(page.getByTestId('recordings-list')).toContainText('Lesser Redpoll');
   await page.goto('./#/species/Acanthis%20cabaret');
-  await expect(page.locator('.kv')).toContainText('Count', { timeout: 30_000 });
+  await expect(page.locator('.kv')).toContainText('Sightings', { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Recordings' })).toBeVisible();
 });
 
@@ -136,7 +136,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
 
   await card.click();
   await page.waitForURL(/#\/species\/Acanthis%20cabaret\/history/);
-  await expect(page.getByTestId('history-summary')).toContainText(/1 sighting, 0 with a position/);
+  await expect(page.getByTestId('history-summary')).toContainText(/1 sighting \(1 analysed window\), 0 with a position/);
   await expect(page.getByTestId('history-list')).toContainText('No position recorded');
   await expect(page.getByTestId('history-map')).toBeHidden();
 
@@ -149,7 +149,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('history-gate')).toContainText('Sign in to unlock Sighting history.');
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.getByTestId('wiki')).toBeVisible();
-  await expect(page.getByText('Your detections')).toBeVisible();
-  await expect(page.locator('dl.kv dd').first()).toHaveText('1'); // count row still shows the detection
+  await expect(page.getByText('Your sightings')).toBeVisible();
+  await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // the sighting is still there
 });
 
