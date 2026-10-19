@@ -687,3 +687,30 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone (swipe, safe areas with the dock, real
   microphone states); the "paused" state needs a real backgrounding.
 
+
+## 46. `/v1/ask` reads Gemini's finish reason; no half sentences
+
+(Numbered after the entries open on other branches; renumber at merge.)
+
+- **Problem:** live answers ended mid-sentence ("…though it notes that the").
+  The call asked for 400 output tokens and the model's own thinking counts
+  against the same allowance on thinking models, so the visible answer was
+  cut without any sign of it.
+- **Decision:** `createGeminiModel` sends `maxOutputTokens: 700` (room for 2–4
+  short paragraphs with citations) and `thinkingConfig.thinkingBudget: 512`
+  (`ThinkingConfig.thinkingBudget` in `@google/genai` 2.30; 0 disables and −1
+  is automatic, the range is model-dependent). It reads
+  `candidates[0].finishReason`; on `MAX_TOKENS` it retries once with 1400,
+  and if that is cut too it returns the complete sentences (citations kept)
+  followed by "(answer cut short)". The system instruction already asked for
+  at most 120 words. Each call logs one line, `[ask] attempt= limit= finish=
+  prompt_tokens= answer_tokens= thinking_tokens= total_tokens=`, never the
+  question or the answer.
+- **Alternatives:** streaming (more code for the same result); raising the
+  limit alone (hides the cause); asking the model to "finish the sentence"
+  (another call, same risk).
+- **Tests:** `server/test/ask-truncation.test.ts` with `FakeGemini` returning
+  `finishReason: 'MAX_TOKENS'` once and twice.
+- **Not verified:** the thinking budget against the real `gemini-3.8-flash`
+  (if the model rejects the value the API returns an error that the existing
+  502 path reports; adjust `ANSWER_THINKING_BUDGET` in `server/src/ask.ts`).
