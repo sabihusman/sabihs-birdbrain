@@ -1306,3 +1306,48 @@ other open branches, so this may be renumbered at merge.)
   `docs/LIVE_HARDENING.md` for the drill), the fallback timing on the free
   plan's single slot, and the Admin table on a phone.
 
+
+## 50. Recent sightings: one 30 s lumping rule, grouped per species on Listen
+
+- **What Sabih saw (2026-10-19):** Listen → Recent sightings listed Eastern
+  Bluebird at 3:34:15, :17, :18 and :20 and Mourning Dove at :06, :08 and :09,
+  although a 60 s sighting merge existed.
+- **Cause:** the 60 s rule lived only in storage. `recordDetections` folded
+  each analysis window into a `sightings` row correctly (reproduced with that
+  exact sequence in `tests/sightings.test.ts`: 7 stored hits, 2 sightings),
+  but the Listen screen never read `sightings`. "Recent sightings" rendered
+  an in-memory list of every window hit (`recent.slice(-8)`), and the live
+  result list showed the latest hit per species. The merge was invisible
+  where it mattered.
+- **Decision: one rule, 30 s, rolling, in one constant.**
+  `LUMP_GAP_SECONDS = 30` in `src/species/recent.ts` lumps hits of a species
+  when no more than 30 s separates one hit from the next (a bird singing
+  steadily stays one detection). The stored sightings now use the same
+  constant (`DEFAULT_SIGHTING_GAP_SECONDS = LUMP_GAP_SECONDS`), the
+  "New sighting after" slider is gone, and DB version 5 re-lumps the existing
+  `sightings` rows from the stored hits once. Stored per-window hits are never
+  dropped or merged (history, the heat map, clips and ticks need them); only
+  their `sightingId` links change.
+- **Display (`src/ui/components/recent-group-card.ts`, `src/ui/views/listen.ts`):**
+  one card per species, ordered by last heard, newest first; name, scientific
+  name, best confidence labelled "best", "Heard once" / "Heard N times" (N =
+  lumped detections, not raw hits) and "last <end of the newest detection>".
+  The header reads "N birds · N detections". The whole card is a button
+  (≥ 44 px, `aria-expanded`, label "Eastern Bluebird, heard once, best 100%,
+  last at 3:34 PM"); tapping it lists the detections, newest first, each with
+  a time range when it spans several hits ("3:34:15–3:34:20 PM"), the hit
+  count and the best confidence. Members get the species' saved clip (the
+  best one kept). The live results list reuses the same grouping: one result
+  card per species with "best", the count and the time last heard; Focus mode
+  shows the newest species large. The scope is this Listen view's session
+  (up to 400 hits kept), as before.
+- **Alternatives:** keep two rules (60 s stored, 30 s shown): rejected, the
+  numbers would disagree between Listen and the history. Count raw hits:
+  rejected, every 1.5 s window would inflate the number. Merge stored hits:
+  rejected, history and clips need each window.
+- **Tests:** `tests/recent.test.ts` (29 s merges, 31 s splits, a 20-hit chain
+  stays one detection, sort order, a new hit moves the card up and bumps the
+  count, counts, labels, expand/collapse state), `tests/sightings.test.ts`
+  (the phone sequence, the version-5 re-lump, stored hits untouched), and a
+  Playwright test per Listen layout (card, aria-expanded, rows, collapse, no
+  overflow). Screenshots: `docs/screenshots/listen-recent-{grouped,expanded}-{dark,light}.png`.

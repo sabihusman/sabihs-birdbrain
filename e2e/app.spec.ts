@@ -460,7 +460,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     }, layout);
     await page.goto('./#/listen');
     await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-    await expect(page.getByTestId('recent-empty')).toBeVisible();
+    await expect(page.getByTestId('recent-empty')).toBeAttached(); // inside the collapsed fold until opened
     await page.getByTestId('demo').click();
     await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
     // The live results list shows the best confidence labelled "best" and the count.
@@ -475,6 +475,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     const fold = page.getByTestId('recent-fold');
     await expect(page.getByTestId('recent-summary')).toHaveText(/^\d+ birds? · \d+ detections?$/);
     await fold.locator('summary').click();
+    await expect(page.getByTestId('recent-empty')).toBeHidden();
     const cards = page.getByTestId('recent-card');
     const n = await cards.count();
     expect(n).toBeGreaterThanOrEqual(1);
