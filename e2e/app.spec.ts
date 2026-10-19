@@ -136,6 +136,17 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(card.getByTestId('clip-meta')).toContainText(/\d+% confidence · imported file/);
   await expect(card).toContainText('none with a position yet');
 
+  // ID clip: spectrogram drawn from the stored audio, the identifying window listed with its confidence, the wording, and tap-to-run "Why this ID".
+  await expect(card.getByTestId('clip-spectrogram')).toBeVisible();
+  await expect(card.getByTestId('clip-windows')).toContainText(/Identified in 1 window of 3 s: 0:00–0:03 \(\d+%\)/);
+  await expect(card.getByTestId('clip-meaning')).toContainText('BirdNET marks when a species is heard, not which of the overlapping sounds it is.');
+  await expect(card.getByTestId('clip-why-result')).toHaveCount(0); // nothing ran on its own
+  // Tapping the spectrogram seeks; it must not open the history (the card is a link).
+  await card.locator('.viz canvas.overlay').click({ position: { x: 40, y: 40 } });
+  await expect(page).toHaveURL(/#\/species\/Acanthis%20cabaret$/);
+  await card.getByTestId('clip-why-run').click();
+  await expect(card.getByTestId('clip-why-result')).toContainText(/Lesser Redpoll: baseline \d+% on this window/, { timeout: 240_000 });
+
   await card.click();
   await page.waitForURL(/#\/species\/Acanthis%20cabaret\/history/);
   await expect(page.getByTestId('history-summary')).toContainText(/1 sighting \(1 analysed window\), 0 with a position/);
