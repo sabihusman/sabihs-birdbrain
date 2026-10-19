@@ -1403,3 +1403,46 @@ other open branches, so this may be renumbered at merge.)
   (the phone sequence, the version-5 re-lump, stored hits untouched), and a
   Playwright test per Listen layout (card, aria-expanded, rows, collapse, no
   overflow). Screenshots: `docs/screenshots/listen-recent-{grouped,expanded}-{dark,light}.png`.
+
+## 52. Server maintenance scripts are read-only planners, run by hand, tested against a fake tree
+
+(Numbered #50 while #48 cost and #49 Ollama are on open branches; may be renumbered on merge.)
+
+- **Decision:** `scripts/server/update-planner.sh` and
+  `scripts/server/backup-restore-test.sh` (docs/SERVER_RUNBOOK.md) are copied to
+  the host and run by a normal user; nothing in CI or in the app runs them.
+  The host also serves other projects, so the scripts only *read* system state
+  (`apt list --upgradable` / `apt-get -s upgrade`, `/var/run/reboot-required*`,
+  `needrestart -b`) and only *write* under `/opt/birdbrain` (`reports/`,
+  `tmp/`). Neither ever calls `apt-get install`, `systemctl`, `docker compose
+  down/up/restart/stop` or `docker exec` on the live container. Both refuse to
+  run as root (exit 77); the restore test calls `sudo` itself for the three
+  things that need it on this host (root-owned `/opt/birdbrain`, `docker
+  compose` reading the root-only `.env`, and the root-only volume paths for the
+  sqlite3 engine) and prints the reason first.
+- **Restore test design:** the newest `birdbrain-*.db` in the `birdbrain-backups`
+  volume is copied into `mktemp -d /opt/birdbrain/tmp/restore-test.XXXXXX`,
+  opened read-write (the restore), `PRAGMA integrity_check`ed and counted per
+  table; the live `/data/birdbrain.db` is opened `{ readOnly: true }`
+  (`node:sqlite`) or `sqlite3 -readonly`; an `EXIT` trap removes the folder on
+  every path. Preferred engine is the api image itself via `docker compose run
+  --rm --no-deps -T` (no ports, separate one-off container, same `node:sqlite`
+  the app uses); the sqlite3 CLI is the fallback. Exit 3 when no backup exists.
+- **Tests:** `scripts/server/test.sh` (47 checks, run by CI after `npm test`)
+  drives both scripts with `--dry-run` and for real against a temp tree, a fake
+  `docker` (runs the node program locally; exits 99 on down/restart/stop/up)
+  and a fake `sudo`. Test hooks are environment variables (`BIRDBRAIN_HOME`,
+  `BB_RUN_DIR`, `BB_APT_LIST_FILE`, `BB_DOCKER`, `BB_SUDO`, `BB_TEST_UID`);
+  `shellcheck -S style` is clean (0.11.0).
+- **Alternatives rejected:** running the restore in a second compose project on
+  `127.0.0.1:<port>` (the app is not needed to compare counts, and a second API
+  on the host is more surface); `unattended-upgrades` or any auto-apply (shared
+  host, kernel/docker upgrades restart the other projects); opening the live DB
+  with `immutable=1` (silently wrong reads under concurrent writes; `readOnly`
+  is enough).
+- **Not verified (no server access from this session):** that `sqlite3` or
+  `needrestart` are installed on the host, that `docker compose run -v` with a
+  bind under `/opt/birdbrain/tmp` works with the image's `read_only` root
+  filesystem (the bind is a separate mount, so it should), and the actual
+  backup listing; docs/SERVER_RUNBOOK.md §3 lists the read-only checks to run
+  first.

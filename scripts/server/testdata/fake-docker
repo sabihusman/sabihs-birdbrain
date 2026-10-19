@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Fake `docker` for scripts/server/test.sh. Supports: info; volume inspect; compose ... run ... api node -e PROGRAM.
+# Runs the node program locally with the fake tree's paths (FAKE_HOME) instead of the container's.
+set -euo pipefail
+echo "$*" >> "${FAKE_LOG:?}"
+case "$1" in
+  info) exit 0 ;;
+  volume)  # volume inspect -f '{{.Mountpoint}}' NAME: the name is the last argument
+    while [ $# -gt 1 ]; do shift; done
+    case "$1" in
+      birdbrain-backups) echo "${FAKE_HOME:?}/volumes/backups" ;;
+      birdbrain-data) echo "${FAKE_HOME:?}/volumes/data" ;;
+      *) echo "no such volume" >&2; exit 1 ;;
+    esac ;;
+  compose)
+    restore=""; prog=""; prev=""
+    for a in "$@"; do
+      case "$prev" in
+        -v) restore="${a%%:*}" ;;
+        -e) [ "$a" = RESTORE_DIR=/restore ] || prog="$a" ;;
+      esac
+      case "$a" in down|restart|stop|rm|up) echo "FAKE DOCKER: forbidden subcommand $a" >&2; exit 99 ;; esac
+      prev="$a"
+    done
+    if [ -z "$prog" ] || [ -z "$restore" ]; then echo "fake docker: unexpected compose call: $*" >&2; exit 98; fi
+    BACKUP_DIR="${FAKE_HOME:?}/volumes/backups" DATABASE_PATH="${FAKE_HOME:?}/volumes/data/birdbrain.db" RESTORE_DIR="$restore" \
+      exec node --disable-warning=ExperimentalWarning -e "$prog" ;;
+  *) echo "fake docker: unsupported: $*" >&2; exit 97 ;;
+esac
