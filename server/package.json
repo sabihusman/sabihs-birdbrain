@@ -12,7 +12,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "eslint .",
-    "eval": "tsx scripts/eval-models.ts"
+    "eval": "tsx scripts/eval-models.ts",
+    "harden": "node dist/hardening/cli.js",
+    "harden:dev": "tsx src/hardening/cli.ts"
   },
   "dependencies": {
     "@google/genai": "2.30.0",
