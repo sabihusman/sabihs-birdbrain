@@ -22,7 +22,7 @@ case "$1" in
       case "$a" in down|restart|stop|rm|up) echo "FAKE DOCKER: forbidden subcommand $a" >&2; exit 99 ;; esac
       prev="$a"
     done
-    [ -n "$prog" ] && [ -n "$restore" ] || { echo "fake docker: unexpected compose call: $*" >&2; exit 98; }
+    if [ -z "$prog" ] || [ -z "$restore" ]; then echo "fake docker: unexpected compose call: $*" >&2; exit 98; fi
     BACKUP_DIR="${FAKE_HOME:?}/volumes/backups" DATABASE_PATH="${FAKE_HOME:?}/volumes/data/birdbrain.db" RESTORE_DIR="$restore" \
       exec node --disable-warning=ExperimentalWarning -e "$prog" ;;
   *) echo "fake docker: unsupported: $*" >&2; exit 97 ;;

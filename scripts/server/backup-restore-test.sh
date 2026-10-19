@@ -149,7 +149,7 @@ fi
 
 # ---- temp folder, removed whatever happens ---------------------------------------------
 TMP=""
-# shellcheck disable=SC2329  # invoked by the EXIT trap
+# shellcheck disable=SC2329,SC2317  # invoked by the EXIT trap (SC2317 on shellcheck <= 0.10, SC2329 on newer)
 cleanup() {
   rc=$?
   if [ -n "$TMP" ] && [ -d "$TMP" ]; then
