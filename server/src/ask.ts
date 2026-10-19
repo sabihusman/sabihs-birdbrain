@@ -1,6 +1,10 @@
 import { FinishReason, GoogleGenAI, HarmBlockThreshold, HarmCategory, ThinkingLevel, type GenerateContentParameters } from '@google/genai';
 import { z } from 'zod';
+import type { AnswerCache } from './answer-cache.js';
+import { CACHE_HIT_LOG_LINE, describeCost, type AskCostStore } from './ask-cost.js';
+import { CONTEXT_TOKEN_BUDGET, estimateTokens, selectRelevantSections } from './context-select.js';
 import type { UsageStore } from './db.js';
+import { costMicros, thinkingLevelFor, usageFromMetadata } from './pricing.js';
 import type { SpeciesLabels } from './labels.js';
 import type { WikiFetcher } from './wiki.js';
 import type { ArticleFetcher, ArticleSection, WikiArticle } from './wiki-article.js';
@@ -195,6 +199,7 @@ export const ANSWER_RETRY_OUTPUT_TOKENS = 1400;
  * Thinking level so reasoning cannot eat the answer allowance. Gemini 3 models take
  * `thinkingConfig.thinkingLevel` (gemini-3.8-flash: low, medium, high; default medium);
  * `thinkingBudget` is the legacy field and the two cannot be combined (ai.google.dev, "Thinking").
+ * The level is the lowest each model accepts (`thinkingLevelFor` in pricing.ts); this is the default.
  */
 export const ANSWER_THINKING_LEVEL = ThinkingLevel.LOW;
 export const CUT_SHORT_SUFFIX = '(answer cut short)';
@@ -203,7 +208,7 @@ export const CUT_SHORT_SUFFIX = '(answer cut short)';
 export interface GenAiResponse {
   text: string | undefined;
   candidates?: Array<{ finishReason?: string }>;
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; cachedContentTokenCount?: number; totalTokenCount?: number };
 }
 
 /** The part of the Gemini SDK the server uses; tests inject a fake that records calls. */
@@ -223,8 +228,9 @@ export function finishCutAnswer(text: string): string {
   return `${kept} ${CUT_SHORT_SUFFIX}`;
 }
 
-export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line)): AnswerModel {
+export function createGeminiModel(apiKey: string, model: string, client: GenAiClient = new GoogleGenAI({ apiKey }), log: (line: string) => void = (line) => console.info(line), costs?: AskCostStore): AnswerModel {
   const ai = client;
+  const thinkingLevel = thinkingLevelFor(model);
   const generate = (systemInstruction: string, prompt: string, maxOutputTokens: number) =>
     ai.models.generateContent({
       model,
@@ -233,7 +239,7 @@ export function createGeminiModel(apiKey: string, model: string, client: GenAiCl
         systemInstruction,
         temperature: 0.2,
         maxOutputTokens,
-        thinkingConfig: { thinkingLevel: ANSWER_THINKING_LEVEL },
+        thinkingConfig: { thinkingLevel },
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
           { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -245,8 +251,10 @@ export function createGeminiModel(apiKey: string, model: string, client: GenAiCl
   const describe = (res: GenAiResponse, attempt: number, limit: number) => {
     const u = res.usageMetadata ?? {};
     const finish = res.candidates?.[0]?.finishReason ?? 'unknown';
-    // Finish reason and token counts only; never the question or the answer.
-    return `[ask] attempt=${attempt} limit=${limit} finish=${finish} prompt_tokens=${u.promptTokenCount ?? '-'} answer_tokens=${u.candidatesTokenCount ?? '-'} thinking_tokens=${u.thoughtsTokenCount ?? '-'} total_tokens=${u.totalTokenCount ?? '-'}`;
+    const usage = usageFromMetadata(u);
+    const cost = costs ? costs.record(model, usage) : costMicros(model, usage);
+    // Finish reason, token counts and estimated cost only; never the question or the answer.
+    return `[ask] attempt=${attempt} limit=${limit} finish=${finish} prompt_tokens=${u.promptTokenCount ?? '-'} answer_tokens=${u.candidatesTokenCount ?? '-'} thinking_tokens=${u.thoughtsTokenCount ?? '-'} total_tokens=${u.totalTokenCount ?? '-'} ${describeCost(cost)}`;
   };
   const hitLimit = (res: GenAiResponse) => res.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS;
   return async ({ systemInstruction, prompt }) => {
@@ -275,6 +283,11 @@ export interface AskDeps {
   natureserve?: NatureServeFetcher;
   /** eBird sightings (cached); null or absent when EBIRD_API_KEY is not set. */
   ebird?: EbirdSource | null;
+  /** Answer cache (DECISIONS.md #48); optional so older call sites and tests keep working. */
+  answers?: AnswerCache<AnswerBody>;
+  /** Daily cost totals; cache hits are counted here, model calls in createGeminiModel. */
+  costs?: AskCostStore;
+  log?: (line: string) => void;
 }
 
 /** A source the answer drew on, for the links under the answer. */
@@ -283,9 +296,19 @@ export interface UsedSource {
   url: string;
 }
 
-export type AskOutcome =
-  | { status: 200; body: { answer: string; source: { title: string; url: string }; citations: Citation[]; context: 'article' | 'summary'; sources: UsedSource[]; region: Region } }
-  | { status: 400 | 403 | 404 | 429 | 502; body: { error: string } };
+/** The successful answer body; also what the answer cache stores. */
+export interface AnswerBody {
+  answer: string;
+  source: { title: string; url: string };
+  citations: Citation[];
+  context: 'article' | 'summary';
+  sources: UsedSource[];
+  region: Region;
+  /** Present (true) only when the answer was reused from the answer cache. */
+  cached?: true;
+}
+
+export type AskOutcome = { status: 200; body: AnswerBody } | { status: 400 | 403 | 404 | 429 | 502; body: { error: string } };
 
 /**
  * The NatureServe and eBird sections for one question. Every failure (timeout,
@@ -332,6 +355,15 @@ export async function answerQuestion(deps: AskDeps, user: { id: string; status?:
   const region: Region = parsed.data.region ?? 'none';
   const common = deps.labels.byScientific.get(species);
   if (!common) return { status: 400, body: { error: 'unknown_species' } };
+  // A cached answer costs nothing, so it is served before the caps are checked or counted.
+  // The key covers region and the rounded position: the eBird sections depend on them.
+  const scope = { region, near };
+  const cached = deps.answers?.get(species, question, scope, now);
+  if (cached) {
+    deps.costs?.recordCacheHit(now);
+    deps.log?.(CACHE_HIT_LOG_LINE);
+    return { status: 200, body: { ...cached, cached: true } };
+  }
   const cap = checkCaps(deps.usage, user.id, deps.caps, now);
   if (!cap.ok) return { status: 429, body: { error: cap.reason } };
   // Context: the relevant sections of the full article; the summary when the article is unavailable.
@@ -369,17 +401,30 @@ export async function answerQuestion(deps: AskDeps, user: { id: string; status?:
     context = 'summary';
   }
   const { sections: more, sources: used } = await extra;
+  // Citations resolve against every section; the prompt carries only the Wikipedia sections the
+  // question needs (context-select.ts), within the token budget left after the short NatureServe
+  // and eBird blocks, which are always sent whole.
   const sections: SourceSection[] = [...wikiSections(wiki), ...more];
   const sources: UsedSource[] = [{ name: SOURCE_NAMES.wikipedia, url }, ...used];
+  const prompted: SourceSection[] = [...wikiSections(selectRelevantSections(wiki, question, wikiTokenBudget(more))), ...more];
   deps.usage.record(user.id, now);
   let text: string;
   try {
-    text = await deps.model({ systemInstruction: SYSTEM_INSTRUCTION, prompt: buildPrompt({ scientific: species, common }, buildSource(sections), question) });
+    text = await deps.model({ systemInstruction: SYSTEM_INSTRUCTION, prompt: buildPrompt({ scientific: species, common }, buildSource(prompted), question) });
   } catch {
     return { status: 502, body: { error: 'model_unavailable' } };
   }
   const answer = toPlainText(text);
   if (!answer) return { status: 502, body: { error: 'empty_answer' } };
   if (leaksSystemPrompt(answer)) return { status: 502, body: { error: 'answer_rejected' } };
-  return { status: 200, body: { answer, source: { title, url }, citations: extractCitations(answer, sections), context, sources, region } };
+  const body: AnswerBody = { answer, source: { title, url }, citations: extractCitations(answer, sections), context, sources, region };
+  deps.answers?.put(species, question, scope, body, now);
+  return { status: 200, body };
+}
+
+/** The Wikipedia share of the ~1,500-token source budget: whatever the other sources' blocks leave, never below the floor. */
+export const WIKI_TOKEN_FLOOR = 400;
+export function wikiTokenBudget(extra: ReadonlyArray<Pick<SourceSection, 'source' | 'heading' | 'text'>>, total = CONTEXT_TOKEN_BUDGET): number {
+  const used = extra.reduce((n, s) => n + estimateTokens(fullLabel(s)) + estimateTokens(s.text) + 4, 0);
+  return Math.max(WIKI_TOKEN_FLOOR, total - used);
 }
