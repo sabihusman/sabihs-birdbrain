@@ -6,18 +6,23 @@ import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
 import { el, fmtDateTime, pct } from '../dom';
-import { hrefFor } from '../router';
+import { hrefFor, speciesHref } from '../router';
 import { createMiniMap } from './map';
 import { askBox } from '../components/ask-box';
 import { locationBlock } from '../components/location-block';
 import { speciesIdCard } from '../components/species-id-card';
-import { isMember } from '../../app/access';
+import { lockedNoteEl } from '../components/member-gate';
+import { isMember, memberAccess } from '../../app/access';
 import { describeLocalCount, filterLocal } from '../../species/local';
+import { countSpotted, filterSpotted, isSpotted, loadSpottedSet, type SpottedSet } from '../../species/spotted';
 
 const PAGE = 60;
 
+/** Set by the tick on the Species tab so the detail view lands on the ID card (members only). */
+let focusIdCardOnOpen = false;
+
 export function speciesListView(ctx: ViewContext): View {
-  const { controller } = ctx;
+  const { controller, api } = ctx;
   const settings = controller.settings;
   const input = el('input', { class: 'search', type: 'search', placeholder: 'Search species by common or scientific name', 'aria-label': 'Search species', autocomplete: 'off' });
   const list = el('div', { class: 'chip-list', 'data-testid': 'species-list' });
@@ -31,8 +36,38 @@ export function speciesListView(ctx: ViewContext): View {
     search();
   });
   const toggle = el('label', { class: 'switch' }, el('span', null, 'Show all species', el('div', { class: 'small muted' }, 'Off: only species the location model expects near you in some week of the year.')), showAll);
+  // "Spotted by me": species with at least one sighting on this device (DECISIONS.md #41).
+  const spottedCount = el('span', { class: 'filter-chip-count' }, '');
+  const spottedChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': String(settings.get().speciesSpottedOnly), 'data-testid': 'spotted-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'), 'Spotted by me', spottedCount);
+  spottedChip.addEventListener('click', () => {
+    const on = !settings.get().speciesSpottedOnly;
+    settings.update({ speciesSpottedOnly: on });
+    spottedChip.setAttribute('aria-pressed', String(on));
+    search();
+  });
+  let spotted: SpottedSet = new Set();
   let shown = 0;
   let results: Species[] = [];
+
+  /** One list row: the species chip plus, when spotted, a tick that opens the ID card (members) or says "Sign in to unlock". */
+  const row = (sp: Species): HTMLElement => {
+    const chip = speciesChip(sp);
+    if (!isSpotted(sp, spotted)) return chip;
+    const tick = el('button', { class: 'tick-btn', type: 'button', 'data-testid': 'spotted-tick', title: 'Spotted by you', 'aria-label': `${sp.common}: spotted by you. Open the species ID card.` }, el('span', { 'aria-hidden': 'true' }, '✓'));
+    const wrap = el('div', { class: 'spotted-row', 'data-testid': 'spotted-row' }, el('div', { class: 'row' }, chip, tick));
+    tick.addEventListener('click', () => {
+      const access = memberAccess(api.user);
+      if (access === 'member') {
+        focusIdCardOnOpen = true;
+        location.hash = speciesHref(sp.scientific);
+        return;
+      }
+      const old = wrap.querySelector('.locked-note');
+      if (old) old.remove();
+      else wrap.appendChild(lockedNoteEl(access, 'the species ID card'));
+    });
+    return wrap;
+  };
 
   const render = (reset: boolean) => {
     if (reset) {
@@ -40,7 +75,7 @@ export function speciesListView(ctx: ViewContext): View {
       shown = 0;
     }
     const next = results.slice(shown, shown + PAGE);
-    for (const sp of next) list.appendChild(speciesChip(sp));
+    for (const sp of next) list.appendChild(row(sp));
     shown += next.length;
     more.style.display = shown < results.length ? '' : 'none';
     count.textContent = results.length ? `${results.length.toLocaleString()} species${shown < results.length ? `, showing ${shown}` : ''}` : controller.species.length ? 'No matches.' : 'Loading species list…';
@@ -48,20 +83,34 @@ export function speciesListView(ctx: ViewContext): View {
   const search = () => {
     const all = controller.species.filter((s) => s.isBird || settings.get().includeNonBird);
     const local = controller.getLocalSpecies();
+    const spottedOnly = settings.get().speciesSpottedOnly;
     const scope = filterLocal(all, local.indices, settings.get().speciesShowAll, local.note);
-    localLine.textContent = all.length ? describeLocalCount(scope) : '';
-    note.textContent = scope.note ?? '';
-    note.style.display = scope.note ? '' : 'none';
+    const base = spottedOnly ? filterSpotted(all, spotted, true) : scope.shown;
+    spottedCount.textContent = all.length ? String(countSpotted(all, spotted)) : '';
+    localLine.textContent = all.length ? (spottedOnly ? `${base.length.toLocaleString()} species spotted by you · ${all.length.toLocaleString()} total` : describeLocalCount(scope)) : '';
+    const noteText = spottedOnly ? 'Showing every species you have a sighting of on this device, local or not.' : scope.note;
+    note.textContent = noteText ?? '';
+    note.style.display = noteText ? '' : 'none';
     showAll.disabled = local.indices === null;
-    results = input.value.trim() ? searchSpecies(scope.shown, input.value, 500) : scope.shown;
+    results = input.value.trim() ? searchSpecies(base, input.value, 500) : base;
     render(true);
+  };
+  const refreshSpotted = () => {
+    loadSpottedSet().then(
+      (set) => {
+        spotted = set;
+        search();
+      },
+      () => undefined, // storage unavailable: no ticks, the list still works
+    );
   };
   input.addEventListener('input', search);
   more.addEventListener('click', () => render(false));
-  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search)];
+  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search), controller.on('detections-changed', refreshSpotted), api.on('change', search)];
   search();
+  refreshSpotted();
 
-  const root = el('div', null, el('section', { class: 'card' }, input, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip), localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list. A tick marks a species you have a sighting of; it stays on this device.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {
@@ -97,6 +146,14 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     );
     void renderWiki(sp, wikiBox);
     void renderMine(sp, myBox);
+    if (focusIdCardOnOpen) {
+      focusIdCardOnOpen = false;
+      requestAnimationFrame(() => {
+        const card = idCard.el.querySelector<HTMLElement>('[data-testid="species-id-card"]');
+        card?.scrollIntoView({ block: 'start' });
+        card?.focus({ preventScroll: true });
+      });
+    }
   };
 
   const renderWiki = async (sp: Species, box: HTMLElement, force = false) => {

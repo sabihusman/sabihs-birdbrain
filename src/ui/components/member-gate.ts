@@ -1,6 +1,11 @@
 import type { ApiClient } from '../../api/client';
-import { lockedNote, memberAccess } from '../../app/access';
+import { lockedNote, memberAccess, type MemberAccess } from '../../app/access';
 import { el } from '../dom';
+
+/** The one-line "Sign in to unlock" note shown in place of a member feature (DESIGN_GUIDE.md §9). */
+export function lockedNoteEl(access: Exclude<MemberAccess, 'member'>, feature: string): HTMLElement {
+  return el('p', { class: 'small muted locked-note' }, lockedNote(access, feature), ' ', access === 'signed-out' ? el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.') : null);
+}
 
 export interface Gated {
   el: HTMLElement;
@@ -26,7 +31,7 @@ export function memberGate(api: ApiClient, feature: string, build: () => Gated, 
       return;
     }
     root.dataset.access = access;
-    const note = el('p', { class: 'small muted locked-note' }, lockedNote(access, feature), ' ', access === 'signed-out' ? el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.') : null);
+    const note = lockedNoteEl(access, feature);
     root.replaceChildren(opts.wrap === false ? note : el('section', { class: 'card' }, note));
   };
   render();

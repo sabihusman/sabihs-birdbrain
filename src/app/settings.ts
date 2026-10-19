@@ -30,6 +30,8 @@ export interface Settings {
   sightingGapSeconds: number;
   /** Species tab: list every species instead of the local ones. */
   speciesShowAll: boolean;
+  /** Species tab: list only species with at least one of your sightings ("Spotted by me"). */
+  speciesSpottedOnly: boolean;
   listenLayout: ListenLayout;
 }
 
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lowCut: true,
   sightingGapSeconds: 60,
   speciesShowAll: false,
+  speciesSpottedOnly: false,
   listenLayout: 'consolidated',
 };
 
