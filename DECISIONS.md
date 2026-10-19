@@ -404,7 +404,50 @@ Sabih's approval and a baseline check of the other sites after every reload.
   IndexedDB and is a member feature; it reveals where someone walks, so it is
   never exported or sent anywhere (README › Privacy).
 
-## 30. Live waveform and spectrogram auto-scale to the recent peak
+## 30. Front-end `Referrer-Policy: strict-origin-when-cross-origin` (tiles need a Referer)
+
+- **Symptom:** map tiles answered `403 Access blocked` on the live site.
+  OpenStreetMap's tile usage policy requires browser apps to send a valid
+  `Referer`; `vercel.json` sent `Referrer-Policy: no-referrer` for every
+  page, so tile requests carried none.
+- **Decision:** `strict-origin-when-cross-origin` for the front end. Cross-
+  origin requests (tiles, Wikipedia images and REST calls, the API) now carry
+  the origin only, `https://sabihs-birdbrain.vercel.app/`, never a path or the
+  hash route; same-origin requests carry the full URL, which is ours anyway.
+  Nothing in a Birdbrain URL is secret (hash routes name species, not
+  people), so the origin is all that leaks.
+- **Checked:** `index.html` has no `<meta name="referrer">`; the Leaflet tile
+  layer uses the default `referrerPolicy: false` (Leaflet 1.9.4 adds the
+  attribute to tile images only when the option is set, per the option's
+  source documentation), and `crossOrigin: true` does not affect the
+  referrer. The API's Nginx `Referrer-Policy no-referrer` stays: it serves
+  JSON only and loads nothing third-party.
+- **Guard:** `tests/headers.test.ts` reads `vercel.json`, `index.html` and the
+  map module and fails if any of them reintroduces `no-referrer`; the map
+  e2e test checks that tile images carry no `referrerpolicy` attribute.
+- **Not verified here:** the 403 disappearing on the live site (needs the
+  Vercel deploy); the tiles loaded only in Chromium against the preview
+  server, which sends no headers.
+
+## 31. Default confidence threshold 60 %, migrated once from 25 %
+
+- **Decision:** `DEFAULT_SETTINGS.threshold` is 0.6 (was 0.25) and the
+  auto-save bar defaults to 0.6 as well. Stored settings carry a `version`;
+  loading a store without one (or < 2) replaces a saved threshold that
+  equals the old default with the new default and stamps version 2. Any
+  other saved value is a user's choice and stays, and after the stamp a
+  threshold of 25 % stays too.
+- **Auto-save clamp:** `sanitize()` raises `autoSaveMinConfidence` to the
+  detection threshold whenever it would be lower, because a clip is only
+  saved for a detection; the Settings sliders re-read the store after each
+  change so the clamped value is what they show.
+- **Reason:** at 25 % BirdNET lists many weak candidates on a phone; 60 %
+  matches what the sample clip and field use produced as reliable. The
+  Listen screen's help line already says what lowering does.
+- **Not verified:** field behaviour at 60 % on a phone; the e2e tests still
+  detect the sample clip at the new default.
+
+## 32. Live waveform and spectrogram auto-scale to the recent peak
 
 - **Symptom:** after #22 (no automatic gain on the microphone) raw phone
   input peaks at roughly 0.01–0.06 of full scale. The waveform drew samples
