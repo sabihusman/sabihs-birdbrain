@@ -9,6 +9,7 @@ import type { View, ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { speciesHref } from '../router';
 import { locationBlock } from '../components/location-block';
+import { cssToken } from '../../theme/theme';
 
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -71,7 +72,8 @@ export function createHistoryMap(container: HTMLElement, sightings: SightingReco
   // One point per sighting (not per window), weighted by its peak confidence so sure identifications glow brighter.
   const heat = L.heatLayer(
     sightings.map((s) => [s.lat!, s.lon!, Math.max(0.2, s.peakConfidence)] as L.HeatLatLngTuple),
-    { radius: 28, blur: 20, maxZoom: 17, minOpacity: 0.3 },
+    // Gradient from the theme's accent through warn to error (status colours from the tokens, not hard-coded).
+    { radius: 28, blur: 20, maxZoom: 17, minOpacity: 0.3, gradient: { 0.3: cssToken('accent', '#5FCB97'), 0.65: cssToken('warn', '#E8B36A'), 1: cssToken('error', '#E07A5F') } },
   );
   let current: L.Layer | null = null;
   const setMode = (m: HistoryMapMode) => {

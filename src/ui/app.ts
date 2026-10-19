@@ -10,6 +10,7 @@ import { settingsView } from './views/settings';
 import { helpView } from './views/help';
 import { adminView } from './views/admin';
 import type { ApiClient } from '../api/client';
+import { applyTheme, currentTheme, otherTheme, storeTheme } from '../theme/theme';
 
 export interface View {
   el: HTMLElement;
@@ -55,7 +56,23 @@ function tabGroup(route: Route): string {
 
 export function mountApp(root: HTMLElement, controller: AppController, api: ApiClient): void {
   const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status' }, 'Loading model…');
-  const header = el('header', { class: 'app-header' }, el('img', { src: `${controller.baseUrl}icons/icon-192.png`, alt: '' }), el('h1', null, 'Sabih’s Birdbrain'), modelPill);
+  const themeToggle = el('button', { class: 'theme-toggle', type: 'button', 'data-testid': 'theme-toggle' });
+  const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  const renderToggle = () => {
+    const t = currentTheme();
+    themeToggle.innerHTML = t === 'dark' ? SUN : MOON;
+    themeToggle.setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    themeToggle.title = themeToggle.getAttribute('aria-label') ?? '';
+  };
+  themeToggle.addEventListener('click', () => {
+    const next = otherTheme(currentTheme());
+    applyTheme(next);
+    storeTheme(next);
+    renderToggle();
+  });
+  renderToggle();
+  const header = el('header', { class: 'app-header' }, el('img', { src: `${controller.baseUrl}icons/icon-192.png`, alt: '' }), el('h1', null, 'Sabih’s Birdbrain'), modelPill, themeToggle);
   const notices = el('div', { class: 'notices', 'aria-live': 'polite' });
   const main = el('main', { class: 'view' });
   const tabs = el('nav', { class: 'tabs', 'aria-label': 'Main' });

@@ -603,3 +603,35 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Failure:** a mailer error is logged and never surfaces to the
   signing-up user; approval is still possible from the admin page.
 
+## 39. Theme system per docs/DESIGN_GUIDE.md (dark by default)
+
+- **Decision:** two themes from the guide, "Forest Night" (dark, the default
+  whatever the phone prefers) and "Field Guide, cream" (light), as CSS tokens
+  on `:root` and `:root[data-theme="light"]` (`src/styles.css`) mirrored in
+  `src/theme/tokens.ts` for canvases and tests. A sun/moon button in the
+  header (44 px, `aria-label`, focus ring) toggles and stores the choice in
+  `localStorage` (`birdbrain.theme.v1`, try/catch, falls back to dark). An
+  inline script in `<head>` sets `data-theme` before first paint; its SHA-256
+  is allow-listed in `vercel.json`'s `script-src` so the CSP stays without
+  `'unsafe-inline'`, and `tests/headers.test.ts` fails if the script and the
+  hash drift apart.
+- **Token changes for WCAG AA** (the guide allows changing tokens, never
+  species colours): light `--warn` #A8661B → #8F5614 (4.26:1 → 5.4:1 as text
+  on the card) and light `--muted` #6A7066 → #5F665C (4.33:1 → 5.2:1 on the
+  page). All other pairs passed. Species dots: on the dark card every sampled
+  colour is ≥ 3:1, on the cream card most are not, so every dot now carries a
+  1 px ring in `--muted` (≥ 3:1 on both cards) instead of changing the colour.
+  `tests/theme-contrast.test.ts` keeps these checks.
+- **Canvases and status colours** read tokens: waveform (`--wave` = accent,
+  badge `--muted`), spectrogram overlay (`--viz-fg`), timeline axis
+  (`--muted`), heat-map gradient (accent → warn → error), conditions bar,
+  level meter (`--live`), status pill dot (ok/error), Leaflet controls and
+  attribution. The spectrogram image itself keeps a near-black field in both
+  themes because the colour map needs it; tiles stay as OSM serves them.
+- **Foundations:** 8 px spacing scale, 20 px card radius, 14 px controls,
+  one type scale (12–32 px), `prefers-reduced-motion` disables transitions
+  and the meter animation, 3 px `--focus` ring with 3 px offset.
+- **Not verified:** on a phone; screenshots come from Chromium with a fake
+  microphone. The headless "mic blocked" shot shows "No microphone was found"
+  (no device in the container) rather than a denied permission.
+

@@ -4,12 +4,15 @@ import { SAMPLE_RATE } from '../../model/constants';
 import type { SpeciesColor } from '../../species/colors';
 import { fitCanvas } from '../dom';
 import { AdaptiveDbRange, columnDb, maxOf } from './autoscale';
+import { cssToken } from '../../theme/theme';
 import { INFERNO } from './colormap';
 
 export const SPEC_FFT = 1024;
 export const SPEC_MAX_HZ = 15000;
 /** A full-scale sine through a Hann window peaks at N/4 in the FFT, so 4/N reads 0 dBFS. */
 export const SPEC_MAG_SCALE = 4 / SPEC_FFT;
+/** The colour map needs a near-black field in both themes (THEME_TOKENS.*.vizBg). */
+const VIZ_BG = '#000004';
 
 export interface WindowMark {
   startSec: number;
@@ -65,7 +68,7 @@ export class SpectrogramView {
     this.image.width = Math.round(visibleSeconds * (SAMPLE_RATE / this.hop));
     this.image.height = imageHeight;
     this.imageCtx = this.image.getContext('2d', { willReadFrequently: true })!;
-    this.imageCtx.fillStyle = '#000004';
+    this.imageCtx.fillStyle = VIZ_BG;
     this.imageCtx.fillRect(0, 0, this.image.width, this.image.height);
     this.column = this.imageCtx.createImageData(1, imageHeight);
     this.dbColumn = new Float32Array(imageHeight);
@@ -85,7 +88,7 @@ export class SpectrogramView {
     this.staticDuration = null;
     this.cursorSec = null;
     this.range.reset();
-    this.imageCtx.fillStyle = '#000004';
+    this.imageCtx.fillStyle = VIZ_BG;
     this.imageCtx.fillRect(0, 0, this.image.width, this.image.height);
     this.draw();
   }
@@ -157,7 +160,7 @@ export class SpectrogramView {
     const hop = Math.max(256, Math.floor(audio.length / width));
     const s = stft(audio, SPEC_FFT, hop, this.window, this.fft);
     const ctx = this.imageCtx;
-    ctx.fillStyle = '#000004';
+    ctx.fillStyle = VIZ_BG;
     ctx.fillRect(0, 0, width, this.image.height);
     // Two passes: one fixed colour window for the whole clip, set from its loudest bin.
     const re = new Float64Array(SPEC_FFT);
@@ -226,6 +229,8 @@ export class SpectrogramView {
 
     const octx = fitCanvas(this.overlay);
     octx.clearRect(0, 0, w, h);
+    const fg = cssToken('viz-fg', '#E4EDE8');
+    const fgA = (a: number) => `color-mix(in srgb, ${fg} ${Math.round(a * 100)}%, transparent)`;
     const xFor = (sec: number) => this.xFor(sec, w);
     const yForHz = (hz: number) => h - (Math.min(SPEC_MAX_HZ, hz) / SPEC_MAX_HZ) * h;
 
@@ -256,7 +261,7 @@ export class SpectrogramView {
       const x1 = xFor(m.endSec);
       if (x1 < 0 || x0 > w) continue;
       if (m.colors.length === 0) {
-        octx.fillStyle = 'rgba(255,255,255,0.05)';
+        octx.fillStyle = fgA(0.05);
         octx.fillRect(x0, 0, x1 - x0, h);
         continue;
       }
@@ -274,7 +279,7 @@ export class SpectrogramView {
     if (this.liveWindow) {
       const x0 = xFor(this.liveWindow.startSec);
       const x1 = xFor(this.liveWindow.endSec);
-      octx.strokeStyle = 'rgba(255,255,255,0.8)';
+      octx.strokeStyle = fgA(0.8);
       octx.lineWidth = 1.5;
       octx.setLineDash([4, 3]);
       octx.strokeRect(x0 + 1, 1, x1 - x0 - 2, h - 2);
@@ -283,7 +288,7 @@ export class SpectrogramView {
 
     if (this.cursorSec != null) {
       const x = xFor(this.cursorSec);
-      octx.strokeStyle = 'rgba(255,255,255,0.9)';
+      octx.strokeStyle = fgA(0.9);
       octx.lineWidth = 1.5;
       octx.beginPath();
       octx.moveTo(x, 0);
@@ -292,14 +297,14 @@ export class SpectrogramView {
     }
 
     // Frequency labels.
-    octx.fillStyle = 'rgba(255,255,255,0.7)';
+    octx.fillStyle = fgA(0.7);
     octx.font = '10px system-ui, sans-serif';
     for (const khz of [2, 5, 10]) {
       const y = yForHz(khz * 1000);
       octx.fillText(`${khz} kHz`, 3, y - 2);
-      octx.fillStyle = 'rgba(255,255,255,0.15)';
+      octx.fillStyle = fgA(0.15);
       octx.fillRect(0, y, w, 1);
-      octx.fillStyle = 'rgba(255,255,255,0.7)';
+      octx.fillStyle = fgA(0.7);
     }
     // Colour window, bottom right.
     octx.textAlign = 'right';

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { devices, expect, test } from '@playwright/test';
 
 /**
  * Loads the built app, waits for the BirdNET models to load inside the Web
@@ -151,5 +151,51 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('wiki')).toBeVisible();
   await expect(page.getByText('Your sightings')).toBeVisible();
   await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // the sighting is still there
+});
+
+test('theme: dark by default whatever the device prefers, toggle persists, no wrong-theme flash', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], colorScheme: 'light' });
+  const page = await context.newPage();
+  // Capture the attribute as early as possible: the inline head script must have run before any paint.
+  await page.addInitScript(() => {
+    (window as unknown as { __themeAtStart?: string | null }).__themeAtStart = null;
+    document.addEventListener('DOMContentLoaded', () => {
+      (window as unknown as { __themeAtStart?: string | null }).__themeAtStart = document.documentElement.getAttribute('data-theme');
+    });
+  });
+  await page.goto('./#/settings');
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('dark');
+  expect(await page.evaluate(() => (window as unknown as { __themeAtStart?: string | null }).__themeAtStart)).toBe('dark');
+  const toggle = page.getByTestId('theme-toggle');
+  await expect(toggle).toHaveAttribute('aria-label', 'Switch to light mode');
+  const box = await toggle.boundingBox();
+  expect(box!.width).toBeGreaterThanOrEqual(44);
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  await toggle.click();
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('light');
+  await expect(toggle).toHaveAttribute('aria-label', 'Switch to dark mode');
+  await page.reload();
+  expect(await page.evaluate(() => (window as unknown as { __themeAtStart?: string | null }).__themeAtStart)).toBe('light');
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(244, 236, 218)');
+  await context.close();
+});
+
+test('no horizontal scrolling and the primary control visible at 320, 375, 390 and 430 px', async ({ browser }) => {
+  for (const width of [320, 375, 390, 430]) {
+    const context = await browser.newContext({ viewport: { width, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    for (const route of ['#/listen', '#/species', '#/settings']) {
+      await page.goto(`./${route}`);
+      await page.waitForTimeout(300);
+      const scroll = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+      expect(scroll.sw, `${route} at ${width}px`).toBeLessThanOrEqual(scroll.iw);
+    }
+    await page.goto('./#/listen');
+    const start = page.getByTestId('start-stop');
+    await expect(start).toBeVisible();
+    const b = await start.boundingBox();
+    expect(b!.x + b!.width, `start button inside ${width}px`).toBeLessThanOrEqual(width);
+    await context.close();
+  }
 });
 

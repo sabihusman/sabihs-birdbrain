@@ -135,6 +135,15 @@ The name is always shown next to the colour.
 - **PWA:** manifest, icons, apple-touch-icon, service worker precaching the app
   shell and label list, cache-first model files, offline operation.
 
+## Look and feel
+
+Two themes from [docs/DESIGN_GUIDE.md](docs/DESIGN_GUIDE.md): "Forest Night"
+(dark, the default whatever the phone prefers) and "Field Guide, cream". The
+sun/moon button in the header switches; the choice is remembered on the
+device and applied before the first paint. Both themes pass WCAG AA on the
+token pairs and the species dots (checked by tests); screenshots of every
+Listen state in both themes are in `docs/screenshots/`.
+
 ## Privacy
 
 Audio is processed on the device and never uploaded: identification, saving
