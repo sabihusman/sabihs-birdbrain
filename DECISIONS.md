@@ -486,3 +486,27 @@ Sabih's approval and a baseline check of the other sites after every reload.
   chowned by step 8; the image change only matters for a `--purge` reinstall
   or a new host. The CI image build is the check that the layer is valid.
 
+## 34. Certificate-renewal failure alert through the app's mailer
+
+- **Decision:** `lego-renew-birdbrain.service` gets `OnFailure=birdbrain-renew-alert.service`
+  through a drop-in (`lego-renew-birdbrain.service.d/onfailure.conf`), not by
+  editing the unit, so the unit file stays an exact copy of Sentinel's pattern
+  and `setup.sh` step 5's diff stays clean. The alert unit runs a root-owned
+  script that composes the failure report (result, exit code, certificate
+  expiry, last 40 journal lines) and mails `ADMIN_EMAIL` via
+  `docker compose run --rm --no-deps -T api node dist/alert-mail.js`, a small
+  CLI in the image that reuses `createSmtpMailer`. The SMTP app password
+  therefore never leaves `/opt/birdbrain/.env`.
+- **Alternatives:** `mail`/`sendmail` on the host (needs an MTA or the Gmail
+  password in a second place); `docker exec` into the running API container
+  (fails exactly when the API is down, while `compose run` only needs the
+  image). Rejected for those reasons.
+- **Behaviour:** the timer keeps running daily, so a persistent failure mails
+  once a day; Let's Encrypt's 90-day lifetime and lego's 30-day renewal
+  window leave time to act. The script also logs to the journal, so a mail
+  that cannot be sent is still visible.
+- **Not verified:** nothing ran on the server from this session; step 9 and
+  `rollback.sh --only-alert` are to be applied from the PC with approval.
+  `MONITOR_*` variables need systemd ≥ 251 (Ubuntu 22.04 has 249: the mail
+  then says "unknown" for result and exit code, the journal lines still tell).
+
