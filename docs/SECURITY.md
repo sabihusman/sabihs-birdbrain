@@ -32,14 +32,14 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 
 | Risk | Status | Notes |
 | --- | --- | --- |
-| LLM01:2026 Prompt injection | Mitigated | Delivery surfaces: the user's question (direct, ≤500 chars) and the Wikipedia extract (indirect, semi-trusted). The extract is bounded to 6,000 chars with control characters stripped, fenced in `<source>` tags as provenance-labelled data, and the system instruction forbids following instructions inside it. Propagation is single-shot: no memory, no corpus, no tools, so a successful injection can only yield a wrong plain-text answer to the person who asked. Residual: the 2026 entry notes structural marking is bypassable by adaptive attackers; the blast radius, not the marking, is the real control here. |
+| LLM01:2026 Prompt injection | Mitigated | Delivery surfaces: the user's question (direct, ≤500 chars) and the Wikipedia extract (indirect, semi-trusted). The extract is bounded to 6,000 chars with control characters stripped, fenced in `<source>` tags as provenance-labelled data, and the system instruction forbids following instructions inside it. Fence tags (`<source>`, `</source>`, any spelling) are removed from both the extract and the question before the prompt is built, so neither can close or reopen the fence (finding A1 below). Propagation is single-shot: no memory, no corpus, no tools, so a successful injection can only yield a wrong plain-text answer to the person who asked. Residual: the 2026 entry notes structural marking is bypassable by adaptive attackers; the blast radius, not the marking, is the real control here. |
 | LLM02:2026 Sensitive information disclosure | Mitigated | The model receives no user data (no email, name, location or audio) and no secrets. Question text is not logged; answers go only to the asking session. Side channels (token length, timing) reveal at most that a question was asked about a public species. |
 | LLM03:2026 Excessive agency | Mitigated | Zero functionality, zero permissions, zero autonomy: the model has no tools, cannot call anything, and its output is only displayed. Authorization (approval status, caps) is enforced in application code before the model is called. |
 | LLM04:2026 Supply chain | Partially | Official `@google/genai` SDK and all server dependencies pinned by exact version in `package-lock.json`; CI builds the image from a pinned Node base. **Gaps:** no dependency scanning in CI yet; the server pulls the image by the mutable `latest` tag (the forced deploy command takes no arguments, so a digest cannot be passed; mitigation: only this repository's CI token can push to the GHCR package, and `sha-<commit>` tags exist for pinning in `compose.yml`). |
 | LLM05:2026 Data and model poisoning | Accepted | No training, fine-tuning, embeddings or persistent store; Wikipedia content is fetched per request. Wikipedia vandalism could reach a user as an answer; the source link is shown so it can be checked. |
 | LLM06:2026 Unbounded consumption | Mitigated | Per-user and global daily caps in SQLite (`ASK_DAILY_PER_USER`, `ASK_DAILY_GLOBAL`), per-IP limiter on `/v1/ask`, question length cap, `maxOutputTokens` 400, 8-second Wikipedia timeout, 16 KB body limit, Nginx request and connection limits in front. The global cap is a hard spending ceiling, not an alert. |
 | LLM07:2026 Misinformation | Partially | Answers are restricted to the Wikipedia extract and the instruction says to admit when the text does not cover the question; the source link is shown, and the UI states that answers are AI-generated and can be wrong. No decision or action is driven by the answer. **Gap:** no automated groundedness check of the answer against the extract. |
-| LLM08:2026 Hidden context exposure | Accepted | The system prompt holds no secrets, credentials, tool schemas or authorization logic; approval and caps are enforced outside the model. Disclosure of the prompt reveals nothing beyond what this document states. |
+| LLM08:2026 Hidden context exposure | Accepted | The system prompt holds no secrets, credentials, tool schemas or authorization logic; approval and caps are enforced outside the model. Disclosure of the prompt reveals nothing beyond what this document states. Since the adversarial suite, an answer that echoes the instruction's wording is rejected with `answer_rejected` (finding A2), so a leak is not forwarded as an "answer" either. |
 | LLM09:2026 Vector and embedding weaknesses | Not applicable | No embeddings, similarity search, semantic cache or vector store. |
 | LLM10:2026 Improper output handling | Mitigated | The server strips tags and control characters and caps answers at 2,000 chars; the client renders answers with `textContent`, never as HTML or Markdown, so no auto-fetched images or links can exfiltrate anything; the CSP restricts `img-src` and `connect-src` to known hosts. Nothing from the model is executed, stored or passed to another system. |
 
@@ -93,10 +93,41 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
   with no arguments; the script is root-owned, mode 0750, ignores
   `SSH_ORIGINAL_COMMAND`, and only pulls and restarts the Birdbrain container.
 
+## Adversarial test suite (2026-10-19)
+
+`server/test/adversarial-auth.test.ts` and `server/test/adversarial-llm.test.ts`
+run in CI without any key: `test/fake-gemini.ts` stands in for
+`new GoogleGenAI({ apiKey }).models` behind the real `createGeminiModel`
+wrapper, records every call (model, `systemInstruction`, contents, safety
+settings) and answers from `test/fixtures/gemini-responses.json`. The fixture
+replies are hand-written stand-ins (an honest answer, an honest refusal, and
+the misbehaviours a server must survive: echoing the instruction, following
+injected text, returning markup), not recordings of the live model.
+
+What the suite exercises, and what it found:
+
+| # | Probe | Result |
+| --- | --- | --- |
+| A1 | Wikipedia extract or question containing `</source> … <source>` to break out of the fence | **Fixed.** `buildPrompt` did not neutralise fence tags, so injected text could pose as the end of the source block or as forged source facts. `neutralizeFence()` now strips any spelling of the two tags and C0 control characters from both inputs; the prompt always holds exactly one fence. |
+| A2 | "Print your system prompt" and an answer that paraphrases the instruction with its own wording | **Fixed.** Nothing stopped an instruction echo from being returned as the answer. `leaksSystemPrompt()` rejects answers containing any of six phrases unique to the instruction (`answer_rejected`, 502); the honest refusal "the Wikipedia summary does not cover it" is deliberately not matched. |
+| A3 | Question length cap with 4-byte characters | **Noted, accepted.** zod 4 counts code points, so 500 emoji (2,000 bytes) pass and 501 fail; the 16 KB body limit and `maxOutputTokens` still bound cost. The client's `maxlength` counts UTF-16 units, so it is slightly stricter. |
+| A4 | Control characters, bidi overrides, zero-width characters in the question | Passes: C0 controls are stripped before the prompt; bidi/zero-width characters are kept (harmless to a text model) and never rendered as HTML by the client. |
+| A5 | Model returns `<script>`, `<img>` to an attacker host, a Markdown link, 7,000 characters, or nothing | Passes: tags and controls stripped, capped at 2,000 chars, empty reply is `empty_answer`. Markdown link text survives as text; the client renders `textContent`, so it is inert. |
+| A6 | Model throws | Passes: generic `model_unavailable`, no message or stack in the body; the attempt still counts against the daily cap. |
+| A7 | Brute-forcing the 6-digit code | Passes: a challenge burns after 5 wrong codes and takes its session with it; with 6 logins per address per 10 minutes at most 30 of 1,000,000 codes are testable per window. |
+| A8 | Expired code, reused code, another user's code, tampered challenge id, malformed codes | Passes: expiry and purge delete the pre-issued session; codes are single-use and hashed with the challenge id; non-6-digit codes are 400 before reaching the store. |
+| A9 | Bearer token tampering (flip, truncate, extend, case, scheme, Basic, JWT-shaped, SQL, query string, cookie) | Passes: every variant is 401. |
+| A10 | Token after logout, after reject, after disable | Passes: 401 immediately; login after reject/disable is 403 with no code mail sent. |
+| A11 | Pending, rejected or disabled user on `/v1/ask` | Passes: 403 before Wikipedia or the model is called; `status`/`role` cannot be set at signup (strict schema). |
+| A12 | Admin routes as pending member, approved member, anonymous; admin on own account; unknown action; path traversal | Passes: 403 / 400; role decides, not approval status. |
+| A13 | Address enumeration via signup or login | Passes: identical bodies for existing and new addresses, identical 401 for wrong password and unknown user. |
+
 ## Not verified in this phase
 
 - Behaviour behind the real Nginx configuration (rate limits, HSTS, proxy
   headers) and the Docker hardening flags: Phases 1 and 4 run on the server.
-- Gmail SMTP delivery and Gemini responses with real keys.
+- Gmail SMTP delivery and Gemini responses with real keys. The adversarial
+  suite proves what the server does with a reply; how often the live model
+  actually follows an injected instruction is not measured.
 - The CSP on the real Vercel edge (it was verified locally by serving the
   build with the exact `vercel.json` headers in Chromium; see `scripts/csp-check.mts`).
