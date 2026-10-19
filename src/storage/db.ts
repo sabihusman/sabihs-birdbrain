@@ -29,7 +29,7 @@ interface BirdbrainDB extends DBSchema {
 }
 
 export const DB_NAME = 'sabihs-birdbrain';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<BirdbrainDB>> | null = null;
 
@@ -62,6 +62,10 @@ export function getDB(): Promise<IDBPDatabase<BirdbrainDB>> {
             for (const sgt of sightings) await st.put(sgt);
             for (const d of all) await detStore.put({ ...d, sightingId: assignments.get(d.id) });
           }
+        }
+        if (oldVersion < 4) {
+          // Clips gain `windows` (the 3 s windows that triggered the ID). Existing records stay as they
+          // are: a clip without `windows` is read as "unknown windows" (DECISIONS.md #42).
         }
       },
     });

@@ -726,3 +726,48 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** on a phone; the tick row beside a long name at 320 px is
   not covered by the width test, which runs with no sightings (the CSS keeps
   the row from wrapping: the chip shrinks, the 48 px tick does not).
+
+## 42. ID clips: 10 s context, identifying windows, spectrogram and tap-to-run "Why this ID"
+
+- **Decision:** the per-species ID clip (#28) keeps its 10 s cap and its
+  replace-if-higher rule, and now records *which* 3 s analysis windows
+  triggered the ID: `ClipRecord.windows`, a list of `{ offsetSec, confidence }`
+  relative to the clip start (DB version 4). Live, the controller remembers
+  every window that detected the species while it is still inside the 24 s
+  raw ring and stores the ones that fall in the clip (`windowsInClip`); for
+  recordings and imports the per-window detections give the same list. A
+  window cut at a clip edge keeps its true offset (it may be slightly
+  negative) and is clamped when drawn. The surrounding audio is kept on
+  purpose: other birds may be audible, and the user should hear the context
+  the model heard.
+- **Card:** the species ID card draws a spectrogram of the clip from the
+  stored samples with our own FFT (`computeStaticSpectrogram`, shared with the
+  recording view and DOM-free so the frames, outlines and cursor are
+  unit-tested), outlines each identifying window in the species colour with
+  its confidence as the label, shows a playback cursor (tap the spectrogram
+  to seek) and a line listing the windows. "Why this ID" is a button: it runs
+  the existing occlusion job on the most confident identifying window and
+  shades the heat map over that window. It is 25–97 model passes, so it never
+  runs on its own (as in the recording view).
+- **Wording, in the card and here:** BirdNET marks *when* a species is heard,
+  not which of the overlapping sounds it is. An outlined window means the
+  model's confidence for that species crossed the threshold in those 3 s; the
+  sound it reacted to may sit under another bird, wind or a voice. The
+  occlusion heat map is the honest way to narrow it down, and it is still an
+  approximation.
+- **Migration:** version 4 adds no store; clips saved before it have no
+  `windows` and are read as "unknown windows" (`clipWindows()` returns null):
+  the card says the windows were not recorded, draws no outlines and runs
+  "Why this ID" on the clip centre (live clips were always centred on their
+  window). A later, more confident detection replaces such a clip the normal
+  way. Tested with `fake-indexeddb` from a hand-built version-3 database.
+- **Setting renamed:** the older option that saves each detection's 3 s
+  window into Recordings is now "Auto-save 3-second detection windows as
+  recordings" (hint: separate from the species ID clip), and those
+  recordings are named "Detection window: <species>" instead of "Auto clip".
+  The storage keys (`autoSaveClips`, `autoSaveMinConfidence`, source
+  `'autoclip'`) are unchanged: nothing to migrate.
+- **Not verified:** on a phone; the playback cursor follows
+  `audio.currentTime` in a `requestAnimationFrame` loop, whose timing against
+  the sound on iOS Safari has not been checked. Playwright exercises the card
+  with the bundled sample (one window, the occlusion run) in Chromium.

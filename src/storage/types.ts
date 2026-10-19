@@ -79,6 +79,16 @@ export interface WikiCacheEntry {
 }
 
 /**
+ * One 3 s analysis window that identified the species, placed inside its clip.
+ * BirdNET marks when a species is heard, not which overlapping sound it is.
+ */
+export interface ClipWindow {
+  /** Window start relative to the clip start, seconds (may be slightly negative or run past the end when the window was cut at a clip edge). */
+  offsetSec: number;
+  confidence: number;
+}
+
+/**
  * One saved clip per species (member feature). Raw, unfiltered 16-bit WAV at
  * 48 kHz, at most 10 s, centred on the detection window(s). Replaced only by a
  * clip with a higher confidence. Kept on the device; never uploaded.
@@ -99,5 +109,10 @@ export interface ClipRecord {
   accuracy: number | null;
   source: DetectionSource;
   recordingId: string | null;
+  /**
+   * The analysis windows that triggered the ID, with their confidence (DB
+   * version 4). Absent on clips saved before that: "unknown windows".
+   */
+  windows?: ClipWindow[];
 }
 
