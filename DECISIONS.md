@@ -233,7 +233,60 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
   can be pinned by hand for a rollback. Recorded as a supply-chain gap in
   docs/SECURITY.md.
 
-## 22. Microphone: ask for raw audio, then show what was applied
+## 22. Server install findings (2026-10-19)
+
+Made while applying `server/deploy/` to the live server, step by step with
+Sabih's approval and a baseline check of the other sites after every reload.
+
+- **No `http2` listen flag on the Birdbrain vhost.** nginx 1.24 sets HTTP/2
+  per address:port, and the mba-vault catch-all (`default_server`) already
+  enables it on the shared `:443` socket. The explicit flag only made
+  `nginx -t` warn "protocol options redefined" for Sentinel's file. Verified
+  on the scratch config and live: both hosts still negotiate HTTP/2 without it.
+- **Root-owned `~birdbrain-deploy/.ssh` (0755) and `authorized_keys`
+  (0644).** Alternative: user-owned 0700/0600. Reason: the deploy user cannot
+  loosen its own forced-command restrictions; sshd `StrictModes` accepts root
+  ownership. Tested from the PC with the private key while the deploy lock was
+  held: `ssh … id` and a shell request both ran only the deploy script
+  (exit 75, "another deploy is running"); a `-L` forward carried no traffic.
+- **Volume ownership fixed in `setup.sh` step 8, not in the Dockerfile.** The
+  image has no `/data` or `/backups`, so Docker created the named volumes
+  `root:root 0755` and the uid-1000, read-only container could not write
+  SQLite. Step 8 runs `compose create`, chowns both volumes from a throwaway
+  `alpine` container, then `compose up -d`. Alternative: `mkdir` + `chown` in
+  the Dockerfile, which is cleaner but would have rebuilt and re-tagged the
+  pinned image mid-install. Follow-up: add it to the Dockerfile anyway.
+- **`BIRDBRAIN_IMAGE_TAG=latest` after the merge.** Installed pinned to
+  `sha-1cc01d4`; switched to `latest` once PR #2 was on `main` so CI deploys
+  take effect. The CI deploy ran as a correct no-op while pinned, then a manual
+  run recreated the container on `latest` with the data volume intact.
+  Rollback: pin a `sha-<commit>` tag and run the deploy script.
+- **Verified in Phase 4:** other sites' status codes unchanged throughout;
+  `/health` 200 over TLS 1.2+ with HSTS/nosniff/no-referrer; TLS 1.1 refused;
+  20 KB body → 413; burst of requests → 429; preflight allows only
+  `https://sabihs-birdbrain.vercel.app` (other origins get no
+  `access-control-allow-origin`); `/v1/ask` without or with a bogus token →
+  401; port 8010 unreachable publicly; Vercel production serves the strict CSP
+  with zero console violations; GitHub Pages still 200.
+- **Not verified here:** a pending (non-admin) user receiving 403 on
+  `/v1/ask`, Gmail delivery and Gemini answers with the real keys. Those need a
+  real signup, which Sabih does from the live app. Also the ACME renewal path
+  itself (the timer's first run logged "Skip renewal", as expected for a fresh
+  certificate; the first real renewal is due around 2026-12-18).
+
+## 23. GitHub Pages switched off (2026-10-19)
+
+- **Decision:** remove `.github/workflows/deploy.yml` and unpublish the Pages
+  site once Vercel production was verified; Vercel is the only front-end host.
+  Dev and preview now serve at `/`; `VITE_BASE_PATH` stays as a generic
+  override, and `ci.yml` is unchanged.
+- **Alternative:** keep Pages as a permanent mirror at `/sabihs-birdbrain/`.
+- **Reason:** two live copies with different base paths meant two service
+  worker scopes, two model caches and a CSP that only one host enforced; the
+  Wikipedia User-Agent and docs also pointed at the old URL. The model files
+  stay in the repo (decision 1) because Vercel serves them the same way.
+
+## 24. Microphone: ask for raw audio, then show what was applied
 
 - **Decision:** `getUserMedia` asks for `echoCancellation: false`,
   `noiseSuppression: false`, `autoGainControl: false` (as before), and the
@@ -257,7 +310,7 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
 - **Before this change:** the constraints were requested the same way but the
   applied settings were never read or shown.
 
-## 23. 150 Hz low-cut on the analysis path only
+## 25. 150 Hz low-cut on the analysis path only
 
 - **Decision:** the engine has two AudioWorklet taps on the microphone: a raw
   tap (recording, waveform/spectrogram, conditions indicator) and an analysis
@@ -284,7 +337,7 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
   count, which holds for one shared `AudioContext`; it is tested with fakes,
   not on a device.
 
-## 24. Conditions indicator thresholds
+## 26. Conditions indicator thresholds
 
 - **Decision:** once per second of raw audio (`src/audio/conditions.ts`):
   "Too quiet" when RMS < -50 dBFS; otherwise "Windy" when at least 60 % of
@@ -298,7 +351,7 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
   here are meant to be readable and adjustable, not exact. Expect to tune
   -50 dBFS once real iPhone levels are known.
 
-## 25. Member features are gated from the cached session
+## 27. Member features are gated from the cached session
 
 - **Decision:** the species ID card, sighting history and species clips are
   unlocked when the session the `ApiClient` loads from localStorage has
@@ -317,7 +370,7 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
   signed in (`controller.setClipsEnabled`), so free users do not accumulate
   ~1 MB WAVs they cannot play.
 
-## 26. One raw clip per species, replace-if-higher, 10 s cap
+## 28. One raw clip per species, replace-if-higher, 10 s cap
 
 - **Decision:** IndexedDB store `clips` (DB version 2) keyed by scientific
   name. A clip is at most 10 s of raw, unfiltered 16-bit WAV at 48 kHz, cut by
@@ -334,7 +387,7 @@ Choices made while building, with alternatives and reasons. Newest at the bottom
 - **Reason for raw:** the clip is for listening and for later re-analysis, and
   the low-cut filter (#23) belongs to the analysis path only.
 
-## 27. Heat map plugin: `leaflet.heat` 0.2.0, pinned
+## 29. Heat map plugin: `leaflet.heat` 0.2.0, pinned
 
 - **Decision:** `leaflet.heat` 0.2.0 (BSD-2-Clause, Vladimir Agafonkin; bundles
   `simpleheat`) with `@types/leaflet.heat` 0.2.5, pinned exactly. Pins
