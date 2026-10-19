@@ -924,3 +924,100 @@ Sabih's approval and a baseline check of the other sites after every reload.
   `aria-label` and in DESIGN_GUIDE.md §6.
 - **Not verified:** on a phone or with VoiceOver; checked in Chromium with
   Playwright and in both theme screenshots (`docs/screenshots/settings-*.png`).
+
+## 48. `/v1/ask` cost: token logging, lean context, minimal thinking, answer cache, model eval
+
+(Numbered 48 on branch `claude/ask-cost`; #46 and #47 are taken by other
+open branches, so this may be renumbered at merge.)
+
+- **Problem:** every question sent the whole selected article (up to 12,000
+  characters, ~1,800 prompt tokens in the live logs) at thinking level LOW
+  and the server had no idea what a day of questions cost.
+- **Prices (verified 2026-10-19 on https://ai.google.dev/gemini-api/docs/pricing,
+  Standard tier, USD per 1M tokens):** `gemini-3.8-flash` input "$0.75 through
+  December 31, 2026" ("$1.50 starting January 1, 2027"), output "$3.75"
+  ("$7.50"), cached input "$0.075" ("$0.15"); `gemini-3.5-flash-lite` input
+  "$0.30 (text / image / video / audio)", output "$2.50", cached input "$0.03".
+  The page labels every output price "(including thinking tokens)", so
+  thinking tokens are billed at the output rate. `server/src/pricing.ts`
+  holds the table (also `gemini-3.1-flash-lite` and `gemini-2.5-flash-lite`)
+  with the URL and date; an unknown model yields cost `null`, logged as
+  `cost_usd=unknown` and counted in `unpriced_requests`. The 2027 price rise
+  is a comment, not code: the table must be revisited then.
+- **Model IDs (https://ai.google.dev/gemini-api/docs/models, "Last updated
+  2026-10-13"):** `gemini-3.8-flash` (Stable) and `gemini-3.5-flash-lite`
+  (Stable; "For any new projects, use our latest models: 3.5 Flash-Lite or 3.8
+  Flash"). `GEMINI_MODEL` stays configurable, default unchanged.
+- **Thinking (https://ai.google.dev/gemini-api/docs/thinking):** the table
+  lists `gemini-3.8-flash` with low, medium, high (default medium) and
+  `gemini-3.5-flash-lite` with minimal, low, medium, high (default minimal).
+  Neither can be turned off. `thinkingLevelFor(model)` sends MINIMAL to
+  3.5 Flash-Lite and LOW to 3.8 Flash and to unknown models (`ThinkingLevel.
+  MINIMAL` exists in `@google/genai` 2.30); `thinkingBudget` is still never
+  sent (#43).
+- **Implicit caching (https://ai.google.dev/gemini-api/docs/caching):**
+  "enabled by default for all Gemini 2.5 and newer models"; "Try putting large
+  and common contents at the beginning of your prompt" and "send requests with
+  similar prefix in a short amount of time"; savings are passed on
+  automatically and reported as cached tokens. The prompt already has the
+  static system instruction first, then the source context, then the
+  question, and the cost code bills `cachedContentTokenCount` at the cached
+  rate. Caveat from the same page: the minimum prompt for an implicit cache
+  hit on Gemini 3.8 Flash is 4,096 tokens (no minimum is listed for 3.5
+  Flash-Lite), and this prompt is ~1,800 tokens at most, so a cache discount is
+  not expected in practice; the ordering costs nothing and the smaller prompt
+  saves more than a cache would.
+- **Context (`server/src/context-select.ts`):** sections are scored by
+  keyword overlap between the question and the heading + text (lower-case,
+  stop words removed, a light suffix strip so "eat" meets "eats" and "breed"
+  meets "breeding"; a heading match counts three times). The lead always
+  scores at least 1, so it is the fallback when nothing matches. Sections are
+  added in score order until ~1,500 tokens (chars / 4; the last one cut at a
+  word boundary with "[…]", dropped if fewer than 60 tokens fit) and sent in
+  article order. Citations still resolve against every article section
+  (same anchors). The fence neutralisation, control stripping and leak
+  markers are unchanged.
+- **Answer cache (`server/src/answer-cache.ts`):** SQLite `answer_cache`
+  keyed by SHA-256 of species + normalised question (lower-case, trimmed,
+  punctuation and symbols removed, whitespace collapsed, 200 characters), so
+  the table never stores a question. Region- and member-independent: the
+  context is the same article for everyone. Seven-day TTL from `created_at`;
+  only successful answers are stored; expired rows are pruned on each write.
+  A hit returns the same body plus `cached: true`, is served before the
+  daily caps are checked and does not count against them.
+- **Logging and totals:** the `[ask]` line gains `cost_usd=0.001875
+  cached=false` (six decimals; a cache hit logs one line with
+  `finish=CACHE … cost_usd=0.000000 cached=true`); still no question or
+  answer text. `server/src/ask-cost.ts` keeps SQLite `ask_cost` per UTC day
+  (requests = billed calls, retries included; prompt, answer, thinking and
+  cached tokens; cost_micros; unpriced_requests; cache_hits). `GET
+  /v1/admin/ask-costs` (admin only) returns the last 30 days and the
+  configured model; the Admin page shows them as a table with totals
+  (`src/ui/views/admin.ts`, `adminAskCosts()` in `src/api/client.ts`).
+- **Eval (`scripts/eval-models.ts`, pieces in `server/src/eval-models.ts`):**
+  20 fixed questions over 5 species (blackbird, great tit, robin, blue jay,
+  house finch; one off-topic control), the real `answerQuestion` pipeline
+  with the article fetched once per species so both models see the same
+  context, `gemini-3.8-flash` versus `gemini-3.5-flash-lite`. It prints the
+  worst-case plan first (1,500 context + instruction + question ≈ 1,758 prompt
+  tokens, 200 answer and 150 thinking tokens per call: $0.0526 + $0.0280 =
+  $0.081) and refuses above $0.10 or for an unpriced model; `--dry-run`
+  makes no network call. Output is a Markdown table (question, each model's
+  answer, prompt/answer/thinking tokens, cost) plus totals. `GEMINI_API_KEY`
+  comes from the environment only.
+- **Alternatives:** explicit context caches (storage fee per hour, and the
+  prompt is below the implicit minimum anyway); an embedding-based section
+  match (a second model call per question, more cost than it saves); caching
+  per member or region (fewer hits for no benefit, since the answer depends
+  on neither); thinking off (not offered on Gemini 3 text models).
+- **Tests:** `server/test/ask-cost.test.ts` (prices and cost arithmetic,
+  thinking level per model, log line, daily totals, cache normalisation and
+  TTL with a fake clock, caps not charged for hits, failures not cached,
+  keyword/stem/score, selection order and budget, admin endpoint, eval plan,
+  refusal and table against `FakeGemini`), `tests/admin-costs.test.ts`
+  (client call and table totals). `adversarial-llm.test.ts` now asks three
+  different questions in its cap test, because a repeat is a cache hit.
+- **Not verified:** a live call with `thinkingLevel: MINIMAL` on
+  3.5 Flash-Lite and the eval itself (no API key in this environment: the
+  script was run with `--dry-run` only); whether Gemini ever reports cached
+  tokens for this prompt size; the Admin table on a phone.

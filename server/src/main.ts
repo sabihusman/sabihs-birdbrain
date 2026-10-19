@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
+import { createAskCostStore } from './ask-cost.js';
 import { createGeminiModel } from './ask.js';
 import { createAuth, migrateAuth } from './auth.js';
 import { loadConfig } from './config.js';
@@ -16,10 +17,11 @@ async function main() {
   const auth = createAuth(db, config);
   const labels = loadLabels(config.LABELS_PATH);
   const mailer = withSendTimeout(config.MAIL_TRANSPORT === 'smtp' ? createSmtpMailer(config.SMTP_USER!, config.SMTP_APP_PASSWORD!, config.MAIL_FROM ?? `Sabih's Birdbrain <${config.SMTP_USER}>`) : createConsoleMailer());
-  const model = config.GEMINI_API_KEY ? createGeminiModel(config.GEMINI_API_KEY, config.GEMINI_MODEL) : null;
+  const costs = createAskCostStore(db);
+  const model = config.GEMINI_API_KEY ? createGeminiModel(config.GEMINI_API_KEY, config.GEMINI_MODEL, undefined, undefined, costs) : null;
   if (!model) console.warn('[startup] GEMINI_API_KEY not set: /v1/ask will answer 502');
   const article = createArticleCache(db).wrap(fetchWikipediaArticle);
-  const app = createApp({ config, db, auth, mailer, labels, wiki: fetchWikipediaSummary, article, model });
+  const app = createApp({ config, db, auth, mailer, labels, wiki: fetchWikipediaSummary, article, model, costs });
 
   const server = serve({ fetch: app.fetch, hostname: config.HOST, port: config.PORT }, (info) => {
     console.log(`[startup] birdbrain-api listening on ${info.address}:${info.port} (${labels.byScientific.size} species, mail=${config.MAIL_TRANSPORT})`);

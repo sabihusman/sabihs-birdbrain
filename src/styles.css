@@ -105,6 +105,10 @@ main.view { flex: 1; padding: var(--space-3) calc(var(--space-3) + var(--sar)) c
 .tabs a.active { color: var(--accent); font-weight: var(--weight-bold); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--space-3); margin-bottom: var(--space-3); }
 .card h2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.table-wrap { overflow-x: auto; }
+.cost-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.cost-table th, .cost-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.cost-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .row.between { justify-content: space-between; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
