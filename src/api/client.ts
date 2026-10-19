@@ -48,6 +48,8 @@ export function describeApiError(e: unknown): string {
       return 'That code is wrong or has expired. Sign in again to get a new one.';
     case 'rate_limited':
       return 'Too many attempts. Wait a few minutes and try again.';
+    case 'email_unavailable':
+      return 'The sign-in email could not be sent right now. Try again in a minute.';
     case 'account_disabled':
       return 'This account is disabled.';
     case 'not_approved':
