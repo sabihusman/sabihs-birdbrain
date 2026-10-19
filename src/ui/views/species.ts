@@ -13,8 +13,10 @@ import { locationBlock } from '../components/location-block';
 import { speciesIdCard } from '../components/species-id-card';
 import { lockedNoteEl } from '../components/member-gate';
 import { isMember, memberAccess } from '../../app/access';
-import { describeLocalCount, filterLocal } from '../../species/local';
-import { countSpotted, filterSpotted, isSpotted, loadSpottedSet, type SpottedSet } from '../../species/spotted';
+import { isSpotted, loadSpottedSet, type SpottedSet } from '../../species/spotted';
+import { scopeSpeciesList } from '../../species/list-scope';
+import { describeSpottedBy } from '../../species/friends';
+import { spottedByBlock } from '../components/spotted-by';
 
 const PAGE = 60;
 
@@ -45,13 +47,24 @@ export function speciesListView(ctx: ViewContext): View {
     spottedChip.setAttribute('aria-pressed', String(on));
     search();
   });
+  // "Spotted by friends": species any accepted friend has shared (DECISIONS.md #44). Members only; the chip hides otherwise.
+  let friendsOnly = false;
+  const friendsCount = el('span', { class: 'filter-chip-count' }, '');
+  const friendsChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': 'false', 'data-testid': 'friends-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '👥'), 'Spotted by friends', friendsCount);
+  friendsChip.addEventListener('click', () => {
+    friendsOnly = !friendsOnly;
+    friendsChip.setAttribute('aria-pressed', String(friendsOnly));
+    search();
+  });
   let spotted: SpottedSet = new Set();
   let shown = 0;
   let results: Species[] = [];
 
-  /** One list row: the species chip plus, when spotted, a tick that opens the ID card (members) or says "Sign in to unlock". */
+  /** One list row: the species chip (with "Spotted by Alex, Sam" when friends shared it) plus, when spotted by me, a tick that opens the ID card (members) or says "Sign in to unlock". */
   const row = (sp: Species): HTMLElement => {
-    const chip = speciesChip(sp);
+    const by = ctx.friends.spottedBy(sp.scientific);
+    const chip = speciesChip(sp, by.length ? { subtitle: describeSpottedBy(by) } : {});
+    if (by.length) chip.dataset.spottedByFriends = 'true';
     if (!isSpotted(sp, spotted)) return chip;
     const tick = el('button', { class: 'tick-btn', type: 'button', 'data-testid': 'spotted-tick', title: 'Spotted by you', 'aria-label': `${sp.common}: spotted by you. Open the species ID card.` }, el('span', { 'aria-hidden': 'true' }, '✓'));
     const wrap = el('div', { class: 'spotted-row', 'data-testid': 'spotted-row' }, el('div', { class: 'row' }, chip, tick));
@@ -83,16 +96,28 @@ export function speciesListView(ctx: ViewContext): View {
   const search = () => {
     const all = controller.species.filter((s) => s.isBird || settings.get().includeNonBird);
     const local = controller.getLocalSpecies();
-    const spottedOnly = settings.get().speciesSpottedOnly;
-    const scope = filterLocal(all, local.indices, settings.get().speciesShowAll, local.note);
-    const base = spottedOnly ? filterSpotted(all, spotted, true) : scope.shown;
-    spottedCount.textContent = all.length ? String(countSpotted(all, spotted)) : '';
-    localLine.textContent = all.length ? (spottedOnly ? `${base.length.toLocaleString()} species spotted by you · ${all.length.toLocaleString()} total` : describeLocalCount(scope)) : '';
-    const noteText = spottedOnly ? 'Showing every species you have a sighting of on this device, local or not.' : scope.note;
-    note.textContent = noteText ?? '';
-    note.style.display = noteText ? '' : 'none';
+    const scope = scopeSpeciesList({
+      all,
+      localIndices: local.indices,
+      localNote: local.note,
+      showAll: settings.get().speciesShowAll,
+      spotted,
+      spottedOnly: settings.get().speciesSpottedOnly,
+      friendSpecies: ctx.friends.species(),
+      friendsAvailable: ctx.friends.available,
+      friendsOnly,
+      friendCount: ctx.friends.friendCount,
+    });
+    friendsOnly = scope.friendsOnly;
+    friendsChip.style.display = ctx.friends.available ? '' : 'none';
+    friendsChip.setAttribute('aria-pressed', String(friendsOnly));
+    friendsCount.textContent = scope.friendsCount;
+    spottedCount.textContent = scope.spottedCount;
+    localLine.textContent = scope.line;
+    note.textContent = scope.note ?? '';
+    note.style.display = scope.note ? '' : 'none';
     showAll.disabled = local.indices === null;
-    results = input.value.trim() ? searchSpecies(base, input.value, 500) : base;
+    results = input.value.trim() ? searchSpecies(scope.shown, input.value, 500) : scope.shown;
     render(true);
   };
   const refreshSpotted = () => {
@@ -106,11 +131,12 @@ export function speciesListView(ctx: ViewContext): View {
   };
   input.addEventListener('input', search);
   more.addEventListener('click', () => render(false));
-  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search), controller.on('detections-changed', refreshSpotted), api.on('change', search)];
+  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search), controller.on('detections-changed', refreshSpotted), api.on('change', search), ctx.friends.on('change', search)];
   search();
   refreshSpotted();
+  void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip), localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list. A tick marks a species you have a sighting of; it stays on this device.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list. A tick marks a species you have a sighting of; it stays on this device.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {
@@ -137,8 +163,11 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const idCard = speciesIdCard(ctx, sp);
     disposers.push(idCard.dispose);
     const myBox = el('div', null, el('p', { class: 'muted' }, 'Loading your detections…'));
+    const spottedBy = ctx.friends.available ? spottedByBlock(ctx, sp, () => idCard.el.querySelector<HTMLElement>('[data-testid="species-id-card"]')) : null;
+    if (spottedBy) disposers.push(spottedBy.dispose);
     root.replaceChildren(
       el('section', { class: 'card' }, el('div', { class: 'row' }, el('span', { class: 'swatch', style: `background:${color.css};width:22px;height:22px`, 'aria-hidden': 'true' }), el('div', null, el('h2', { style: 'margin:0' }, sp.common), el('div', { class: 'muted', style: 'font-style:italic' }, sp.scientific))), el('p', { class: 'small muted' }, 'Colour used for this species everywhere in the app.')),
+      ...(spottedBy ? [spottedBy.el] : []),
       idCard.el,
       el('section', { class: 'card' }, wikiBox),
       ask.el,
@@ -238,6 +267,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
   build();
   disposers.push(controller.on('species-loaded', build));
   disposers.push(ctx.api.on('change', build));
+  void ctx.friends.refresh();
   return {
     el: root,
     dispose() {

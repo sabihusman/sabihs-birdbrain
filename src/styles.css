@@ -282,3 +282,12 @@ textarea { color: inherit; }
 
 .update-banner { width: 100%; min-height: 44px; border: none; border-radius: var(--radius-control); background: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); padding: 10px 14px; margin: 8px 0; text-align: left; }
 .update-banner:disabled { opacity: 0.7; }
+
+/* Account card: friends and sharing (DECISIONS.md #44) */
+.rule { border: 0; border-top: 1px solid var(--line); margin: var(--space-2) 0; }
+.friend-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 10px; border-radius: var(--radius-control); background: var(--surface-2); min-height: 48px; }
+.friend-name { min-width: 0; overflow-wrap: anywhere; }
+.friends-panel input[type=email], .friends-panel input[type=text], .field input[type=text], .field input[type=email] { min-height: 44px; padding: 8px 10px; border-radius: var(--radius-control); border: 1px solid var(--border); background: var(--surface); width: 100%; }
+.spotted-by-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 48px; padding: 8px 12px; border-radius: var(--radius-control); background: var(--surface-2); color: var(--text); font: inherit; text-align: left; }
+.spotted-by-row.me { border: 1px solid var(--accent); width: 100%; }
+.field input[type=password] { min-height: 44px; padding: 8px 10px; border-radius: var(--radius-control); border: 1px solid var(--border); background: var(--surface); width: 100%; }

@@ -799,3 +799,95 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** a live call with the level set (a rejected value surfaces
   through the existing 502 path; adjust `ANSWER_THINKING_LEVEL` in
   `server/src/ask.ts`).
+
+## 44. Friends: species-only sharing with explicit consent
+
+- **Decision:** members can set a display name (`POST /v1/me/name`, trimmed,
+  1–40 characters, no control or format characters), add friends by email,
+  accept or decline invites and remove friends, and, only after turning on
+  "Share my species list with friends", let accepted friends see which birds
+  they have spotted. The Species tab then shows "Spotted by Alex, Sam" under
+  a chip (next to the user's own tick from #41 when both apply), a "Spotted
+  by friends" filter chip, and on each species page a "Spotted by" card with
+  one row per person, "You" included, each with the day of their most recent
+  sighting, newest first. The user's own row opens the ID card; friends'
+  rows are not tappable. Friends' data is fetched by the client
+  (`GET /v1/friends/species`), kept in memory and `sessionStorage` per user
+  id, refreshed when the tab opens and the device is online, and dropped on
+  sign-out.
+- **What is shared, exactly:** per species the scientific name and the local
+  calendar day (`YYYY-MM-DD`) of the most recent sighting. The upload
+  (`POST /v1/me/species`) is always the full current set, capped at 2,000
+  species; the server validates every name against `labels.json`
+  (`unknown_species`), every day as a real calendar day, refuses duplicates
+  and any extra field (strict schema), and replaces the stored rows in one
+  transaction. The client builds the list from the sightings store
+  (`buildSharedSpeciesList`: one entry per species, newest first) and uploads
+  it debounced 5 s after `detections-changed`, on turning sharing on, on
+  sign-in and when the connection returns. The consent text next to the
+  switch reads: "Friends will see which birds you've spotted and the date you
+  last spotted each one. Nothing else: no times, no places, no recordings, no
+  counts. Turning this off removes the list from the server at once."
+- **What is NOT shared:** times of day, positions, accuracy, counts of
+  sightings or windows, confidence, clips or recordings, the history of
+  earlier dates, species never spotted, the email address (friends see the
+  display name; the mail to an invitee names the inviter by display name
+  only and never carries any address). Nothing is uploaded while signed out,
+  pending or with sharing off, and the consent flag is a `localStorage` key
+  per user id, so it never follows the session to another account.
+- **Invites:** `POST /v1/friends/invite` always answers
+  `{ ok: true, message: 'Invite sent' }`; a mail goes out, and a row is
+  stored, only when an approved account with that address exists, is not
+  the caller, is not already a friend and has no open (pending or declined,
+  unexpired) invite with the caller. The only other answer is 429
+  `rate_limited` when the caller is past their own cap (10 per UTC day in
+  `invite_usage`, counting every attempt alike, so the budget reveals
+  nothing). Invites expire after 30 days; a declined one stays until then so
+  the same person cannot re-invite daily. The invitee sees pending invites in
+  the Account card (`GET /v1/friends`) and acts there; the mail says only
+  "<Name> invited you ... open the Account card on the Settings tab". There
+  is no outgoing-invites list, because it would reveal which addresses exist.
+- **Deletion:** `POST /v1/me/delete` (session, strict empty body) runs one
+  SQLite transaction over `shared_species`, `friendship`, `friend_invite`,
+  `invite_usage`, the user's `ask_usage` scope, `login_challenge`, `session`,
+  `account` and `user`. Better Auth 1.7 does have `auth.api.deleteUser`
+  behind `user.deleteUser.enabled`, but it demands a fresh session (default
+  `freshAge` 24 h) or the password and would not touch the app's own tables,
+  so the direct transaction is simpler and complete. The admin account is
+  refused (`admin_account`): it is the only one that can approve people.
+  The Account card confirms inline (no pop-up); the client drops the local
+  session either way. Recordings and detections on the device are untouched.
+- **Gating:** every friend endpoint needs an approved member (401 without a
+  session, 403 `not_approved` otherwise). A friend who is disabled or
+  rejected disappears from lists and species answers at once (the join
+  filters on `status = 'approved'`), without deleting their rows. Remove is
+  idempotent (200 for strangers and unknown ids) so ids cannot be probed;
+  accept/decline answer 404 alike for foreign, unknown and expired ids.
+- **Tables:** `friend_invite` (id, from, to, status pending/declined,
+  created, expires), `friendship` (ordered pair, since), `shared_species`
+  (user, scientific, last_seen), `invite_usage` (day, user, count). No new
+  environment variables.
+- **Alternatives:** sharing full sightings with positions (rejected: the
+  heat map is the most sensitive data the app holds, see #29); server-side
+  invite tokens in the mail link (rejected: a link that logs you in is a
+  phishing pattern, and the in-app list needs no token); push notifications
+  (out of scope for this change); storing the consent in Settings (rejected:
+  settings are per device, not per account, and a shared phone would leak
+  the switch between accounts); a DELETE method (rejected to keep the CORS
+  method list unchanged).
+- **Tests:** `server/test/friends.test.ts` (name validation, invite
+  sent/not-sent cases returning the same body, cap and reset, accept,
+  decline, expiry, remove, upload replace/clear, validation, body limit,
+  deletion) and `server/test/adversarial-friends.test.ts` (who can read a
+  list: stranger, pending invitee, declined invitee, removed friend, signed
+  out, disabled; a friend sees only display name and (sci, lastSeen) pairs;
+  byte-identical invite answers; invite-id and remove probing; writing for
+  someone else; header smuggling in names). Front end: `tests/sharing.test.ts`
+  (what leaves the device, debounce, off/signed-out/pending/offline, per-user
+  consent) and `tests/friends.test.ts` (index, cache per user, offline copy,
+  sign-out), plus the API-client paths.
+- **Not verified:** the whole flow against the live server and Gmail (the
+  fake mailer stands in); the Species tab with real friends' data on a
+  phone; the Account card at 320 px with long display names (the width test
+  runs signed out).
+

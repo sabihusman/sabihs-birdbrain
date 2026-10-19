@@ -176,6 +176,23 @@ What does leave the phone, and why:
   cites as links. When the article cannot be fetched, the summary is used. Questions are not logged. There are daily limits per person and
   overall.
 
+- If you are an approved member and use **Friends** (Settings › Account):
+  your display name is stored on the server and shown to friends instead of
+  your email. Inviting a friend sends their address to the API, which always
+  answers "Invite sent"; an email goes out only to an approved member who is
+  not already your friend, and it names you by display name, never by email.
+  Sharing is **off by default**. If you turn on "Share my species list with
+  friends" (the switch says exactly what is shared: "which birds you've
+  spotted and the date you last spotted each one"), the app uploads, for
+  each species, only the scientific name and the calendar day of your most
+  recent sighting (`YYYY-MM-DD`, local day, no time), replacing the whole
+  list after each new sighting. No locations, no counts, no recordings or
+  clips, no history of earlier sightings, and nothing about species you have
+  not spotted. Only accepted friends can read it, and they see your display
+  name with those pairs, nothing else. Turning the switch off removes the
+  list from the server immediately; "Delete account" removes the list, your
+  friendships and invites, your sessions and the account itself in one step.
+
 Member features keep everything on the device too: the species ID card,
 sighting history, heat map and the one saved clip per species are read from
 IndexedDB and are never uploaded. The heat map in particular is sensitive
