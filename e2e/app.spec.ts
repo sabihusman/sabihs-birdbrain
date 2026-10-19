@@ -69,6 +69,10 @@ test('tabs, settings and map render', async ({ page }) => {
   await page.goto('./#/map');
   await expect(page.getByTestId('map')).toBeVisible();
   await expect(page.locator('.leaflet-control-attribution')).toContainText('OpenStreetMap');
+  // Tile images must be able to send a Referer (OSM tile policy): no referrerpolicy attribute from Leaflet.
+  const tile = page.locator('img.leaflet-tile').first();
+  await expect(tile).toBeAttached();
+  await expect(tile).not.toHaveAttribute('referrerpolicy', /./);
   await page.goto('./#/recordings');
   await expect(page.getByText('Import audio file')).toBeVisible();
 });

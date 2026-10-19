@@ -12,7 +12,7 @@
           "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org https://upload.wikimedia.org https://thumb.wikimedia.org; media-src 'self' blob:; connect-src 'self' https://bird-brain.duckdns.org https://en.wikipedia.org; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), geolocation=(self), microphone=(self), payment=()" },
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" }
       ]
