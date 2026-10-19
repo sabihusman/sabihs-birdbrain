@@ -8,6 +8,7 @@ import { ACOUSTIC_MODEL_JSON, GEO_MODEL_JSON, MODEL_CACHE_NAME, MODEL_TOTAL_BYTE
 import { registerMelSpecLayer } from './melspec-layer';
 import { analysisStft, melBandEdges, occludeAudio, regionFor } from './occlusion';
 import { rankScores, type GeoMask } from './postprocess';
+import { maxOverWeeks, WEEKS_PER_YEAR } from '../species/local';
 import type { BackendName, BackendPreference, WorkerRequest, WorkerResponse } from './protocol';
 import { extractWindow, planWindows } from '../audio/windowing';
 
@@ -186,6 +187,35 @@ async function handleSetGeo(msg: Extract<WorkerRequest, { type: 'set-geo' }>): P
   post({ type: 'geo-ready', id: msg.id, count });
 }
 
+/** All 48 weeks at one position in one batch (falls back to one week per call if the graph refuses a batch). */
+async function handleLocalSpecies(msg: Extract<WorkerRequest, { type: 'local-species' }>): Promise<void> {
+  if (!geoModel) throw new Error('geo model not loaded');
+  const rows: number[][] = [];
+  for (let w = 1; w <= WEEKS_PER_YEAR; w++) rows.push([msg.lat, msg.lon, w]);
+  let all: Float32Array;
+  try {
+    const input = tf.tensor2d(rows);
+    const out = geoModel.predict(input) as tf.Tensor;
+    all = (await out.data()) as Float32Array;
+    input.dispose();
+    out.dispose();
+  } catch {
+    const parts: Float32Array[] = [];
+    for (const row of rows) {
+      const input = tf.tensor2d([row]);
+      const out = geoModel.predict(input) as tf.Tensor;
+      parts.push((await out.data()) as Float32Array);
+      input.dispose();
+      out.dispose();
+    }
+    all = new Float32Array(parts.length * parts[0].length);
+    parts.forEach((p, i) => all.set(p, i * p.length));
+  }
+  const speciesCount = all.length / WEEKS_PER_YEAR;
+  const maxProbs = maxOverWeeks(all, WEEKS_PER_YEAR, speciesCount);
+  post({ type: 'local-species', id: msg.id, maxProbs }, [maxProbs.buffer]);
+}
+
 async function handleAnalyze(msg: Extract<WorkerRequest, { type: 'analyze' }>): Promise<void> {
   post({ type: 'stage', id: msg.id, stage: 'spectrogram' });
   const t0 = performance.now();
@@ -246,6 +276,8 @@ async function handle(msg: WorkerRequest): Promise<void> {
       return handleInit(msg);
     case 'set-geo':
       return handleSetGeo(msg);
+    case 'local-species':
+      return handleLocalSpecies(msg);
     case 'analyze':
       return handleAnalyze(msg);
     case 'analyze-file':

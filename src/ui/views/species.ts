@@ -12,15 +12,25 @@ import { askBox } from '../components/ask-box';
 import { locationBlock } from '../components/location-block';
 import { speciesIdCard } from '../components/species-id-card';
 import { isMember } from '../../app/access';
+import { describeLocalCount, filterLocal } from '../../species/local';
 
 const PAGE = 60;
 
 export function speciesListView(ctx: ViewContext): View {
   const { controller } = ctx;
-  const input = el('input', { class: 'search', type: 'search', placeholder: 'Search 6,522 species by common or scientific name', 'aria-label': 'Search species', autocomplete: 'off' });
+  const settings = controller.settings;
+  const input = el('input', { class: 'search', type: 'search', placeholder: 'Search species by common or scientific name', 'aria-label': 'Search species', autocomplete: 'off' });
   const list = el('div', { class: 'chip-list', 'data-testid': 'species-list' });
   const more = el('button', { class: 'btn small' }, 'Show more');
   const count = el('div', { class: 'small muted' }, '');
+  const localLine = el('div', { class: 'small', 'data-testid': 'local-count' }, '');
+  const note = el('div', { class: 'small muted', 'data-testid': 'local-note' }, '');
+  const showAll = el('input', { type: 'checkbox', checked: settings.get().speciesShowAll, 'data-testid': 'show-all-species' });
+  showAll.addEventListener('change', () => {
+    settings.update({ speciesShowAll: showAll.checked });
+    search();
+  });
+  const toggle = el('label', { class: 'switch' }, el('span', null, 'Show all species', el('div', { class: 'small muted' }, 'Off: only species the location model expects near you in some week of the year.')), showAll);
   let shown = 0;
   let results: Species[] = [];
 
@@ -36,17 +46,28 @@ export function speciesListView(ctx: ViewContext): View {
     count.textContent = results.length ? `${results.length.toLocaleString()} species${shown < results.length ? `, showing ${shown}` : ''}` : controller.species.length ? 'No matches.' : 'Loading species list…';
   };
   const search = () => {
-    const all = controller.species.filter((s) => s.isBird || controller.settings.get().includeNonBird);
-    results = input.value.trim() ? searchSpecies(all, input.value, 500) : all;
+    const all = controller.species.filter((s) => s.isBird || settings.get().includeNonBird);
+    const local = controller.getLocalSpecies();
+    const scope = filterLocal(all, local.indices, settings.get().speciesShowAll, local.note);
+    localLine.textContent = all.length ? describeLocalCount(scope) : '';
+    note.textContent = scope.note ?? '';
+    note.style.display = scope.note ? '' : 'none';
+    showAll.disabled = local.indices === null;
+    results = input.value.trim() ? searchSpecies(scope.shown, input.value, 500) : scope.shown;
     render(true);
   };
   input.addEventListener('input', search);
   more.addEventListener('click', () => render(false));
-  const unsub = controller.on('species-loaded', search);
+  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search)];
   search();
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app. Wikipedia pages are cached after the first visit.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
-  return { el: root, dispose: unsub };
+  const root = el('div', null, el('section', { class: 'card' }, input, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  return {
+    el: root,
+    dispose() {
+      for (const u of unsubs) u();
+    },
+  };
 }
 
 export function speciesDetailView(ctx: ViewContext, scientific: string): View {
