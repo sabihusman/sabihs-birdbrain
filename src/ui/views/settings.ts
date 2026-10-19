@@ -1,12 +1,13 @@
 import { sightingsToCsv } from '../../export/csv';
 import { downloadBlob, timestampForFilename } from '../../export/download';
 import { sightingsToGeoJson } from '../../export/geojson';
-import type { BackendPreference, ListenLayout, LocationMode, OcclusionResolution } from '../../app/settings';
+import type { BackendPreference, LocationMode, OcclusionResolution } from '../../app/settings';
 import { clearAllData, countDetections, countSightings, listSightings } from '../../storage/db';
 import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
 import { accountSection } from './account';
+import { layoutPicker } from '../components/layout-picker';
 import { describeVoiceProcessing } from '../../audio/mic-constraints';
 
 export function settingsView(ctx: ViewContext): View {
@@ -34,16 +35,20 @@ export function settingsView(ctx: ViewContext): View {
     for (const f of syncs) f();
   });
 
+  // Listen layout: preview tiles (DECISIONS.md #44). A tap switches immediately; the store change is mirrored back.
+  const picker = layoutPicker(s.listenLayout, (listenLayout) => settings.update({ listenLayout }));
+  syncs.push(() => picker.sync(settings.get().listenLayout));
+
   const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut', hint?: string) => {
     const input = el('input', { type: 'checkbox', checked: s[key] });
     input.addEventListener('change', () => settings.update({ [key]: input.checked }));
     return el('label', { class: 'switch' }, el('span', null, label, hint ? el('div', { class: 'small muted' }, hint) : null), input);
   };
 
-  const select = <T extends string>(label: string, key: 'locationMode' | 'backend' | 'occlusionResolution' | 'listenLayout', options: Array<[T, string]>, hint?: string) => {
+  const select = <T extends string>(label: string, key: 'locationMode' | 'backend' | 'occlusionResolution', options: Array<[T, string]>, hint?: string) => {
     const sel = el('select', { 'aria-label': label });
     for (const [v, text] of options) sel.appendChild(el('option', { value: v, selected: s[key] === v }, text));
-    sel.addEventListener('change', () => settings.update({ [key]: sel.value as LocationMode & BackendPreference & OcclusionResolution & ListenLayout }));
+    sel.addEventListener('change', () => settings.update({ [key]: sel.value as LocationMode & BackendPreference & OcclusionResolution }));
     return el('div', { class: 'field' }, el('label', null, label), sel, hint ? el('div', { class: 'small muted' }, hint) : null);
   };
 
@@ -125,16 +130,7 @@ export function settingsView(ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Listen layout'),
-      select(
-        'Listen layout',
-        'listenLayout',
-        [
-          ['consolidated', 'Consolidated (default): panel on top, results below'],
-          ['dock', 'Bottom dock: results fill the screen, controls above the tabs'],
-          ['focus', 'Focus mode: one large card for the latest bird'],
-        ],
-        'Same components and states in every layout; only the arrangement differs. Remembered on this device.',
-      ),
+      picker.el,
     ),
     el(
       'section',

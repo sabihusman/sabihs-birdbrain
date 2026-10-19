@@ -201,6 +201,87 @@ test('no horizontal scrolling and the primary control visible at 320, 375, 390 a
   }
 });
 
+/**
+ * Height of the previous Settings → "Listen layout" card (h2 + dropdown + two-line helper text),
+ * measured with getBoundingClientRect() at a 375 px viewport on main (commit efc0a2a) before the
+ * preview-tile picker replaced it. The picker's card must stay within 1.5× of it (DECISIONS.md #44).
+ */
+const BASELINE_DROPDOWN_CARD_HEIGHT_PX = 210.59;
+
+test('Listen layout picker: tiles select and persist, arrow keys move, height budget, no overflow at 320 px', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.goto('./#/settings');
+  const group = page.getByTestId('listen-layout');
+  await expect(group).toHaveAttribute('role', 'radiogroup');
+  await expect(page.locator('select[aria-label="Listen layout"]')).toHaveCount(0);
+  const tiles = group.getByRole('radio');
+  await expect(tiles).toHaveCount(3);
+  // Visible names (the first may carry a soft hyphen for 320 px) and clean accessible names.
+  await expect(tiles).toHaveText([/^Consoli\u00AD?dated$/, 'Bottom dock', 'Focus']);
+  for (const name of [/^Consolidated: /, /^Bottom dock: /, /^Focus: /]) await expect(group.getByRole('radio', { name })).toHaveAttribute('aria-checked', /true|false/);
+  // Default selection and roving tabindex: the checked tile is the only one in the tab order.
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('tabindex', '0');
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('tabindex', '-1');
+  // Height budget: the whole card is no taller than 1.5× the old dropdown card at 375 px.
+  const card = group.locator('xpath=ancestor::section[contains(@class, "card")][1]');
+  const cardBox = await card.boundingBox();
+  expect(cardBox!.height).toBeLessThanOrEqual(1.5 * BASELINE_DROPDOWN_CARD_HEIGHT_PX);
+  // Every tile is a 44 px target and fits inside the viewport in one row.
+  const firstTile = await page.getByTestId('listen-layout-consolidated').boundingBox();
+  for (const l of ['consolidated', 'dock', 'focus']) {
+    const b = await page.getByTestId(`listen-layout-${l}`).boundingBox();
+    expect(b!.width, `${l} width`).toBeGreaterThanOrEqual(44);
+    expect(b!.height, `${l} height`).toBeGreaterThanOrEqual(44);
+    expect(b!.x + b!.width, `${l} inside 375px`).toBeLessThanOrEqual(375);
+    expect(b!.y, `${l} in one row`).toBeCloseTo(firstTile!.y, 0);
+  }
+  // Tap switches at once, is written to the store and survives a reload; the Listen view uses it.
+  await page.getByTestId('listen-layout-dock').click();
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'false');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').listenLayout)).toBe('dock');
+  await page.reload();
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('tabindex', '0');
+  // Keyboard: arrows move focus and selection with wrap-around; Space/Enter select the focused tile.
+  await page.getByTestId('listen-layout-dock').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('listen-layout-focus')).toBeFocused();
+  await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('listen-layout-consolidated')).toBeFocused();
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowUp');
+  await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').listenLayout)).toBe('focus');
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'focus');
+  await context.close();
+
+  // No horizontal overflow at 320 px with the Settings tab open: the Settings content and every tile
+  // stay inside the viewport. (The document width is measured on the view, not on the root, because the
+  // sticky header's status pill alone exceeds 320 px by a few px once it reads "Model ready · wasm",
+  // a pre-existing header issue that this picker neither causes nor can fix.)
+  const narrow = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const np = await narrow.newPage();
+  await np.goto('./#/settings');
+  await expect(np.getByTestId('listen-layout')).toBeVisible();
+  const widths = await np.evaluate(() => {
+    const view = document.querySelector('main.view')!;
+    return { view: view.scrollWidth, cards: Math.max(...[...document.querySelectorAll('main.view .card')].map((c) => c.getBoundingClientRect().right)) };
+  });
+  expect(widths.view, 'settings view scrollWidth at 320px').toBeLessThanOrEqual(320);
+  expect(widths.cards, 'cards inside 320px').toBeLessThanOrEqual(320);
+  for (const l of ['consolidated', 'dock', 'focus']) {
+    const b = await np.getByTestId(`listen-layout-${l}`).boundingBox();
+    expect(b!.x + b!.width, `${l} inside 320px`).toBeLessThanOrEqual(320);
+    expect(b!.width, `${l} width at 320px`).toBeGreaterThanOrEqual(44);
+  }
+  await narrow.close();
+});
+
 for (const layout of ['consolidated', 'dock', 'focus'] as const) {
   test(`Listen layout ${layout}: ready, listening with the fake microphone, result cards, stop`, async ({ page }) => {
     await page.addInitScript((l) => {
