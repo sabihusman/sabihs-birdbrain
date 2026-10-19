@@ -447,3 +447,27 @@ Sabih's approval and a baseline check of the other sites after every reload.
 - **Not verified:** field behaviour at 60 % on a phone; the e2e tests still
   detect the sample clip at the new default.
 
+## 32. Live waveform and spectrogram auto-scale to the recent peak
+
+- **Symptom:** after #22 (no automatic gain on the microphone) raw phone
+  input peaks at roughly 0.01–0.06 of full scale. The waveform drew samples
+  on a fixed ±1 axis into a 56 px canvas, so a 0.02 peak was 0.6 px: a flat
+  line. The spectrogram mapped a fixed 0…−80 dBFS window, so the same input
+  sat in the dark purple end of the colour map. The data path was intact
+  (the level bar and the conditions indicator read the same raw tap); the
+  scale was the bug, case (b).
+- **Decision:** `src/ui/viz/autoscale.ts`. The waveform follows the loudest
+  sample in its 3 s ring with a fast-attack, slow-release follower and
+  applies a gain capped at ×100, rounded to readable steps (×1, ×2…×9, ×10,
+  ×15…), shown on the canvas and in the caption. The spectrogram's colour
+  window is 60 dB wide and its top follows the loudest bin of recent columns
+  (instant attack, 0.25 dB per column release, never below −70 dBFS so
+  digital silence is not blown up into a bright noise floor); the window is
+  printed bottom right. Static spectrograms of recordings use one window set
+  from the clip's loudest bin.
+- **Alternative:** remove the panel. Rejected: the scaled trace is useful
+  (the gain number itself tells how quiet the mic is) and the test suite now
+  proves a −40 dBFS sine fills more than 80 % of the canvas height.
+- **Not verified:** on a phone; the thresholds (×100 cap, 60 dB span,
+  −70 dBFS top floor) are first guesses for real microphone levels.
+

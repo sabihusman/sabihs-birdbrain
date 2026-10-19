@@ -3,10 +3,13 @@ import { stft } from '../../audio/stft';
 import { SAMPLE_RATE } from '../../model/constants';
 import type { SpeciesColor } from '../../species/colors';
 import { fitCanvas } from '../dom';
-import { dbToIndex, INFERNO } from './colormap';
+import { AdaptiveDbRange, columnDb, maxOf } from './autoscale';
+import { INFERNO } from './colormap';
 
 export const SPEC_FFT = 1024;
 export const SPEC_MAX_HZ = 15000;
+/** A full-scale sine through a Hann window peaks at N/4 in the FFT, so 4/N reads 0 dBFS. */
+export const SPEC_MAG_SCALE = 4 / SPEC_FFT;
 
 export interface WindowMark {
   startSec: number;
@@ -48,6 +51,9 @@ export class SpectrogramView {
   private liveWindow: { startSec: number; endSec: number } | null = null;
   private staticDuration: number | null = null;
   private cursorSec: number | null = null;
+  /** Colour range follows the loudest recent bin, so quiet raw mic input is still visible. */
+  private readonly range = new AdaptiveDbRange();
+  private readonly dbColumn: Float32Array;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -62,6 +68,12 @@ export class SpectrogramView {
     this.imageCtx.fillStyle = '#000004';
     this.imageCtx.fillRect(0, 0, this.image.width, this.image.height);
     this.column = this.imageCtx.createImageData(1, imageHeight);
+    this.dbColumn = new Float32Array(imageHeight);
+  }
+
+  /** Current colour window in dBFS (for captions and tests). */
+  get dbRange(): { topDb: number; bottomDb: number } {
+    return { topDb: this.range.topDb, bottomDb: this.range.bottomDb };
   }
 
   reset(): void {
@@ -72,6 +84,7 @@ export class SpectrogramView {
     this.liveWindow = null;
     this.staticDuration = null;
     this.cursorSec = null;
+    this.range.reset();
     this.imageCtx.fillStyle = '#000004';
     this.imageCtx.fillRect(0, 0, this.image.width, this.image.height);
     this.draw();
@@ -113,19 +126,18 @@ export class SpectrogramView {
     this.marks = this.marks.filter((m) => m.endSec > oldest);
   }
 
+  /** Live column: dB per row (row 0 = highest frequency), range adapts to this column's peak. */
   private columnPixels(re: Float64Array, im: Float64Array): Uint8ClampedArray {
+    const db = columnDb(re, im, this.imageHeight, this.maxBin, SPEC_MAG_SCALE, this.dbColumn);
+    this.range.update(maxOf(db));
+    return this.pixelsFromDb(db);
+  }
+
+  private pixelsFromDb(db: Float32Array): Uint8ClampedArray {
     const h = this.imageHeight;
     const out = new Uint8ClampedArray(h * 4);
-    const scale = 2 / SPEC_FFT;
     for (let y = 0; y < h; y++) {
-      // y = 0 is the top (highest frequency); linear frequency axis.
-      const binF = ((h - 1 - y) / (h - 1)) * this.maxBin;
-      const b0 = Math.floor(binF);
-      const b1 = Math.min(this.maxBin, b0 + 1);
-      const f = binF - b0;
-      const m0 = Math.hypot(re[b0], im[b0]) * scale;
-      const m1 = Math.hypot(re[b1], im[b1]) * scale;
-      const idx = dbToIndex(m0 * (1 - f) + m1 * f);
+      const idx = this.range.index(db[y]);
       out[y * 4] = INFERNO[idx * 3];
       out[y * 4 + 1] = INFERNO[idx * 3 + 1];
       out[y * 4 + 2] = INFERNO[idx * 3 + 2];
@@ -147,16 +159,25 @@ export class SpectrogramView {
     const ctx = this.imageCtx;
     ctx.fillStyle = '#000004';
     ctx.fillRect(0, 0, width, this.image.height);
+    // Two passes: one fixed colour window for the whole clip, set from its loudest bin.
     const re = new Float64Array(SPEC_FFT);
     const im = new Float64Array(SPEC_FFT);
+    const columns: Float32Array[] = [];
+    let peakDb = -Infinity;
     for (let f = 0; f < s.frames; f++) {
-      const x = Math.floor((f / s.frames) * width);
       const o = f * s.bins;
       for (let k = 0; k < s.bins; k++) {
         re[k] = s.re[o + k];
         im[k] = s.im[o + k];
       }
-      this.column.data.set(this.columnPixels(re, im));
+      const db = columnDb(re, im, this.imageHeight, this.maxBin, SPEC_MAG_SCALE);
+      peakDb = Math.max(peakDb, maxOf(db));
+      columns.push(db);
+    }
+    this.range.reset(Math.max(peakDb, -70));
+    for (let f = 0; f < columns.length; f++) {
+      const x = Math.floor((f / columns.length) * width);
+      this.column.data.set(this.pixelsFromDb(columns[f]));
       ctx.putImageData(this.column, x, 0);
     }
     this.draw();
@@ -280,5 +301,9 @@ export class SpectrogramView {
       octx.fillRect(0, y, w, 1);
       octx.fillStyle = 'rgba(255,255,255,0.7)';
     }
+    // Colour window, bottom right.
+    octx.textAlign = 'right';
+    octx.fillText(`${Math.round(this.range.bottomDb)} to ${Math.round(this.range.topDb)} dBFS`, w - 3, h - 4);
+    octx.textAlign = 'left';
   }
 }
