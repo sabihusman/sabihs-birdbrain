@@ -1,0 +1,13 @@
+# /etc/systemd/system/birdbrain-renew-alert.service
+# Started by lego-renew-birdbrain.service's OnFailure= (drop-in onfailure.conf). Emails
+# ADMIN_EMAIL via the app's mailer; see /usr/local/sbin/birdbrain-renew-alert.sh.
+# To test by hand (sends a real mail): systemctl start birdbrain-renew-alert.service
+[Unit]
+Description=Email the admin when the bird-brain.duckdns.org certificate renewal fails
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/birdbrain-renew-alert.sh
+TimeoutStartSec=180

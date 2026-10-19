@@ -5,6 +5,7 @@
 #   sudo server/deploy/setup.sh                    # run all steps in order
 #   sudo server/deploy/setup.sh --only 3           # run one step
 #   sudo server/deploy/setup.sh --from 4           # resume from a step
+#   sudo server/deploy/setup.sh --only 9           # add the renewal-failure alert to an existing install
 # Rules baked in: never touches other sites' Nginx files, nginx.conf, other containers,
 # other units or cron; never restarts nginx (only `nginx -t` then `systemctl reload nginx`);
 # refuses to overwrite any target file it did not itself create (stage-1 Nginx file excepted).
@@ -30,6 +31,10 @@ LEGO_BIN_DEFAULT=/usr/local/bin/lego
 DEPLOY_USER=birdbrain-deploy
 DEPLOY_SCRIPT=/usr/local/sbin/birdbrain-deploy.sh
 SUDOERS_FILE=/etc/sudoers.d/birdbrain-deploy
+ALERT_SCRIPT=/usr/local/sbin/birdbrain-renew-alert.sh
+ALERT_UNIT=$UNIT_DIR/birdbrain-renew-alert.service
+ALERT_DROPIN_DIR=$UNIT_DIR/lego-renew-birdbrain.service.d
+ALERT_DROPIN=$ALERT_DROPIN_DIR/onfailure.conf
 
 DRY_RUN=0; ONLY=""; FROM=1
 while [ $# -gt 0 ]; do
@@ -83,7 +88,7 @@ nginx_apply() {
 }
 
 step1_preflight() {
-  log "Step 1/8: preflight (read-only)"
+  log "Step 1/9: preflight (read-only)"
   if [ "$DRY_RUN" = 0 ] && [ "$(id -u)" -ne 0 ]; then echo "run as root" >&2; exit 77; fi
   local resolved; resolved="$(getent ahostsv4 "$DOMAIN" | awk 'NR==1{print $1}')" || true
   echo "   $DOMAIN -> ${resolved:-unresolved} (expected $SERVER_IP)"
@@ -95,7 +100,7 @@ step1_preflight() {
 }
 
 step2_appdir() {
-  log "Step 2/8: $APP_DIR, .env (0600, secrets added by Sabih), compose.yml"
+  log "Step 2/9: $APP_DIR, .env (0600, secrets added by Sabih), compose.yml"
   run mkdir -p "$APP_DIR"
   if [ ! -e "$ENV_FILE" ]; then
     run install -o root -g root -m 0600 /dev/null "$ENV_FILE"
@@ -108,7 +113,7 @@ step2_appdir() {
 }
 
 step3_nginx_http() {
-  log "Step 3/8: Nginx port-80 block (ACME + redirect), nginx -t, reload"
+  log "Step 3/9: Nginx port-80 block (ACME + redirect), nginx -t, reload"
   refuse_if_exists "$NGINX_AVAIL" "$NGINX_ENABLED"
   write_file "$NGINX_AVAIL" 0644 < "$HERE/nginx/birdbrain.http-only"
   run ln -s "$NGINX_AVAIL" "$NGINX_ENABLED"
@@ -117,7 +122,7 @@ step3_nginx_http() {
 }
 
 step4_cert() {
-  log "Step 4/8: $LEGO_ENV (copy of Sentinel's env with only LEGO_DOMAINS changed), then lego run"
+  log "Step 4/9: $LEGO_ENV (copy of Sentinel's env with only LEGO_DOMAINS changed), then lego run"
   need_conf
   if [ ! -f "$SENTINEL_LEGO_ENV" ] && [ "$DRY_RUN" = 0 ]; then echo "$SENTINEL_LEGO_ENV not found; set SENTINEL_LEGO_ENV in setup.conf" >&2; exit 78; fi
   if [ -e "$LEGO_ENV" ]; then
@@ -138,7 +143,7 @@ step4_cert() {
 }
 
 step5_renew_units() {
-  log "Step 5/8: lego-renew-birdbrain.service/.timer (Sentinel's pattern: EnvironmentFile + lego run + reload), run once"
+  log "Step 5/9: lego-renew-birdbrain.service/.timer (Sentinel's pattern: EnvironmentFile + lego run + reload), run once"
   need_conf
   refuse_if_exists "$UNIT_DIR/lego-renew-birdbrain.service" "$UNIT_DIR/lego-renew-birdbrain.timer"
   [ -f "$LEGO_ENV" ] || [ "$DRY_RUN" = 1 ] || { echo "$LEGO_ENV missing; run step 4 first" >&2; exit 78; }
@@ -153,7 +158,7 @@ step5_renew_units() {
 }
 
 step6_nginx_full() {
-  log "Step 6/8: Nginx port-443 block (proxy to 127.0.0.1:8010, limits, headers), nginx -t, reload"
+  log "Step 6/9: Nginx port-443 block (proxy to 127.0.0.1:8010, limits, headers), nginx -t, reload"
   need_conf
   local lp; lp="$(lego_path)"
   [ -e "$lp/certificates/$DOMAIN.crt" ] || [ "$DRY_RUN" = 1 ] || { echo "certificate missing ($lp/certificates/$DOMAIN.crt); run step 4 first" >&2; exit 1; }
@@ -164,7 +169,7 @@ step6_nginx_full() {
 }
 
 step7_deploy_user() {
-  log "Step 7/8: $DEPLOY_USER with forced-command key, root-owned deploy script, sudoers (no arguments)"
+  log "Step 7/9: $DEPLOY_USER with forced-command key, root-owned deploy script, sudoers (no arguments)"
   need_conf
   if [ -z "${DEPLOY_PUBKEY_FILE:-}" ] || [ ! -f "$DEPLOY_PUBKEY_FILE" ]; then
     [ "$DRY_RUN" = 1 ] && { echo "   [dry-run] DEPLOY_PUBKEY_FILE not set; using placeholder key"; DEPLOY_PUBKEY_FILE=/dev/null; } || { echo "setup.conf: DEPLOY_PUBKEY_FILE must point at the CI public key" >&2; exit 78; }
@@ -187,7 +192,7 @@ step7_deploy_user() {
 }
 
 step8_container() {
-  log "Step 8/8: pull the image, make the volumes writable for uid 1000, start the container (127.0.0.1:8010), wait for /health"
+  log "Step 8/9: pull the image, make the volumes writable for uid 1000, start the container (127.0.0.1:8010), wait for /health"
   [ -s "$ENV_FILE" ] || [ "$DRY_RUN" = 1 ] || { echo "$ENV_FILE is empty; add the variables first" >&2; exit 78; }
   grep -qE '^BIRDBRAIN_IMAGE_TAG=' "$ENV_FILE" 2>/dev/null && echo "   image tag: $(grep -E '^BIRDBRAIN_IMAGE_TAG=' "$ENV_FILE" | cut -d= -f2)" || echo "   note: BIRDBRAIN_IMAGE_TAG not set in $ENV_FILE; compose falls back to :latest"
   (
@@ -208,7 +213,25 @@ step8_container() {
   echo "   rollback: cd $APP_DIR && docker compose down   (volumes birdbrain-data/birdbrain-backups are kept)"
 }
 
-STEPS=(step1_preflight step2_appdir step3_nginx_http step4_cert step5_renew_units step6_nginx_full step7_deploy_user step8_container)
+step9_renew_alert() {
+  log "Step 9/9: e-mail ADMIN_EMAIL when the certificate renewal fails (OnFailure= drop-in, alert unit, alert script)"
+  [ -f "$UNIT_DIR/lego-renew-birdbrain.service" ] || [ "$DRY_RUN" = 1 ] || { echo "$UNIT_DIR/lego-renew-birdbrain.service missing; run step 5 first" >&2; exit 78; }
+  [ -f "$COMPOSE_FILE" ] || [ "$DRY_RUN" = 1 ] || { echo "$COMPOSE_FILE missing; run step 2 first (the alert sends mail through the API image)" >&2; exit 78; }
+  refuse_if_exists "$ALERT_SCRIPT" "$ALERT_UNIT" "$ALERT_DROPIN"
+  run install -o root -g root -m 0750 "$HERE/birdbrain-renew-alert.sh" "$ALERT_SCRIPT"
+  write_file "$ALERT_UNIT" 0644 < "$HERE/systemd/birdbrain-renew-alert.service"
+  run install -d -o root -g root -m 0755 "$ALERT_DROPIN_DIR"
+  write_file "$ALERT_DROPIN" 0644 < "$HERE/systemd/lego-renew-birdbrain.service.d-onfailure.conf"
+  run systemctl daemon-reload
+  if [ "$DRY_RUN" = 0 ]; then
+    echo "   OnFailure now reads: $(systemctl show -p OnFailure --value lego-renew-birdbrain.service)"
+    systemctl show -p OnFailure --value lego-renew-birdbrain.service | grep -q birdbrain-renew-alert.service || { echo "drop-in not picked up" >&2; exit 1; }
+  fi
+  echo "   test (sends a real mail to ADMIN_EMAIL): systemctl start birdbrain-renew-alert.service; journalctl -u birdbrain-renew-alert -n 20"
+  echo "   rollback: rm -r $ALERT_DROPIN_DIR; rm $ALERT_UNIT $ALERT_SCRIPT; systemctl daemon-reload   (or rollback.sh --only-alert)"
+}
+
+STEPS=(step1_preflight step2_appdir step3_nginx_http step4_cert step5_renew_units step6_nginx_full step7_deploy_user step8_container step9_renew_alert)
 if [ -n "$ONLY" ]; then "${STEPS[$((ONLY-1))]}"; exit 0; fi
 for i in "${!STEPS[@]}"; do n=$((i+1)); [ "$n" -ge "$FROM" ] && "${STEPS[$i]}"; done
 log "done. Run server/deploy/verify.sh check to compare with the baseline."
