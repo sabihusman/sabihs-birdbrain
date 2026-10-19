@@ -101,20 +101,20 @@ describe('answer cache', () => {
     expect(answerCacheKey('Turdus merula', 'What does it eat?')).not.toBe(answerCacheKey('Parus major', 'What does it eat?'));
     expect(answerCacheKey('Turdus merula', 'What does it eat?')).not.toContain('eat');
     expect(answerCacheKey('Turdus merula', 'What does it eat?')).toBe(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'none' }));
-    expect(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'US-NY' })).not.toBe(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'US-CA' }));
+    expect(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'US-IA' })).not.toBe(answerCacheKey('Turdus merula', 'What does it eat?', { region: 'US-CA' }));
   });
 
   it('returns a stored answer for 7 days and nothing after, with a fake clock', () => {
     const cache = createAnswerCache(openDatabase(':memory:'));
     const t0 = new Date('2026-10-19T12:00:00Z');
     const body = { answer: 'Seeds. [Diet]', source: { title: 'T', url: 'u' }, citations: [{ section: 'Diet', url: 'u#Diet' }], context: 'article' as const };
-    const scope = { region: 'US-NY', near: { lat: 40.7, lon: -74 } };
+    const scope = { region: 'US-IA', near: { lat: 40.7, lon: -74 } };
     expect(cache.get('Turdus merula', 'What does it eat?', scope, t0)).toBeNull();
     cache.put('Turdus merula', 'What does it eat?', scope, body, t0);
     expect(cache.get('Turdus merula', 'what does it eat', scope, new Date(t0.getTime() + ANSWER_CACHE_TTL_MS - 1))).toEqual(body);
     // another region or another place is another answer; the same place written differently is the same
     expect(cache.get('Turdus merula', 'what does it eat', { ...scope, region: 'US-NJ' }, t0)).toBeNull();
-    expect(cache.get('Turdus merula', 'what does it eat', { region: 'US-NY' }, t0)).toBeNull();
+    expect(cache.get('Turdus merula', 'what does it eat', { region: 'US-IA' }, t0)).toBeNull();
     expect(cache.get('Turdus merula', 'what does it eat', { ...scope, near: { lat: 40.7, lon: -74.0 } }, t0)).toEqual(body);
     expect(cache.get('Turdus merula', 'what does it eat', { ...scope, near: { lat: 40.8, lon: -74 } }, t0)).toBeNull();
     expect(cache.get('Turdus merula', 'what does it eat', scope, new Date(t0.getTime() + ANSWER_CACHE_TTL_MS))).toBeNull();
@@ -157,7 +157,7 @@ describe('answer cache', () => {
     expect(regional.body).not.toHaveProperty('cached');
     expect(regional.body).toHaveProperty('region', 'US-IA');
     expect(calls).toBe(3);
-    expect((await answerQuestion(deps, { id: 'u6', status: 'approved' }, { species: 'Turdus merula', question: 'What does it eat?', region: 'US-NY' }, now)).body).toHaveProperty('cached', true);
+    expect((await answerQuestion(deps, { id: 'u6', status: 'approved' }, { species: 'Turdus merula', question: 'What does it eat?', region: 'US-IA' }, now)).body).toHaveProperty('cached', true);
     // a failed answer is not cached
     reply = '';
     const bad = await answerQuestion(deps, { id: 'u3', status: 'approved' }, { species: 'Parus major', question: 'How big?' }, now);
