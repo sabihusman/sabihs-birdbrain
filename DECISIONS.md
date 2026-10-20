@@ -1676,3 +1676,39 @@ other open branches, so this may be renumbered at merge.)
   filter and the stamp (the filter would force the stamp to be coarse, or the stamp would
   make the filter recompute constantly); rewriting old rows with a guess (there is nothing
   to guess from).
+
+## 59. The Listen layout is a live setting, and the three layouts differ in Ready too
+
+- **Bug:** picking a layout in Settings appeared to do nothing, and two layouts looked the
+  same. Two causes, both real:
+  - `listenView` read `settings.get().listenLayout` into a `const` when the view was
+    built, and the settings subscription only refreshed the chips and the results. While
+    the screen stayed open, which is the case when switching during a session, nothing
+    changed.
+  - Navigating back did rebuild the view and did read the new value, but every layout
+    rendered the same Ready block: the round mic button, the chips and the two collapsed
+    rows. Consolidated and Focus were identical before Start, and Bottom dock was the same
+    plus a bar. Every layout-specific arrangement existed only in the listening state,
+    which is why pressing Start seemed to fix it.
+- **Decision:** `applyLayout(next)` owns the arrangement and the view subscribes to the
+  setting. It moves the existing nodes into the right parents and sets `data-layout`;
+  nothing is rebuilt, so the microphone, the audio pipeline, the canvases and the
+  detection state survive a switch mid-session. The Ready state now differs per layout:
+  Consolidated keeps the round mic button, Bottom dock has no mic button at all and fills
+  the screen with cards above its bar, and Focus shows one extra-large button with "Last
+  bird: …" and nothing else.
+- **One row on Listen:** the layout spec has exactly two collapsed rows, "How BirdNET
+  decides" and "Recent sightings". The separate "How it works" row is gone and its live
+  waveform, spectrogram and timeline now open inside "How BirdNET decides", above the
+  numbered steps, which still end with the limits note. Nothing was dropped, and Focus
+  shows neither row.
+- **Tests:** the Playwright suite picks each layout in Settings, goes to Listen without
+  pressing Start and asserts the signature (Consolidated has the round button and no dock,
+  Bottom dock has the dock and no round button, Focus has the big button and no lists),
+  then repeats while listening, switches layout three times mid-session and asserts that
+  `getUserMedia` was not called again, and checks the choice survives a reload and is
+  right on the first paint.
+- **Alternatives rejected:** rebuilding the view on a layout change (simplest, but it
+  would tear down the canvases and risk the audio path for a purely visual setting);
+  three separate view modules (they share every component and state, so it would be three
+  copies of the same wiring).

@@ -29,7 +29,7 @@ export class PipelineView {
   private listening = false;
   private resampling = true;
 
-  constructor(opts: { open?: boolean; onToggle?: (open: boolean) => void } = {}) {
+  constructor(opts: { open?: boolean; onToggle?: (open: boolean) => void; lead?: Node | null } = {}) {
     const strip = el('span', { class: 'chip-strip', 'data-testid': 'pipeline-chips', 'aria-hidden': 'true' });
     const items: HTMLElement[] = [];
     PIPELINE_STAGES.forEach((s, i) => {
@@ -53,6 +53,9 @@ export class PipelineView {
         open: opts.open,
         onToggle: opts.onToggle,
       },
+      // The live waveform, spectrogram and timeline go above the steps: they show the same
+      // stages happening (DECISIONS.md #59).
+      opts.lead ?? null,
       el('ol', { class: 'pipeline-list', 'data-testid': 'pipeline-list' }, ...items),
       el('p', { class: 'small muted' }, 'BirdNET marks when each species is present in a 3-second window. It does not separate overlapping calls or count individuals. ', el('a', { href: '#/help' }, 'More about limits')),
     );

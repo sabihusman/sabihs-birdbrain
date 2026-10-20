@@ -63,7 +63,6 @@ for (const scheme of ['light', 'dark'] as const) {
   await page.evaluate(() => localStorage.removeItem('birdbrain.auth.v1'));
   await page.unroute(/\/v1\//);
   await page.goto(`${BASE}#/listen`);
-  await page.getByTestId('how-it-works').getByText('How it works').click();
   await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
   await page.getByTestId('pipeline-list').scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);

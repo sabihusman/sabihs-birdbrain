@@ -111,7 +111,7 @@ There are two themes. **Dark is the default**, whatever the phone's own light/da
 
 **Species ID card (members).** Most recent sighting: Plus Code and coordinates, each with a copy button; "Open in Google Maps"; a mini map; the saved clip. Tapping it opens the sighting history (list + map, pins/heat toggle).
 
-**"How it works" section.** A collapsed row with a chevron. Opening it shows the waveform, spectrogram, pipeline view and timeline. It stays open for the session once opened.
+**"How BirdNET decides" section.** The one collapsed row on Listen, with the chip strip in its summary (Mic › Resample › Window › Spectrogram › Network › Location › Result). Opening it shows the live waveform, spectrogram and confidence timeline, then the numbered steps, ending with the limits note. It stays open for the session once opened. There is no separate "How it works" row.
 
 **Buttons.**
 - **Primary:** accent fill, at most one per card.
@@ -134,16 +134,33 @@ The user picks a layout in **Settings → Listen layout**, and the choice is rem
 - **Accessibility:** the row is `role="radiogroup"` and each tile `role="radio"` with `aria-checked`; roving tabindex (the selected tile is 0, the others −1); Left/Right and Up/Down move focus and selection with wrap-around, Home/End jump to the ends, Space/Enter select; the focus ring is the usual 3 px `--focus`; every tile is at least 44 px on both sides.
 - **Height budget:** the whole card is at most 1.5× the height of the dropdown card it replaced (210.6 px at 375 px, so ≤ 316 px; the picker measures about 183 px). At 320 px the tiles stay inside the viewport ("Consolidated" may break at its soft hyphen). Both are checked by Playwright.
 
-1. **Consolidated (default).**
-   - **Ready:** title, short hint, mic button, context chips, then the collapsed "How it works" and "Recent sightings" rows.
-   - **Listening:** the panel at the top, result cards below, newest first.
-2. **Bottom dock.**
-   - **Results:** the cards fill the screen.
-   - **Dock:** a compact panel pinned above the bottom navigation ("● Listening · 02:14" + Stop). In the Ready state the dock shows "Start listening".
+**Each layout must look clearly different in both states**, and the Ready state is where they
+differ most: if two layouts look the same before Start, that is a bug. Switching the setting
+changes the Listen screen at once, whether or not the mic is on, and switching while listening
+only rearranges the same nodes, so the microphone, the audio pipeline and detection keep
+running (DECISIONS.md #59).
+
+1. **Consolidated (default).** Everything in one scrolling column. No dock.
+   - **Ready:** title, short hint, the round mic button in the middle, context chips, then the
+     collapsed "How BirdNET decides" and "Recent sightings" rows.
+   - **Listening:** the listening panel at the top of the content (timer, "screen stays on",
+     level meter, conditions, full-width Stop), the grouped bird cards below it, newest first,
+     then "How BirdNET decides" with its chips lighting up.
+2. **Bottom dock.** Never a round mic button; the control is always a bar above the tabs.
+   - **Ready:** the recent sightings cards fill the screen under their own header, and the dock
+     shows "Model ready" and a Start listening button. The state block only appears when there
+     is something to say (loading, mic blocked, paused, an error).
+   - **Listening:** the heard-now cards fill the screen and the dock shows a red dot,
+     "Listening · mm:ss", a mini level meter and Stop.
    - **Use case:** best one-handed.
-3. **Focus mode.**
-   - **While listening:** one large card for the latest bird (big photo, 22–24 px name, confidence, conditions) and a large Stop.
-   - **Earlier birds:** one swipe up ("▲ N more birds · swipe up"). Also reachable by a button, for users who can't swipe.
+3. **Focus mode.** One thing on screen at a time: no lists, no chips, no "How BirdNET decides"
+   row.
+   - **Ready:** an extra-large mic button, the hint, and "Last bird: <name> · <time>" when there
+     is one.
+   - **Listening:** one large card for the latest bird (big photo, 24 px name, scientific name,
+     the best confidence, "heard N times", status line) and a large Stop.
+   - **Earlier birds:** "▲ N more birds · swipe up or tap", as a swipe and as a button, for
+     anyone who cannot swipe.
    - **Use case:** best at arm's length in the field.
 
 ## 7. States and wording
