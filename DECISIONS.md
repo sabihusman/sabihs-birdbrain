@@ -1571,6 +1571,12 @@ other open branches, so this may be renumbered at merge.)
   Check your connection and try again." with a Try again button that re-runs the
   download (`AppController.loadModel`), instead of the old generic
   "Something went wrong"; the technical reason goes to the console only.
+- **One copy on the phone:** the first load from the new source deletes any entry
+  in the `birdnet-models-v2.4` cache that is not under the current base URL
+  (`staleModelEntries`, `src/model/model-cache.ts`), so an installed app does not
+  keep the 78 MiB it downloaded from Vercel beside the new copy. Existing
+  installs do download the model once more, which cannot be avoided: the URL is
+  part of a Cache API key.
 - **Guards:** `npm run check:dist` fails the build if any weight file or model
   topology is in `dist/`, or if `dist/` grows past 12 MiB (it is 3.4 MiB now);
   CI runs it, and builds with `VITE_MODEL_BASE_URL=/models/birdnet-v2.4/` so the
