@@ -2,14 +2,70 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { Plugin } from 'vite';
 import { resolveModelFile, serveModels } from '../scripts/serve-models.mts';
 
 /** The dev/preview middleware serves local files, so its path handling is worth a test. */
 const BODY = '{"format":"graph-model"}';
+type Middleware = (req: unknown, res: unknown, next: () => void) => void;
+
+let root: string;
+let models: string;
+
+/** Install the plugin's middleware through one of its two hooks, with a fake Vite server. */
+async function middlewareFrom(hook: 'configureServer' | 'configurePreviewServer'): Promise<Middleware> {
+  const plugin: Plugin = serveModels('/');
+  const added: Middleware[] = [];
+  const server = { middlewares: { use: (fn: Middleware) => added.push(fn) }, config: { root } };
+  // The hooks only read `middlewares` and `config.root`; the cast keeps the fake small.
+  await (plugin[hook] as unknown as (s: typeof server) => unknown).call(plugin, server);
+  expect(added, hook).toHaveLength(1);
+  return added[0];
+}
+
+interface Capture {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+  nexted: boolean;
+}
+
+/** Drive one request through the middleware and collect what it answered. */
+function request(mw: Middleware, url: string, method = 'GET'): Promise<Capture> {
+  return new Promise<Capture>((done) => {
+    const out: Capture = { status: 200, headers: {}, body: '', nexted: false };
+    const res = {
+      get statusCode() {
+        return out.status;
+      },
+      set statusCode(v: number) {
+        out.status = v;
+      },
+      setHeader: (k: string, v: string) => {
+        out.headers[k] = v;
+      },
+      write: (c: Buffer | string) => {
+        out.body += c.toString();
+        return true;
+      },
+      end: (s?: string) => {
+        if (s) out.body += s;
+        done(out);
+      },
+      on: () => res,
+      once: () => res,
+      emit: () => false,
+      writeHead: () => res,
+      destroy: () => undefined,
+    };
+    mw({ url, method }, res, () => {
+      out.nexted = true;
+      done(out);
+    });
+  });
+}
 
 describe('local model file server (scripts/serve-models.mts)', () => {
-  let root: string;
-  let models: string;
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), 'bb-root-'));
     models = join(root, 'models');
@@ -40,84 +96,29 @@ describe('local model file server (scripts/serve-models.mts)', () => {
    * file under node_modules, so a path derived from this module's own URL points at the
    * wrong place and every model request 404s (seen in CI on 2026-10-20).
    */
-  it('resolves the folder from the Vite server root, in dev and in preview', async () => {
-    for (const hook of ['configureServer', 'configurePreviewServer'] as const) {
-      const plugin = serveModels('/');
-      const added: ((req: unknown, res: unknown, next: () => void) => void)[] = [];
-      const fakeServer = { middlewares: { use: (fn: never) => added.push(fn) }, config: { root } };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (plugin[hook] as any)!.call(plugin, fakeServer as any);
-      expect(added, hook).toHaveLength(1);
+  it.each(['configureServer', 'configurePreviewServer'] as const)('serves the model from the Vite server root (%s)', async (hook) => {
+    const got = await request(await middlewareFrom(hook), '/models/birdnet-v2.4/model.json');
+    expect(got.nexted).toBe(false);
+    expect(got.status).toBe(200);
+    expect(got.headers['Content-Type']).toBe('application/json');
+    expect(Number(got.headers['Content-Length'])).toBe(BODY.length);
+    expect(got.headers['Cache-Control']).toContain('immutable');
+    expect(got.headers['Access-Control-Allow-Origin']).toBe('*');
+    expect(got.body).toContain('graph-model');
+  });
 
-      const chunks: string[] = [];
-      const headers: Record<string, string> = {};
-      let status = 200;
-      const res = {
-        set statusCode(v: number) {
-          status = v;
-        },
-        get statusCode() {
-          return status;
-        },
-        setHeader: (k: string, v: string) => {
-          headers[k] = v;
-        },
-        end: (s?: string) => {
-          if (s) chunks.push(s);
-        },
-        // createReadStream(...).pipe(res) needs these; collect what is written.
-        write: (c: Buffer | string) => {
-          chunks.push(c.toString());
-          return true;
-        },
-        on: () => res,
-        once: () => res,
-        emit: () => false,
-        writeHead: () => res,
-        destroy: () => undefined,
-      };
-      let nexted = false;
-      await new Promise<void>((done) => {
-        const origEnd = res.end;
-        res.end = (s?: string) => {
-          origEnd(s);
-          done();
-        };
-        added[0]({ url: '/models/birdnet-v2.4/model.json', method: 'GET' }, res, () => {
-          nexted = true;
-          done();
-        });
-      });
-      expect(nexted, hook).toBe(false);
-      expect(status, hook).toBe(200);
-      expect(headers['Content-Type'], hook).toBe('application/json');
-      expect(Number(headers['Content-Length']), hook).toBe(BODY.length);
-      expect(headers['Cache-Control'], hook).toContain('immutable');
-      expect(chunks.join(''), hook).toContain('graph-model');
+  it('passes on what it does not hold: labels.json and LICENSE.md live in public/', async () => {
+    const mw = await middlewareFrom('configurePreviewServer');
+    for (const url of ['/models/birdnet-v2.4/labels.json', '/models/birdnet-v2.4/LICENSE.md', '/index.html']) {
+      expect((await request(mw, url)).nexted, url).toBe(true);
     }
+    // A write method is not ours to answer either.
+    expect((await request(mw, '/models/birdnet-v2.4/model.json', 'POST')).nexted).toBe(true);
   });
 
-  it('passes a /models/ path it does not have on to Vite (labels.json lives in public/)', async () => {
-    const plugin = serveModels('/');
-    const added: ((req: unknown, res: unknown, next: () => void) => void)[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (plugin.configurePreviewServer as any)!.call(plugin, { middlewares: { use: (fn: never) => added.push(fn) }, config: { root } } as any);
-    let nexted = false;
-    added[0]({ url: '/models/birdnet-v2.4/labels.json', method: 'GET' }, {} as never, () => {
-      nexted = true;
-    });
-    expect(nexted).toBe(true);
-  });
-
-  it('passes other URLs on to Vite', async () => {
-    const plugin = serveModels('/');
-    const added: ((req: unknown, res: unknown, next: () => void) => void)[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (plugin.configurePreviewServer as any)!.call(plugin, { middlewares: { use: (fn: never) => added.push(fn) }, config: { root } } as any);
-    let nexted = false;
-    added[0]({ url: '/index.html', method: 'GET' }, {} as never, () => {
-      nexted = true;
-    });
-    expect(nexted).toBe(true);
+  it('answers a preflight without touching the disk', async () => {
+    const got = await request(await middlewareFrom('configurePreviewServer'), '/models/birdnet-v2.4/model.json', 'OPTIONS');
+    expect(got.status).toBe(204);
+    expect(got.headers['Access-Control-Allow-Methods']).toBe('GET, HEAD, OPTIONS');
   });
 });
