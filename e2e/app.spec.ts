@@ -523,7 +523,8 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   const del = page.getByTestId('delete-row');
   await expect(del).toBeDisabled();
   await expect(del).toContainText('Not available for the admin account');
-  await del.click({ force: true });
+  // Dispatch straight at the row: a coordinate click at 320 px would land on the fixed tab bar.
+  await del.dispatchEvent('click');
   await expect(page.getByTestId('delete-screen')).toHaveCount(0);
   // No horizontal scrolling with every section open either.
   const noScroll = async (label: string) => {
@@ -531,7 +532,16 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
     expect(m.sw, label).toBeLessThanOrEqual(m.iw);
   };
   await noScroll('settings closed at 320px');
-  await page.getByTestId('what-we-store').getByText('What we store').click();
+  const fold = page.getByTestId('what-we-store');
+  await fold.scrollIntoViewIfNeeded();
+  const foldBox = await fold.locator('summary').boundingBox();
+  const barTop = await page.evaluate(() => {
+    const bar = document.querySelector('nav.tabs, .tabs');
+    return bar ? bar.getBoundingClientRect().top : Number.POSITIVE_INFINITY;
+  });
+  expect(foldBox!.y + foldBox!.height, 'the last row on Settings clears the tab bar').toBeLessThanOrEqual(barTop + 1);
+  await fold.getByText('What we store').click();
+  await expect(page.getByText('Only on this phone')).toBeVisible();
   await noScroll('what we store open at 320px');
   await page.goto('./#/listen');
   await page.getByTestId('how-it-works').getByText('How it works').click();
