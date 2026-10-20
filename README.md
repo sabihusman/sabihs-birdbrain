@@ -307,6 +307,10 @@ npm run check:dist                          # fails if weights ever end up in di
 points the app at `https://bird-brain.duckdns.org/models/birdnet-v2.4/`, which
 sends CORS headers only to this app's own origins.
 
+On Windows in Git Bash, put `MSYS_NO_PATHCONV=1` in front of that build: otherwise
+the leading slash is rewritten to a Windows path and the app ends up asking for the
+model over `file://`.
+
 Unit tests (Vitest) cover the FFT/STFT, resampling and windowing, threshold and
 multi-label logic, the week-of-year calculation, species colours, WAV encoding
 and decoding, occlusion masking, and CSV/GeoJSON export. The Playwright test
