@@ -4,6 +4,26 @@ import { describe, expect, it } from 'vitest';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
+describe('Vercel builds only the production branch (vercel.json git.deploymentEnabled)', () => {
+  const vercel = JSON.parse(read('vercel.json')) as { git?: { deploymentEnabled?: Record<string, boolean> | boolean } };
+
+  /**
+   * The free plan allows a limited number of builds per day, and a preview build per push
+   * exhausted it on 2026-10-20, which left a merged change undeployed. Unspecified branches
+   * default to true, so the catch-alls are what switch previews off; "main" wins because a
+   * branch that matches several rules deploys when any of them is true.
+   */
+  it('deploys main and nothing else', () => {
+    const rules = vercel.git?.deploymentEnabled;
+    expect(typeof rules).toBe('object');
+    const r = rules as Record<string, boolean>;
+    expect(r.main).toBe(true);
+    // "*" does not cross a slash in minimatch, so branches like claude/x need "**" too.
+    expect(r['*']).toBe(false);
+    expect(r['**']).toBe(false);
+  });
+});
+
 describe('front-end response headers (vercel.json)', () => {
   const vercel = JSON.parse(read('vercel.json')) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
   const site = vercel.headers.find((h) => h.source === '/(.*)')!;
