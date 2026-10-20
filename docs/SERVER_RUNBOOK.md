@@ -104,9 +104,12 @@ file if you do not want it (`rm /opt/birdbrain/reports/update-plan-<date>.txt`).
 
 ### Where the backups are
 
-`server/src/backup.ts` (run daily by `server/scripts/backup.sh` through
-`docker exec birdbrain-api node dist/backup.js`) writes
+`server/src/backup.ts` (`server/src/backup-lib.ts`; run nightly at 03:15 UTC by a
+root cron line calling `/opt/birdbrain/backup.sh`, i.e. `server/scripts/backup.sh`,
+through `docker exec birdbrain-api node dist/backup.js`) writes
 `birdbrain-YYYYMMDDTHHMMSSZ.db` with `VACUUM INTO` into `BACKUP_DIR=/backups`,
+keeps 14 days (`BACKUP_RETENTION_DAYS`) under a hard 5 GiB cap on the folder
+(`BACKUP_MAX_BYTES`; oldest deleted first before a new backup is written),
 which `compose.yml` maps to the named volume **`birdbrain-backups`**. The live
 database is `/data/birdbrain.db` in the **`birdbrain-data`** volume. On the host
 both live under `/var/lib/docker/volumes/<name>/_data` (root-only). The script
@@ -131,6 +134,12 @@ ignores `-wal`/`-shm`/`-journal` files.
   `sudo cp` the newest backup into the temp folder, `sqlite3` the copy
   (integrity + counts), and `sudo sqlite3 -readonly <live>` for the live counts.
   Not verified on the host: whether `sqlite3` is installed there (`which sqlite3`).
+
+### When to run it
+
+By hand only, when you want to know a backup restores (for example after a
+server change). There is no schedule and no sudoers rule for it (decided
+2026-10-20); backups live only in the `birdbrain-backups` volume on the server.
 
 ### Commands
 
