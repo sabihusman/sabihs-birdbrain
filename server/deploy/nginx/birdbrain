@@ -7,8 +7,13 @@ limit_req_zone  $binary_remote_addr zone=birdbrain:10m      rate=6r/m;
 limit_conn_zone $binary_remote_addr zone=birdbrain_conn:10m;
 
 # The BirdNET model files (/models/, see below) are static and downloaded in a burst of
-# ~23 requests per phone, so they get their own, much more lenient limits.
-limit_req_zone  $binary_remote_addr zone=birdbrain_models:10m rate=240r/m;
+# 23 requests per phone, so they get their own, much more lenient limits.
+#
+# 240r/m (4 r/s) was too tight: one cold start fits in the burst, but a reload or a second
+# phone behind the same carrier NAT drains it, and nginx then answered 429 for the later
+# shards, which TF.js reported as a corrupt tensor (seen live on 2026-10-20). 10 r/s with a
+# burst of 60 covers a cold start plus a retry, and several phones on one address.
+limit_req_zone  $binary_remote_addr zone=birdbrain_models:10m rate=600r/m;
 limit_conn_zone $binary_remote_addr zone=birdbrain_models_conn:10m;
 
 # CORS for the model files only, and only for this app's own origins: the production
@@ -76,8 +81,13 @@ server {
         autoindex off;
 
         # Replaces the inherited API limits: a cold start fetches every shard at once.
-        limit_req zone=birdbrain_models burst=40 nodelay;
-        limit_conn birdbrain_models_conn 8;
+        limit_req zone=birdbrain_models burst=60 nodelay;
+        # nginx counts every HTTP/2 stream against limit_conn, and TF.js asks for all 13
+        # weight shards at once on one connection, so a limit of 8 refused shards 9 to 13
+        # with 429 and the model arrived truncated ("the tensor should have 6678528 values
+        # but has 4020245", live on 2026-10-20). 32 leaves room for a cold start plus a
+        # reload or a second phone, and still caps a client that opens hundreds.
+        limit_conn birdbrain_models_conn 32;
 
         limit_except GET HEAD OPTIONS {
             deny all;
