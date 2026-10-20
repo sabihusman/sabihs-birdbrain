@@ -140,7 +140,8 @@ export function listenView(ctx: ViewContext): View {
   const stateRow = el('div', { class: 'state-row' }, stateIcon, stateTitle);
   const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), chips, noLocationNote, el('div', { class: 'row' }, demoBtn), lastBirdLine, status);
   const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, resultsEmpty);
-  const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00')), dockStartBtn, dockStopBtn);
+  const dockTimer = el('span', { class: 'dock-time' }, ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00'));
+  const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn);
   const focusLatest = el('div', { class: 'focus-latest', 'data-testid': 'focus-latest' });
   const moreBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'more-birds', 'aria-expanded': 'false' }, '▲ 0 more birds · swipe up or tap');
   // In Focus mode the result list lives in the sheet; elsewhere it stays in the results block (a node has one parent).
@@ -210,12 +211,12 @@ export function listenView(ctx: ViewContext): View {
     setHidden(micSteps, st.status !== 'mic-blocked');
     setHidden(tryAgainBtn, !(st.status === 'mic-blocked' || st.status === 'error'));
     setHidden(resumeBtn, st.status !== 'paused');
-    setHidden(noLocationNote, listening || !!controller.location.get().location || layout === 'focus');
     // Ready differs per layout: Consolidated keeps the round mic button, Bottom dock has no
     // mic button at all and fills the screen with cards, Focus shows one giant button.
     const plainReady = st.status === 'ready' || st.status === 'offline';
     setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || layout === 'dock');
-    setHidden(chips, listening || layout === 'focus');
+    setHidden(chips, listening || layout === 'focus' || (layout === 'dock' && plainReady));
+    setHidden(noLocationNote, listening || !!controller.location.get().location || layout === 'focus' || (layout === 'dock' && plainReady));
     setHidden(demoBtn, listening || st.status === 'loading' || layout === 'focus');
     setHidden(readyBlock, listening);
     if (layout === 'dock') {
@@ -243,6 +244,7 @@ export function listenView(ctx: ViewContext): View {
       setHidden(dockStartBtn, listening || st.status !== 'ready');
       setHidden(dockStopBtn, !listening);
       (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.pill;
+      setHidden(dockTimer, !listening);
       dock.dataset.status = st.status;
     }
     startBtn.disabled = st.status !== 'ready' && st.status !== 'offline';
