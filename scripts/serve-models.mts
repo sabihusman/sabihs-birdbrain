@@ -52,29 +52,27 @@ function handler(prefix: string, modelsDir: string): Connect.NextHandleFunction 
   return (req, res, next) => {
     const url = (req.url ?? '').split('?')[0];
     if (!url.startsWith(prefix)) return next();
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
-      res.statusCode = 405;
-      res.end('method not allowed');
-      return;
-    }
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') return next();
     if (req.method === 'OPTIONS') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
       res.statusCode = 204;
       res.end();
       return;
     }
-    const file = resolveModelFile(url.slice(prefix.length), modelsDir);
+    const rest = url.slice(prefix.length);
+    const file = resolveModelFile(rest, modelsDir);
     if (!file) {
-      if (!warned) {
+      // Not ours: labels.json and LICENSE.md live in public/, so Vite serves those.
+      // Warn once if a weight file is missing, which is the mistake worth noticing.
+      if (!warned && /\.bin$|model\.json$/.test(rest)) {
         warned = true;
-        // One line is enough to explain a run where every model request 404s.
         console.warn(`[serve-models] ${url} not found under ${modelsDir}${existsSync(modelsDir) ? '' : ' (that folder does not exist)'}`);
       }
-      res.statusCode = 404;
-      res.end('not found');
-      return;
+      return next();
     }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Content-Type', contentType(file));
     res.setHeader('Content-Length', String(statSync(file).size));
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

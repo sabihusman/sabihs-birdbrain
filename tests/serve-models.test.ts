@@ -97,6 +97,18 @@ describe('local model file server (scripts/serve-models.mts)', () => {
     }
   });
 
+  it('passes a /models/ path it does not have on to Vite (labels.json lives in public/)', async () => {
+    const plugin = serveModels('/');
+    const added: ((req: unknown, res: unknown, next: () => void) => void)[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (plugin.configurePreviewServer as any)!.call(plugin, { middlewares: { use: (fn: never) => added.push(fn) }, config: { root } } as any);
+    let nexted = false;
+    added[0]({ url: '/models/birdnet-v2.4/labels.json', method: 'GET' }, {} as never, () => {
+      nexted = true;
+    });
+    expect(nexted).toBe(true);
+  });
+
   it('passes other URLs on to Vite', async () => {
     const plugin = serveModels('/');
     const added: ((req: unknown, res: unknown, next: () => void) => void)[] = [];
