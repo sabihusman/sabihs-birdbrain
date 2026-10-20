@@ -7,15 +7,16 @@
  * Playwright suite would have to download 78 MiB from the live server. It sends CORS
  * and the same immutable Cache-Control as Nginx, so local behaviour matches.
  *
+ * The folder is resolved from Vite's own project root, not from this file's location:
+ * Vite bundles the config (and this import with it) into a temporary file under
+ * `node_modules`, so `import.meta.url` cannot be trusted here.
+ *
  * Never used in a deployed build: it only adds middleware to the local dev and
  * preview servers.
  */
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join, normalize, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Connect, Plugin } from 'vite';
-
-const MODELS_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)), 'models');
 
 const TYPES: Record<string, string> = {
   '.json': 'application/json',
@@ -28,16 +29,17 @@ function contentType(path: string): string {
   return (dot === -1 ? undefined : TYPES[path.slice(dot)]) ?? 'application/octet-stream';
 }
 
-/** Resolve a URL path under MODELS_ROOT, or null if it escapes the folder or is missing. */
-export function resolveModelFile(urlPath: string, root = MODELS_ROOT): string | null {
+/** Resolve a URL path under `root`, or null if it escapes the folder or is not a file. */
+export function resolveModelFile(urlPath: string, root: string): string | null {
   let decoded: string;
   try {
     decoded = decodeURIComponent(urlPath);
   } catch {
     return null;
   }
-  const full = normalize(join(root, decoded));
-  if (full !== root && !full.startsWith(root + sep)) return null;
+  const base = resolve(root);
+  const full = normalize(join(base, decoded));
+  if (full !== base && !full.startsWith(base + sep)) return null;
   try {
     return statSync(full).isFile() ? full : null;
   } catch {
@@ -45,9 +47,9 @@ export function resolveModelFile(urlPath: string, root = MODELS_ROOT): string | 
   }
 }
 
-export function serveModels(base = '/'): Plugin {
-  const prefix = `${base.replace(/\/*$/, '/')}models/`;
-  const middleware: Connect.NextHandleFunction = (req, res, next) => {
+function handler(prefix: string, modelsDir: string): Connect.NextHandleFunction {
+  let warned = false;
+  return (req, res, next) => {
     const url = (req.url ?? '').split('?')[0];
     if (!url.startsWith(prefix)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
@@ -62,8 +64,13 @@ export function serveModels(base = '/'): Plugin {
       res.end();
       return;
     }
-    const file = resolveModelFile(url.slice(prefix.length));
+    const file = resolveModelFile(url.slice(prefix.length), modelsDir);
     if (!file) {
+      if (!warned) {
+        warned = true;
+        // One line is enough to explain a run where every model request 404s.
+        console.warn(`[serve-models] ${url} not found under ${modelsDir}${existsSync(modelsDir) ? '' : ' (that folder does not exist)'}`);
+      }
       res.statusCode = 404;
       res.end('not found');
       return;
@@ -77,14 +84,18 @@ export function serveModels(base = '/'): Plugin {
     }
     createReadStream(file).pipe(res);
   };
+}
+
+export function serveModels(base = '/'): Plugin {
+  const prefix = `${base.replace(/\/*$/, '/')}models/`;
   return {
     name: 'birdbrain-serve-models',
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use(middleware);
+      server.middlewares.use(handler(prefix, join(server.config.root, 'models')));
     },
     configurePreviewServer(server) {
-      server.middlewares.use(middleware);
+      server.middlewares.use(handler(prefix, join(server.config.root, 'models')));
     },
   };
 }
