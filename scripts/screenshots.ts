@@ -14,6 +14,8 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 for (const scheme of ['light', 'dark'] as const) {
   const context = await browser.newContext({ ...devices['iPhone 13'], colorScheme: scheme });
   const page = await context.newPage();
+  // The app is dark by default whatever the device prefers, so set its own theme too.
+  await page.addInitScript((s) => localStorage.setItem('birdbrain.theme.v1', s), scheme);
   await page.goto(BASE);
   await page.getByTestId('model-status').filter({ hasText: 'Model ready' }).waitFor({ timeout: 240_000 });
   await page.getByTestId('demo').click();
@@ -23,10 +25,16 @@ for (const scheme of ['light', 'dark'] as const) {
   await page.goto(`${BASE}#/species/Acanthis%20cabaret`);
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(out, `species-${scheme}.png`) });
-  // Settings in both themes: the grouped account rows, and the pipeline section open on Listen.
+  // Settings in both themes: the grouped account rows (DECISIONS.md #57). They need a signed-in
+  // member, so seed a cached session and keep the API unreachable; the friends panel behind its
+  // collapsed row is the only thing that would have wanted the network.
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.evaluate(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'shot', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Member', status: 'approved', role: 'member' } })));
   await page.goto(`${BASE}#/settings`);
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(out, `settings-${scheme}.png`) });
+  await page.evaluate(() => localStorage.removeItem('birdbrain.auth.v1'));
+  await page.unroute(/\/v1\//);
   await page.goto(`${BASE}#/listen`);
   await page.getByTestId('how-it-works').getByText('How it works').click();
   await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
