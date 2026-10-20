@@ -14,9 +14,26 @@ RENEW_UNIT=lego-renew-birdbrain.service
 LEGO_ENV=/etc/lego/lego-birdbrain.env
 
 host="$(hostname -f 2>/dev/null || hostname)"
-# systemd >= 251 passes these to OnFailure= units; older versions leave them empty.
-result="${MONITOR_SERVICE_RESULT:-unknown}"; exit_code="${MONITOR_EXIT_CODE:-unknown}"; trigger="${MONITOR_UNIT:-$RENEW_UNIT}"
-subject="certificate renewal FAILED for $DOMAIN on $host"
+# systemd >= 251 passes MONITOR_* to a unit started through OnFailure=. A start by hand
+# (`systemctl start birdbrain-renew-alert.service`) has none of them, and a result of
+# "success" cannot be a failure either: both are a TEST send, labelled as such.
+result="${MONITOR_SERVICE_RESULT:-}"; exit_code="${MONITOR_EXIT_CODE:-}"; trigger="${MONITOR_UNIT:-}"
+if [ -z "$trigger" ] || [ "$result" = success ]; then
+  mode="test"
+  subject="[TEST] certificate renewal alert for $DOMAIN on $host (no action needed)"
+  lead="TEST SEND: no action is needed. This mail only confirms that the renewal-failure alert path works; it was started by hand, not by a failed renewal. The renewal unit $RENEW_UNIT is currently: $(systemctl is-active "$RENEW_UNIT" 2>/dev/null || true)."
+  priority=user.info
+else
+  mode="real"
+  subject="certificate renewal FAILED for $DOMAIN on $host"
+  lead="The systemd unit $trigger failed on $host at $(date -u +'%Y-%m-%dT%H:%M:%SZ').
+Result: $result, exit code: ${exit_code:-unknown}.
+
+The certificate is NOT renewed. Let's Encrypt certificates last 90 days and lego renews
+when 30 days remain, so there is time to act, but the timer will keep failing (and this
+mail will repeat daily) until the cause is fixed."
+  priority=user.err
+fi
 
 cert_info() {
   local lp crt
@@ -32,12 +49,7 @@ cert_info() {
 
 body="$(
   cat <<EOT
-The systemd unit $trigger failed on $host at $(date -u +'%Y-%m-%dT%H:%M:%SZ').
-Result: $result, exit code: $exit_code.
-
-The certificate is NOT renewed. Let's Encrypt certificates last 90 days and lego renews
-when 30 days remain, so there is time to act, but the timer will keep failing (and this
-mail will repeat daily) until the cause is fixed.
+$lead
 
 $(cert_info)
 
@@ -52,7 +64,7 @@ $(journalctl -u "$RENEW_UNIT" -n 40 --no-pager 2>&1 || echo '(journalctl failed)
 EOT
 )"
 
-logger -t birdbrain-renew-alert -p user.err "$subject"
+logger -t birdbrain-renew-alert -p "$priority" "$subject"
 if ! command -v docker >/dev/null 2>&1 || [ ! -f "$APP_DIR/compose.yml" ]; then
   echo "docker or $APP_DIR/compose.yml missing; cannot send mail. Alert body follows:" >&2
   printf '%s\n' "$body" >&2
@@ -60,7 +72,7 @@ if ! command -v docker >/dev/null 2>&1 || [ ! -f "$APP_DIR/compose.yml" ]; then
 fi
 # --no-deps/-T: no ports published, no TTY; the service's env_file supplies the SMTP settings.
 if printf '%s\n' "$body" | docker compose -f "$APP_DIR/compose.yml" run --rm --no-deps -T api node dist/alert-mail.js "$subject"; then
-  logger -t birdbrain-renew-alert "alert mail sent"
+  logger -t birdbrain-renew-alert "alert mail sent (mode=$mode)"
 else
   echo "alert mail FAILED to send; body follows:" >&2
   printf '%s\n' "$body" >&2
