@@ -15,6 +15,8 @@ export interface ClipCandidate {
   lat: number | null;
   lon: number | null;
   accuracy: number | null;
+  /** When the device produced the fix (DECISIONS.md #58); null when there was none. */
+  fixTime?: number | null;
   source: DetectionSource;
   recordingId: string | null;
   /** The 3 s windows that identified the species, relative to the clip start (see windowsInClip). */
@@ -157,6 +159,7 @@ export async function saveClipIfBetter(candidate: ClipCandidate, audio: Float32A
     lat: candidate.lat,
     lon: candidate.lon,
     accuracy: candidate.accuracy,
+    fixTime: candidate.fixTime ?? null,
     source: candidate.source,
     recordingId: candidate.recordingId,
     windows: candidate.windows.slice().sort((a, b) => a.offsetSec - b.offsetSec),

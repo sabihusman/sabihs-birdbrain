@@ -105,7 +105,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     const located = rec.lat != null && rec.lon != null;
     const preview = located ? mapPreview(rec.lat!, rec.lon!, { color: cssToken('accent', '#5FCB97'), label: 'this sighting' }) : null;
     if (preview) disposers.push(preview.dispose);
-    const locationPart = located ? el('div', { class: 'stack', 'data-testid': 'sighting-location' }, el('h3', { style: 'margin:8px 0 0' }, 'Location'), preview!.el, locationBlock(rec.lat!, rec.lon!, { accuracy: rec.accuracy })) : el('p', { class: 'small muted' }, 'No position was recorded for this sighting.');
+    const locationPart = located ? el('div', { class: 'stack', 'data-testid': 'sighting-location' }, el('h3', { style: 'margin:8px 0 0' }, 'Location'), preview!.el, locationBlock(rec.lat!, rec.lon!, { accuracy: rec.accuracy, fixTime: rec.fixTime ?? null, time: rec.createdAt })) : el('p', { class: 'small muted' }, 'No position was recorded for this sighting.');
     // "About this bird" and "Ask about this bird" follow the top species; built once it is known.
     const aboutSlot = el('div', { 'data-testid': 'about-slot' }, el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse the recording to see which bird this is.')));
     const askSlot = el('div', { 'data-testid': 'ask-slot' });

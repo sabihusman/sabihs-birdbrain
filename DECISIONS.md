@@ -1637,3 +1637,42 @@ other open branches, so this may be renumbered at merge.)
   shortening it (the facts are the point); animating the chips from new
   instrumentation (the existing events are enough, and a second source could
   disagree with the first).
+
+## 58. A sighting is stamped with the fix taken at that moment, not at page load
+
+- **Bug:** on a walk every sighting landed on the same spot. `persistDetections` copied
+  `LocationManager`'s cached position onto each detection, and that manager asked the
+  device for a position once (at startup, or at the first listen when none existed yet)
+  and never again. The single call also used `enableHighAccuracy: false` with
+  `maximumAge: 5 * 60 * 1000`, so even that one fix could be a five-minute-old network
+  fix. There was no `watchPosition` anywhere in the code.
+- **Decision:** separate the two uses of location.
+  - `src/app/location.ts` (`LocationManager`) stays as it is and keeps serving the
+    species filter, which only needs a coarse position.
+  - `src/app/position-watch.ts` (`PositionWatch`) is new and is what a sighting is
+    stamped from: `watchPosition` with `enableHighAccuracy: true` and
+    `maximumAge: 5_000`, started when listening starts and stopped when it stops, so the
+    GPS is not left running. `current()` is the newest fix, or null.
+- **What is stored:** each detection takes `positionStamp(current())` at the moment it is
+  persisted: latitude, longitude, accuracy in metres and `fixTime`, the moment the device
+  produced the fix. The sighting carries the fix time of whichever position it kept, and
+  so do clips and recordings saved while listening. Nothing new goes to the server;
+  sightings stay on the phone.
+- **Approximate:** a position is shown as approximate when the fix was already older than
+  60 s at detection time, when the accuracy is worse than 100 m, or when the device gave
+  no accuracy. The card and the history show "±12 m" or "approximate (±1.4 km)", in words
+  and not by colour alone.
+- **No fix, no position:** when location is denied or unavailable the sighting is saved
+  without one. An old fix is never reused, and `stop()` drops the fix so the next session
+  cannot inherit it.
+- **Old sightings** cannot be corrected and are left alone. They are recognisable because
+  they have no `fixTime`, so they show "Saved before the app followed your position:
+  location may be from session start" and count as approximate.
+- **iOS Precise Location** cannot be read from the Geolocation API. An accuracy of a
+  kilometre or more is the only signal, so a fix that coarse shows a one-line hint
+  pointing at Settings › Privacy & Security › Location Services › Precise Location.
+- **Alternatives rejected:** refreshing `getCurrentPosition` on a timer (a watch is what
+  the platform provides, and it stops cleanly); keeping one shared position for both the
+  filter and the stamp (the filter would force the stamp to be coarse, or the stamp would
+  make the filter recompute constantly); rewriting old rows with a guess (there is nothing
+  to guess from).

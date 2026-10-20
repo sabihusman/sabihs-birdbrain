@@ -213,7 +213,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const showLocation = !isMember(ctx.api.user);
     box.replaceChildren(el('div', null,
       el('dl', { class: 'kv' }, el('dt', null, 'Sightings'), el('dd', null, `${dets.length} (${windows} analysed window${windows === 1 ? '' : 's'})`), el('dt', null, 'First seen'), el('dd', null, fmtDateTime(first.firstTime)), el('dt', null, 'Last seen'), el('dd', null, fmtDateTime(last.lastTime)), el('dt', null, 'Best confidence'), el('dd', null, pct(best.peakConfidence))),
-      !showLocation ? null : located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located sighting'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
+      !showLocation ? null : located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located sighting'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy, fixTime: located[located.length - 1].fixTime ?? null, time: located[located.length - 1].firstTime }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
       recIds.length ? el('h3', null, 'Recordings') : null,
       recList,
     ));

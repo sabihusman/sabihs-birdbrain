@@ -20,6 +20,8 @@ export interface RecordingRecord {
   lat: number | null;
   lon: number | null;
   accuracy: number | null;
+  /** When the device produced the fix. Absent on rows saved before DECISIONS.md #58. */
+  fixTime?: number | null;
   /** Species seen in the most recent analysis of this recording. */
   summary: SpeciesSummary[];
   analyzedAt: number | null;
@@ -38,6 +40,8 @@ export interface DetectionRecord {
   lat: number | null;
   lon: number | null;
   accuracy: number | null;
+  /** When the device produced the fix. Absent on rows saved before DECISIONS.md #58. */
+  fixTime?: number | null;
   recordingId: string | null;
   /** Window start inside the recording, seconds. */
   offsetSec: number | null;
@@ -65,6 +69,8 @@ export interface SightingRecord {
   lat: number | null;
   lon: number | null;
   accuracy: number | null;
+  /** When the device produced the fix. Absent on rows saved before DECISIONS.md #58. */
+  fixTime?: number | null;
   recordingId: string | null;
   offsetSec: number | null;
   source: DetectionSource;
@@ -107,6 +113,8 @@ export interface ClipRecord {
   lat: number | null;
   lon: number | null;
   accuracy: number | null;
+  /** When the device produced the fix. Absent on rows saved before DECISIONS.md #58. */
+  fixTime?: number | null;
   source: DetectionSource;
   recordingId: string | null;
   /**
