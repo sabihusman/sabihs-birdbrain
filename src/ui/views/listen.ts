@@ -20,6 +20,8 @@ import { WaveformView } from '../viz/waveform';
 
 /** "How it works" stays open for the session once opened (DESIGN_GUIDE.md §5). */
 let howItWorksOpen = false;
+/** Same for the "How BirdNET decides" section inside it, which starts closed. */
+let pipelineOpen = false;
 /** Candidates at or above this but below the threshold count as "more sounds below your minimum". */
 const LOW_FLOOR = 0.1;
 
@@ -118,12 +120,12 @@ export function listenView(ctx: ViewContext): View {
   const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10);
   const timeline = new TimelineView(timelineCanvas, legend, () => controller.species);
   timeline.setThreshold(settings.get().threshold);
-  const pipeline = new PipelineView();
+  const pipeline = new PipelineView({ open: pipelineOpen, onToggle: (open) => (pipelineOpen = open) });
   const how = el(
     'details',
     { class: 'fold', 'data-testid': 'how-it-works' },
     el('summary', null, 'How it works'),
-    el('div', { class: 'stack' }, waveCanvas, waveLabel, specBox, el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT: an approximation of the two mel spectrograms BirdNET builds internally. Colours follow the loudest recent sound. Dashed box: current 3 s analysis window.'), timelineCanvas, legend, el('div', { class: 'viz-label' }, 'Confidence per species over recent windows (dashed line = your minimum).'), pipeline.el, el('p', { class: 'small muted' }, 'BirdNET marks when each species is present in a 3-second window. It does not separate overlapping calls or count individuals. ', el('a', { href: '#/help' }, 'More about limits'))),
+    el('div', { class: 'stack' }, waveCanvas, waveLabel, specBox, el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT: an approximation of the two mel spectrograms BirdNET builds internally. Colours follow the loudest recent sound. Dashed box: current 3 s analysis window.'), timelineCanvas, legend, el('div', { class: 'viz-label' }, 'Confidence per species over recent windows (dashed line = your minimum).'), pipeline.el),
   );
   if (howItWorksOpen) how.open = true;
   how.addEventListener('toggle', () => {
@@ -174,6 +176,8 @@ export function listenView(ctx: ViewContext): View {
     readyBlock.dataset.status = st.status;
     root.dataset.status = st.status;
     const listening = st.status === 'listening' || st.status === 'paused';
+    // The pipeline chips only animate while the mic is on (DESIGN_GUIDE.md §7).
+    pipeline.setListening(st.status === 'listening');
     setHidden(modelBar, st.status !== 'loading');
     setHidden(modelText, st.status !== 'loading');
     setHidden(micSteps, st.status !== 'mic-blocked');
@@ -457,6 +461,7 @@ export function listenView(ctx: ViewContext): View {
       for (const u of subs) u();
       for (const d of disposers) d();
       for (const d of recentDisposers) d();
+      pipeline.dispose();
     },
   };
 }

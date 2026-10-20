@@ -1586,3 +1586,54 @@ other open branches, so this may be renumbered at merge.)
   first download, which is the bulk of the transfer); a wildcard
   `Access-Control-Allow-Origin` (any site could then use our bandwidth); `alias`
   with `try_files` (resolves the prefix twice and 404s).
+
+## 57. Settings and Listen fit a phone: grouped rows and collapsed sections
+
+- **Problem:** the Account card and "How it works" were long columns of
+  paragraphs, switches and seven step cards. On a 320 px screen the Account
+  card alone was several screens of scrolling, and the privacy paragraph was
+  the longest block in the app.
+- **Decision:** nothing is deleted; long text moves behind a collapsed section
+  and the controls become grouped rows.
+  - `src/ui/components/rows.ts`: a group of full-width rows (action, link,
+    switch, static), each at least 48 px tall, with the chevron and the focus
+    ring. The Account card now shows an avatar, the display name, the email and
+    an Admin/Member pill, then rows only for features that already exist:
+    display name, admin page, the sharing switch, friends and invites, sign out
+    and delete.
+  - `src/ui/components/disclosure.ts`: one helper for every collapsed section,
+    native `<details>`/`<summary>` so Enter, Space and the screen-reader
+    expanded state come for free, 44 px minimum and no chevron animation under
+    prefers-reduced-motion.
+  - **Deleting an account** opens its own screen (password plus the word
+    DELETE) instead of unfolding inside the card, and for the admin the row is
+    disabled with "Not available for the admin account" in place of the old
+    paragraph.
+  - **"What we store"** is the last thing on Settings, closed, summarised as
+    "Sightings stay on your phone", and its facts are five short groups: on the
+    server, only on this phone, if sharing is on, when you ask about a bird,
+    deleting your account. The one-line paragraph is still exported and is now
+    built from those groups, so the test that checks every fact also proves
+    nothing was lost in the regrouping. The sign-up form keeps one short line
+    plus the same section.
+- **"How BirdNET decides"** replaces the seven step cards inside "How it
+  works": closed it is a chip strip (Mic › Resample › Window › Spectrogram ›
+  Network › Location › Result), open a numbered list with one muted line each
+  and the limits note at the end. It starts closed and remembers its state for
+  the session only.
+- **Live chips:** the same `stage` events that lit the old step dots now light
+  the chips and the number badges. The running stage takes the accent fill, the
+  ones already finished in the same 3-second window a soft tint, and the next
+  window clears them; a stage earlier than the last one is what marks that
+  boundary, so the mic firing once per audio chunk changes nothing. Changes are
+  spaced by at least 300 ms, a "● Listening" label sits next to the title while
+  the mic is on, everything is plain when it is off, and with
+  prefers-reduced-motion only a finished window lights Result. The chips carry
+  `aria-hidden`, so none of this is announced. The state lives in
+  `src/ui/viz/pipeline-state.ts` as plain data, which is what the unit tests
+  drive; the view only writes class names and never re-renders the screen.
+- **Alternatives rejected:** a tab bar or a separate Account page (more
+  navigation for a card most people open once); keeping the paragraph and
+  shortening it (the facts are the point); animating the chips from new
+  instrumentation (the existing events are enough, and a second source could
+  disagree with the first).

@@ -12,9 +12,9 @@ Live app: **https://sabihs-birdbrain.vercel.app**. API: `https://bird-brain.duck
 | --- | --- | --- | --- |
 | ![Listen view, light mode](docs/screenshots/listen-light.png) | ![Listen view, dark mode](docs/screenshots/listen-dark.png) | ![Species page](docs/screenshots/species-light.png) | ![Map view](docs/screenshots/map.png) |
 
-| Recording analysed | “Why this ID” heatmap | Species search | Settings |
+| Recording analysed | “Why this ID” heatmap | Species search | Settings (grouped rows) |
 | --- | --- | --- | --- |
-| ![Recording detail](docs/screenshots/recording-detail.png) | ![Occlusion heatmap over the spectrogram](docs/screenshots/why-this-id.png) | ![Species search](docs/screenshots/species-list.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Recording detail](docs/screenshots/recording-detail.png) | ![Occlusion heatmap over the spectrogram](docs/screenshots/why-this-id.png) | ![Species search](docs/screenshots/species-list.png) | ![Settings](docs/screenshots/settings-light.png) |
 
 *Screenshots taken with Playwright at iPhone 13 size from the built app. The
 species page shows the retry state because the build machine’s shared network
@@ -306,6 +306,10 @@ npm run check:dist                          # fails if weights ever end up in di
 `VITE_MODEL_BASE_URL=/models/birdnet-v2.4/` (what CI does); a plain `npm run build`
 points the app at `https://bird-brain.duckdns.org/models/birdnet-v2.4/`, which
 sends CORS headers only to this app's own origins.
+
+On Windows in Git Bash, put `MSYS_NO_PATHCONV=1` in front of that build: otherwise
+the leading slash is rewritten to a Windows path and the app ends up asking for the
+model over `file://`.
 
 Unit tests (Vitest) cover the FFT/STFT, resampling and windowing, threshold and
 multi-label logic, the week-of-year calculation, species colours, WAV encoding

@@ -2,6 +2,7 @@ import { describeApiError, type Friend, type FriendInvite } from '../../api/clie
 import { SHARING_CONSENT_TEXT } from '../../species/sharing';
 import type { ViewContext } from '../app';
 import { el, fmtDate } from '../dom';
+import { switchRow, textRow } from './rows';
 
 /**
  * Friends and sharing, inside the Account card for approved members
@@ -18,7 +19,7 @@ export function shareStatusText(enabled: boolean, lastError: string | null): str
 }
 
 export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () => void } {
-  const { api, sharing, friends: cache, notify } = ctx;
+  const { api, friends: cache, notify } = ctx;
   const root = el('div', { class: 'stack friends-panel', 'data-testid': 'friends' });
   const invitesBox = el('div', { class: 'stack', 'data-testid': 'friend-invites' });
   const friendsBox = el('div', { class: 'stack', 'data-testid': 'friend-list' });
@@ -110,32 +111,49 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
     });
   });
 
-  // Share my species list
-  const share = el('input', { type: 'checkbox', checked: sharing.enabled, 'data-testid': 'share-species' });
-  const shareNote = el('div', { class: 'small muted', 'data-testid': 'share-status' }, '');
-  const renderShareNote = () => {
-    shareNote.textContent = shareStatusText(sharing.enabled, sharing.lastError);
-  };
-  share.addEventListener('change', () => {
-    const on = share.checked;
-    void run(async () => {
-      share.disabled = true;
+  root.append(
+    el('p', { class: 'small muted', 'data-testid': 'share-consent' }, SHARING_CONSENT_TEXT),
+    el('p', { class: 'small muted' }, 'Friends can share which birds they have spotted; the Species tab shows “Spotted by” next to a bird a friend has shared. Nothing is shared until you turn sharing on.'),
+    invitesBox,
+    friendsBox,
+    inviteForm,
+    status,
+  );
+  void load();
+  return { el: root, dispose: () => undefined };
+}
+
+/**
+ * The "Share my species list" switch as a Settings row, with the status line under it
+ * (DECISIONS.md #44). The long consent text stays in the friends panel, which the
+ * Account screen keeps behind a collapsed row.
+ */
+export function sharingRow(ctx: ViewContext): { el: HTMLElement; dispose: () => void } {
+  const { sharing, notify } = ctx;
+  const input = el('input', { type: 'checkbox', checked: sharing.enabled, 'data-testid': 'share-species' });
+  const note = textRow(shareStatusText(sharing.enabled, sharing.lastError), { testId: 'share-status' });
+  let busy = false;
+  input.addEventListener('change', () => {
+    if (busy) return;
+    const on = input.checked;
+    busy = true;
+    input.disabled = true;
+    void (async () => {
       try {
         await sharing.setEnabled(on);
         notify({ kind: 'info', text: on ? 'Sharing is on. Your species list was uploaded.' : 'Sharing is off. Your list was removed from the server.' });
       } catch (e) {
-        share.checked = sharing.enabled;
-        throw e;
+        input.checked = sharing.enabled;
+        notify({ kind: 'error', text: describeApiError(e) });
       } finally {
-        share.disabled = false;
-        renderShareNote();
+        busy = false;
+        input.disabled = false;
+        note.textContent = shareStatusText(sharing.enabled, sharing.lastError);
       }
-    });
+    })();
   });
-  renderShareNote();
-  const shareBlock = el('div', { class: 'stack' }, el('label', { class: 'switch' }, el('span', null, 'Share my species list with friends', el('div', { class: 'small muted', 'data-testid': 'share-consent' }, SHARING_CONSENT_TEXT)), share), shareNote);
-
-  root.append(el('h3', null, 'Friends (members)'), el('p', { class: 'small muted' }, 'Friends can share which birds they have spotted; the Species tab shows “Spotted by” next to a bird a friend has shared. Nothing is shared until you turn it on below.'), invitesBox, friendsBox, inviteForm, shareBlock, status);
-  void load();
-  return { el: root, dispose: () => undefined };
+  return {
+    el: el('div', { class: 'contents-row' }, switchRow('Share my species list', input, { hint: 'Friends see species and dates only' }), note),
+    dispose: () => undefined,
+  };
 }
