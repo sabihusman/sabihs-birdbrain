@@ -57,7 +57,9 @@ What to check (as root, from the PC session):
   systemctl status $RENEW_UNIT
   journalctl -u $RENEW_UNIT -n 50 --no-pager
   curl -sS http://$DOMAIN/.well-known/acme-challenge/test   # expect 404 from Nginx, not a timeout
-  set -a; . $LEGO_ENV; set +a; /usr/local/bin/lego run           # retry by hand
+  systemctl start $RENEW_UNIT     # retry by hand: the same "lego run" as the timer, then an nginx reload
+  (lego 5 has no "renew" command: "run" renews only when the certificate is due, so a retry
+  cannot create a duplicate certificate. Never add --renew-force.)
 
 Last 40 journal lines of $RENEW_UNIT:
 $(journalctl -u "$RENEW_UNIT" -n 40 --no-pager 2>&1 || echo '(journalctl failed)')
