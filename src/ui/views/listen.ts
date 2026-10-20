@@ -95,7 +95,7 @@ export function listenView(ctx: ViewContext): View {
       el('span', { class: 'ctx-chip' }, l.location && l.week > 0 ? `Week ${l.week} birds` : 'All weeks'),
       el('a', { class: 'ctx-chip', href: '#/settings' }, `Min. ${pct(s.threshold)}`),
     );
-    noLocationNote.style.display = l.location ? 'none' : '';
+    // renderState() owns whether this note is shown: it also depends on the layout.
   };
   const noLocationNote = el('p', { class: 'small muted', 'data-testid': 'no-location-note' }, 'No location: results are not filtered for your area. Settings › Location.');
 
@@ -481,7 +481,10 @@ export function listenView(ctx: ViewContext): View {
     controller.on('wakelock', (w) => {
       wakeLine.textContent = w === 'active' ? 'Screen stays on' : w === 'unsupported' ? 'Keep the screen on yourself: this browser cannot' : w === 'failed' ? 'Could not keep the screen on' : '';
     }),
-    controller.on('location', renderChips),
+    controller.on('location', () => {
+      renderChips();
+      renderState(); // the no-location note depends on the location and on the layout
+    }),
     settings.on('change', (s) => {
       // Switching layout rearranges the same nodes; the mic and the analysis keep running.
       if (s.listenLayout !== layout) {
