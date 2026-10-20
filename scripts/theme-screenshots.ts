@@ -60,9 +60,6 @@ for (const theme of ['dark', 'light'] as const) {
     await page.goto(`${BASE}#/species/Acanthis%20cabaret`);
     await page.waitForTimeout(2500);
     await page.screenshot({ path: path.join(out, `species-${theme}.png`) });
-    await page.goto(`${BASE}#/settings`);
-    await page.waitForTimeout(500);
-    await page.screenshot({ path: path.join(out, `settings-${theme}.png`) });
   });
   await withPage(plain, theme, 'denied', async (page) => {
     await page.goto(BASE);

@@ -18,10 +18,8 @@ import { SpectrogramView } from '../viz/spectrogram';
 import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { WaveformView } from '../viz/waveform';
 
-/** "How it works" stays open for the session once opened (DESIGN_GUIDE.md §5). */
+/** "How BirdNET decides" stays open for the session once opened (DESIGN_GUIDE.md §5, §6). */
 let howItWorksOpen = false;
-/** Same for the "How BirdNET decides" section inside it, which starts closed. */
-let pipelineOpen = false;
 /** Candidates at or above this but below the threshold count as "more sounds below your minimum". */
 const LOW_FLOOR = 0.1;
 
@@ -43,7 +41,7 @@ export function listenView(ctx: ViewContext): View {
   const settings = controller.settings;
   const subs: Array<() => void> = [];
   const disposers: Array<() => void> = [];
-  const layout: ListenLayout = settings.get().listenLayout;
+  let layout: ListenLayout = settings.get().listenLayout;
 
   // ---- shared pieces -------------------------------------------------------
   const MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
@@ -57,6 +55,8 @@ export function listenView(ctx: ViewContext): View {
   const tryAgainBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'try-again' }, 'Try again');
   const resumeBtn = el('button', { class: 'btn primary', type: 'button', 'data-testid': 'resume' }, 'Resume listening');
 
+  /** Focus shows one line about the previous bird instead of any list. */
+  const lastBirdLine = el('p', { class: 'small muted last-bird', 'data-testid': 'last-bird', hidden: true }, '');
   const stateIcon = el('span', { class: 'state-icon', 'aria-hidden': 'true' }, '');
   const stateTitle = el('h2', { class: 'state-title' }, '');
   const stateHint = el('p', { class: 'muted state-hint' }, '');
@@ -106,7 +106,13 @@ export function listenView(ctx: ViewContext): View {
   const recentList = el('div', { class: 'recent-list', 'data-testid': 'recent' });
   const recentEmpty = el('p', { class: 'small muted', 'data-testid': 'recent-empty' }, 'Birds heard this session appear here, one card per species.');
   const recentSummary = el('span', { class: 'small muted recent-summary', 'data-testid': 'recent-summary' });
-  const recentDetails = el('details', { class: 'fold', 'data-testid': 'recent-fold' }, el('summary', null, el('span', { class: 'fold-title' }, 'Recent sightings'), recentSummary), recentEmpty, recentList, el('p', { class: 'small muted' }, `Repeat hits of a bird within ${LUMP_GAP_SECONDS} s count as one. Tap a card for the details. Kept on this device only. `, el('a', { href: '#/map' }, 'Map')));
+  const recentNote = el('p', { class: 'small muted' }, `Repeat hits of a bird within ${LUMP_GAP_SECONDS} s count as one. Tap a card for the details. Kept on this device only. `, el('a', { href: '#/map' }, 'Map'));
+  /** The cards themselves, moved between the collapsed row and the page by applyLayout(). */
+  const recentBody = el('div', { class: 'stack recent-body' }, recentEmpty, recentList, recentNote);
+  const recentDetails = el('details', { class: 'fold', 'data-testid': 'recent-fold' }, el('summary', null, el('span', { class: 'fold-title' }, 'Recent sightings'), recentSummary), recentBody);
+  /** Bottom dock shows the same cards on the page instead, with a section header. */
+  const recentHeader = el('div', { class: 'sect' }, el('span', null, 'Recent sightings'), el('span', { class: 'small muted', 'data-testid': 'recent-inline-summary' }, ''));
+  const recentInline = el('section', { class: 'recent-inline', 'data-testid': 'recent-inline' }, recentHeader);
 
   // Visualisations inside "How it works"
   const waveCanvas = el('canvas', { class: 'waveform', 'aria-label': 'Live waveform' });
@@ -120,38 +126,58 @@ export function listenView(ctx: ViewContext): View {
   const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10);
   const timeline = new TimelineView(timelineCanvas, legend, () => controller.species);
   timeline.setThreshold(settings.get().threshold);
-  const pipeline = new PipelineView({ open: pipelineOpen, onToggle: (open) => (pipelineOpen = open) });
-  const how = el(
-    'details',
-    { class: 'fold', 'data-testid': 'how-it-works' },
-    el('summary', null, 'How it works'),
-    el('div', { class: 'stack' }, waveCanvas, waveLabel, specBox, el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT: an approximation of the two mel spectrograms BirdNET builds internally. Colours follow the loudest recent sound. Dashed box: current 3 s analysis window.'), timelineCanvas, legend, el('div', { class: 'viz-label' }, 'Confidence per species over recent windows (dashed line = your minimum).'), pipeline.el),
-  );
-  if (howItWorksOpen) how.open = true;
+  const liveViews = el('div', { class: 'stack' }, waveCanvas, waveLabel, specBox, el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT: an approximation of the two mel spectrograms BirdNET builds internally. Colours follow the loudest recent sound. Dashed box: current 3 s analysis window.'), timelineCanvas, legend, el('div', { class: 'viz-label' }, 'Confidence per species over recent windows (dashed line = your minimum).'));
+  // One row on the Listen screen, as in the layout spec: the chips in its summary, the live
+  // views and the steps inside. The old separate "How it works" row is gone.
+  const pipeline = new PipelineView({ open: howItWorksOpen, onToggle: (open) => (howItWorksOpen = open), lead: liveViews });
+  const how = pipeline.el;
   how.addEventListener('toggle', () => {
     if (how.open) howItWorksOpen = true;
     dirty = true;
   });
 
   // ---- layout ----------------------------------------------------------------
-  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, el('div', { class: 'state-row' }, stateIcon, stateTitle), stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), chips, noLocationNote, el('div', { class: 'row' }, demoBtn), status);
+  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, el('div', { class: 'state-row' }, stateIcon, stateTitle), stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), chips, noLocationNote, el('div', { class: 'row' }, demoBtn), lastBirdLine, status);
   const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, resultsEmpty);
   const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00')), dockStartBtn, dockStopBtn);
   const focusLatest = el('div', { class: 'focus-latest', 'data-testid': 'focus-latest' });
-  const moreBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'more-birds', 'aria-expanded': 'false' }, '▲ 0 more birds · swipe up');
+  const moreBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'more-birds', 'aria-expanded': 'false' }, '▲ 0 more birds · swipe up or tap');
   // In Focus mode the result list lives in the sheet; elsewhere it stays in the results block (a node has one parent).
   const moreSheet = el('div', { class: 'more-sheet', 'data-testid': 'more-sheet', role: 'dialog', 'aria-label': 'Earlier birds', hidden: true }, el('div', { class: 'row between' }, el('h2', null, 'Earlier birds'), el('button', { class: 'btn small', type: 'button', 'data-testid': 'more-close' }, 'Close')));
-  if (layout === 'focus') moreSheet.appendChild(resultsList);
-  const focusBlock = el('div', { class: 'focus-block' }, panel, focusLatest, moreBtn, moreSheet);
+  const focusBlock = el('div', { class: 'focus-block' }, focusLatest, moreBtn, moreSheet);
+  const root = el('div', { class: 'listen' });
 
-  let root: HTMLElement;
-  if (layout === 'dock') {
-    root = el('div', { class: 'listen listen-dock-layout', 'data-layout': 'dock' }, readyBlock, resultsBlock, how, recentDetails, dock);
-  } else if (layout === 'focus') {
-    root = el('div', { class: 'listen listen-focus-layout', 'data-layout': 'focus' }, readyBlock, focusBlock, how, recentDetails);
-  } else {
-    root = el('div', { class: 'listen', 'data-layout': 'consolidated' }, readyBlock, panel, resultsBlock, how, recentDetails);
-  }
+  /**
+   * Put the blocks where this layout wants them (DECISIONS.md #59). Only the arrangement
+   * changes: every node is moved, never rebuilt, so the microphone, the audio pipeline and
+   * the canvases are untouched. The three layouts differ in the Ready state as well as
+   * while listening, which is the whole point of the setting.
+   */
+  const applyLayout = (next: ListenLayout) => {
+    layout = next;
+    root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : ''}`;
+    root.dataset.layout = next;
+    // These three nodes live in a different parent per layout; a node has one parent, so
+    // detach them first and let each branch place them.
+    panel.remove();
+    resultsList.remove();
+    recentBody.remove();
+    if (next === 'focus') {
+      focusBlock.prepend(panel);
+      moreSheet.appendChild(resultsList);
+      recentDetails.appendChild(recentBody);
+      root.replaceChildren(readyBlock, focusBlock);
+    } else if (next === 'dock') {
+      resultsBlock.prepend(resultsList);
+      recentInline.appendChild(recentBody);
+      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, dock);
+    } else {
+      resultsBlock.prepend(resultsList);
+      recentDetails.appendChild(recentBody);
+      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails);
+    }
+  };
+  applyLayout(layout);
 
   // ---- state -----------------------------------------------------------------
   let lastResult: WindowResult | null = null;
@@ -181,17 +207,28 @@ export function listenView(ctx: ViewContext): View {
     setHidden(modelBar, st.status !== 'loading');
     setHidden(modelText, st.status !== 'loading');
     setHidden(micSteps, st.status !== 'mic-blocked');
-    setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error');
     setHidden(tryAgainBtn, !(st.status === 'mic-blocked' || st.status === 'error'));
     setHidden(resumeBtn, st.status !== 'paused');
-    setHidden(demoBtn, listening || st.status === 'loading');
-    setHidden(chips, listening);
-    setHidden(noLocationNote, listening || !!controller.location.get().location);
-    setHidden(readyBlock, layout !== 'focus' && listening && st.status === 'listening' ? true : false);
+    setHidden(noLocationNote, listening || !!controller.location.get().location || layout === 'focus');
+    // Ready differs per layout: Consolidated keeps the round mic button, Bottom dock has no
+    // mic button at all and fills the screen with cards, Focus shows one giant button.
+    const plainReady = st.status === 'ready' || st.status === 'offline';
+    setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || layout === 'dock');
+    setHidden(chips, listening || layout === 'focus');
+    setHidden(demoBtn, listening || st.status === 'loading' || layout === 'focus');
+    setHidden(readyBlock, listening ? true : layout === 'dock' && plainReady);
+    startBtn.classList.toggle('big', layout === 'focus');
     setHidden(panel, !listening || layout === 'dock');
     setHidden(dock, layout !== 'dock');
     setHidden(focusBlock, layout !== 'focus' || !listening);
-    if (layout === 'focus' && listening) setHidden(readyBlock, true);
+    if (layout === 'focus') {
+      setHidden(lastBirdLine, listening || lastBirdLine.textContent === '');
+      setHidden(readyBlock, listening);
+    }
+    if (layout === 'dock') {
+      setHidden(recentInline, listening);
+      setHidden(resultsBlock, !listening);
+    }
     if (layout === 'dock') {
       setHidden(dockStartBtn, listening || st.status !== 'ready');
       setHidden(dockStopBtn, !listening);
@@ -237,7 +274,7 @@ export function listenView(ctx: ViewContext): View {
           focusLatest.appendChild(card.el);
         } else focusLatest.appendChild(el('p', { class: 'muted' }, 'Listening… the latest bird appears here.'));
         const n = Math.max(0, items.length - 1);
-        moreBtn.textContent = `▲ ${n} more bird${n === 1 ? '' : 's'} · swipe up`;
+        moreBtn.textContent = `▲ ${n} more bird${n === 1 ? '' : 's'} · swipe up or tap`;
         moreBtn.disabled = n === 0;
       }
       if (showLow) {
@@ -262,6 +299,11 @@ export function listenView(ctx: ViewContext): View {
     setHidden(recentEmpty, groups.length > 0);
     const detections = groups.reduce((n, g) => n + g.detections.length, 0);
     recentSummary.textContent = groups.length ? `${groups.length} bird${groups.length === 1 ? '' : 's'} · ${detections} detection${detections === 1 ? '' : 's'}` : '';
+    (recentHeader.lastElementChild as HTMLElement).textContent = recentSummary.textContent;
+    // Focus has no list, so it says what the last bird was instead.
+    const newest = groups[0];
+    lastBirdLine.textContent = newest ? `Last bird: ${newest.species.common} · ${new Date(newest.lastHeard).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
+    if (layout === 'focus') setHidden(lastBirdLine, controller.listening || !newest);
     for (const g of groups) {
       const card = recentGroupCard(ctx, g, {
         expanded: expanded.has(g.key),
@@ -428,9 +470,15 @@ export function listenView(ctx: ViewContext): View {
       wakeLine.textContent = w === 'active' ? 'Screen stays on' : w === 'unsupported' ? 'Keep the screen on yourself: this browser cannot' : w === 'failed' ? 'Could not keep the screen on' : '';
     }),
     controller.on('location', renderChips),
-    settings.on('change', () => {
+    settings.on('change', (s) => {
+      // Switching layout rearranges the same nodes; the mic and the analysis keep running.
+      if (s.listenLayout !== layout) {
+        applyLayout(s.listenLayout);
+        renderRecent();
+      }
       renderChips();
       renderResults();
+      renderState();
     }),
   );
   if (typeof window !== 'undefined') {

@@ -66,7 +66,7 @@ test('tabs, settings and map render', async ({ page }) => {
   await expect(page.getByLabel('Low-cut filter (150 Hz)')).toBeChecked();
   await expect(page.getByTestId('threshold-help')).toContainText('Lower catches faint or distant birds but adds false IDs.');
   await page.goto('./#/listen');
-  await expect(page.getByTestId('how-it-works')).not.toHaveAttribute('open', /.*/);
+  await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
   await expect(page.getByTestId('context-chips')).toContainText('Min. 60%');
   await page.goto('./#/map');
   await expect(page.getByTestId('map')).toBeVisible();
@@ -445,8 +445,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       const box = await page.getByTestId('start-stop').boundingBox();
       expect(box!.width).toBeGreaterThanOrEqual(120);
     }
-    await expect(page.getByTestId('how-it-works')).not.toHaveAttribute('open', /.*/);
-    // "How BirdNET decides" replaces the seven step cards and starts closed, with its chip strip.
+    // "How BirdNET decides" is the one row on Listen and starts closed, with its chip strip.
     await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
     // Result cards from the sample clip: thumbnail tile, dot + name, scientific name, confidence.
     await page.getByTestId('demo').click();
@@ -479,7 +478,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     await page.waitForTimeout(1500);
     if (layout === 'consolidated') {
       // Live pipeline chips (DECISIONS.md #57): the stages light in order while the mic is on.
-      await page.getByTestId('how-it-works').getByText('How it works').click();
+      await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
       await expect(page.getByTestId('pipeline-live')).toBeVisible();
       const chips = page.getByTestId('pipeline-chips');
       await expect(chips.locator('.pchip.active, .pchip.done')).not.toHaveCount(0, { timeout: 15_000 });
@@ -544,7 +543,7 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   await expect(page.getByText('Only on this phone')).toBeVisible();
   await noScroll('what we store open at 320px');
   await page.goto('./#/listen');
-  await page.getByTestId('how-it-works').getByText('How it works').click();
+  await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
   await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
   await expect(page.getByTestId('pipeline-list')).toBeVisible();
   await expect(page.getByTestId('pipeline-list')).toContainText('An EfficientNet-style network scores all 6,522 classes');
@@ -555,6 +554,84 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   // The summary is a real tap target and keeps the focus ring.
   const box = await page.getByTestId('pipeline').locator('summary').boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(44);
+  await context.close();
+});
+
+test('Listen layouts: the picker switches at once, each Ready state differs, and the mic keeps running', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], permissions: ['microphone'] });
+  const page = await context.newPage();
+  // Count getUserMedia calls, so switching layout while listening can be shown not to restart the mic.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __mic: number };
+    w.__mic = 0;
+    const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (c?: MediaStreamConstraints) => {
+      w.__mic += 1;
+      return real(c ?? {});
+    };
+  });
+  const micCalls = () => page.evaluate(() => (window as unknown as { __mic: number }).__mic);
+
+  const pick = async (layout: 'consolidated' | 'dock' | 'focus') => {
+    await page.goto('./#/settings');
+    await page.getByTestId(`listen-layout-${layout}`).click();
+    await page.goto('./#/listen');
+  };
+  const listen = page.locator('.listen');
+
+  // 1. Ready, without pressing Start: each layout has its own signature.
+  await pick('consolidated');
+  await expect(listen).toHaveAttribute('data-layout', 'consolidated');
+  await expect(page.getByTestId('start-stop')).toBeVisible();
+  await expect(page.getByTestId('dock')).toBeHidden();
+
+  await pick('dock');
+  await expect(listen).toHaveAttribute('data-layout', 'dock');
+  await expect(page.getByTestId('dock')).toBeVisible();
+  await expect(page.getByTestId('start-stop')).toBeHidden(); // no round mic button anywhere
+  await expect(page.getByTestId('recent-inline')).toBeVisible(); // cards fill the screen
+  await expect(page.getByTestId('dock-start')).toBeVisible();
+
+  await pick('focus');
+  await expect(listen).toHaveAttribute('data-layout', 'focus');
+  await expect(page.getByTestId('start-stop')).toHaveClass(/big/);
+  await expect(page.getByTestId('dock')).toBeHidden();
+  await expect(page.getByTestId('recent-fold')).toHaveCount(0); // no lists on the Focus screen
+  await expect(page.getByTestId('pipeline')).toHaveCount(0);
+  await expect(page.getByTestId('context-chips')).toBeHidden();
+
+  // 2. The choice survives a reload and is right on the first paint, with no flash.
+  await page.reload();
+  await expect(listen).toHaveAttribute('data-layout', 'focus');
+  const early = await page.evaluate(() => document.querySelector('.listen')?.getAttribute('data-layout'));
+  expect(early).toBe('focus');
+
+  // 3. Switching while listening only rearranges: no mic restart, detection keeps running.
+  await pick('consolidated');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 240_000 });
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
+  const callsWhileListening = await micCalls();
+  expect(callsWhileListening).toBeGreaterThan(0);
+  await expect(page.getByTestId('listen-panel')).toBeVisible(); // Consolidated: panel at the top
+
+  for (const layout of ['dock', 'focus', 'consolidated'] as const) {
+    await page.goto('./#/settings');
+    await page.getByTestId(`listen-layout-${layout}`).click();
+    await page.goto('./#/listen');
+    await expect(listen).toHaveAttribute('data-layout', layout);
+    await expect(page.getByTestId('model-status')).toContainText('Listening');
+    if (layout === 'dock') await expect(page.getByTestId('dock')).toContainText('Listening');
+    if (layout === 'focus') {
+      await expect(page.getByTestId('focus-latest')).toBeVisible();
+      await expect(page.getByTestId('more-birds')).toBeVisible();
+    }
+    if (layout === 'consolidated') await expect(page.getByTestId('listen-panel')).toBeVisible();
+  }
+  // Still the same microphone: no second getUserMedia for any of those switches.
+  expect(await micCalls()).toBe(callsWhileListening);
+  await page.getByTestId('stop').click();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready');
   await context.close();
 });
 

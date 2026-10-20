@@ -431,3 +431,23 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 }
 /* An approximate position is said in words, never by colour alone (DESIGN_GUIDE.md §8). */
 .approx { color: var(--warn); }
+
+/* ---------------------------------------------------------------------------
+   Listen layouts (DECISIONS.md #59, DESIGN_GUIDE.md §6). The three arrangements must
+   differ in the Ready state as well as while listening; only the arrangement differs,
+   the components and states are the same.
+   --------------------------------------------------------------------------- */
+/* A section header above a list of cards, as on the dock layout's Ready screen. */
+.sect { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font-weight: var(--weight-semibold); margin: var(--space-1) 2px var(--space-2); }
+.recent-inline { display: block; }
+.recent-inline .recent-body > p:last-child { margin-bottom: var(--space-2); }
+
+/* Focus: one giant button in Ready, one giant card while listening. */
+.mic-button.big { width: 190px; height: 190px; font-size: var(--text-md); }
+.mic-button.big svg { width: 54px; height: 54px; }
+.listen-focus-layout .ready-block { display: flex; flex-direction: column; justify-content: center; min-height: 60vh; }
+.listen-focus-layout .last-bird { text-align: center; }
+.focus-latest .result-card.large .result-name { font-size: var(--text-xl); }
+
+/* Bottom dock: no round mic button anywhere, and the cards fill the screen. */
+.listen-dock-layout .mic-wrap { display: none; }
