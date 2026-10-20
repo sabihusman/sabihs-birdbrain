@@ -81,7 +81,7 @@ function popupFor(s: SightingRecord, controller: AppController, colorCss: string
     null,
     el('div', { class: 'chip', style: 'margin-bottom:6px' }, el('span', { class: 'swatch', style: `background:${color.css}` }), el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, sp?.common ?? s.common), el('span', { class: 'chip-sci' }, s.scientific))),
     el('div', { class: 'small' }, describeSighting(s)),
-    locationBlock(s.lat!, s.lon!, { accuracy: s.accuracy, compact: true }),
+    locationBlock(s.lat!, s.lon!, { accuracy: s.accuracy, fixTime: s.fixTime ?? null, time: s.firstTime, compact: true }),
     el('div', null, el('a', { href: speciesHref(s.scientific) }, 'Open species page')),
   );
   return popup;

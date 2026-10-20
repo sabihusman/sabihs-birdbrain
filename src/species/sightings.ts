@@ -36,6 +36,7 @@ export function sightingFromDetection(d: DetectionRecord, id = newId()): Sightin
     lat: d.lat,
     lon: d.lon,
     accuracy: d.accuracy,
+    fixTime: d.fixTime ?? null,
     recordingId: d.recordingId,
     offsetSec: d.offsetSec,
     source: d.source,
@@ -59,11 +60,13 @@ export function applyDetection(s: SightingRecord, d: DetectionRecord): SightingR
       s.lat = d.lat;
       s.lon = d.lon;
       s.accuracy = d.accuracy;
+      s.fixTime = d.fixTime ?? null;
     }
   } else if (s.lat == null && located) {
     s.lat = d.lat;
     s.lon = d.lon;
     s.accuracy = d.accuracy;
+    s.fixTime = d.fixTime ?? null;
   }
   return s;
 }

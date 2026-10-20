@@ -16,6 +16,7 @@ import { Emitter } from '../shared/emitter';
 import { getClip, newId, putRecording, recordDetections } from '../storage/db';
 import type { ClipRecord, DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
 import { LocationManager, type LocationState } from './location';
+import { PositionWatch, positionStamp } from './position-watch';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
 
@@ -122,6 +123,8 @@ export class AppController extends Emitter<ControllerEvents> {
   private localCache = new LocalSpeciesCache();
   private micError: StartError | null = null;
   private localComputing: Promise<void> | null = null;
+  /** Live position watch, running only while listening. */
+  readonly positions: PositionWatch;
   private conditions = new ConditionsMeter(SAMPLE_RATE, (a) => this.emit('conditions', a));
   /** Raw (unfiltered) live audio for species clips; member feature, see setClipsEnabled. */
   private liveRing = new SampleRing(SAMPLE_RATE * LIVE_RING_SECONDS);
@@ -133,6 +136,9 @@ export class AppController extends Emitter<ControllerEvents> {
   constructor(readonly baseUrl: string) {
     super();
     this.location = new LocationManager(this.settings);
+    // Two separate uses of location (DECISIONS.md #58): `location` is the coarse fix the
+    // species filter needs, `positions` is the live watch a sighting is stamped from.
+    this.positions = new PositionWatch();
     this.engine = new AudioEngine(`${baseUrl}worklet/capture-processor.js`, this.settings.get().overlapSeconds, this.settings.get().lowCut);
     this.inference.on('status', (s) => {
       this.modelReady = s.state === 'ready';
@@ -292,6 +298,9 @@ export class AppController extends Emitter<ControllerEvents> {
   async startListening(): Promise<void> {
     if (this.engine.getState() !== 'stopped') return;
     if (this.settings.get().locationMode === 'auto' && !this.location.get().location) void this.location.refresh();
+    // Follow the walk: each sighting is stamped with the newest fix, not with one from
+    // page load. Off again in stopListening(), so the GPS is not left running.
+    if (this.settings.get().locationMode !== 'off') this.positions.start();
     this.micError = null;
     try {
       await this.engine.start();
@@ -319,6 +328,7 @@ export class AppController extends Emitter<ControllerEvents> {
   }
 
   async stopListening(): Promise<void> {
+    this.positions.stop();
     await this.engine.stop();
     await this.flushPendingClips(true);
     if (this.timer != null) {
@@ -389,7 +399,8 @@ export class AppController extends Emitter<ControllerEvents> {
   }
 
   private async persistDetections(result: WindowResult, windowAudio: Float32Array | null): Promise<void> {
-    const loc = this.location.get().location;
+    // The newest fix as of this window. No fix means no position: never an old one.
+    const where = positionStamp(this.positions.current());
     const s = this.settings.get();
     let recordingId: string | null = null;
     if (s.autoSaveClips && windowAudio) {
@@ -411,9 +422,10 @@ export class AppController extends Emitter<ControllerEvents> {
         scientific: sp.scientific,
         common: sp.common,
         confidence: d.prob,
-        lat: loc?.lat ?? null,
-        lon: loc?.lon ?? null,
-        accuracy: loc?.accuracy ?? null,
+        lat: where.lat,
+        lon: where.lon,
+        accuracy: where.accuracy,
+        fixTime: where.fixTime,
         recordingId,
         offsetSec: recordingId ? 0 : null,
         source: 'live',
@@ -460,7 +472,7 @@ export class AppController extends Emitter<ControllerEvents> {
    * species replaces the pending one.
    */
   private async queueLiveClip(det: DetectionRecord, offsetSamples: number): Promise<void> {
-    const candidate: ClipCandidate = { scientific: det.scientific, common: det.common, confidence: det.confidence, time: det.time, lat: det.lat, lon: det.lon, accuracy: det.accuracy, source: 'live', recordingId: null, windows: [] };
+    const candidate: ClipCandidate = { scientific: det.scientific, common: det.common, confidence: det.confidence, time: det.time, lat: det.lat, lon: det.lon, accuracy: det.accuracy, fixTime: det.fixTime ?? null, source: 'live', recordingId: null, windows: [] };
     const pending = this.pendingClips.get(det.scientific);
     if (pending && !shouldReplaceClip(pending.candidate, candidate)) return;
     if (!pending) {
@@ -529,7 +541,11 @@ export class AppController extends Emitter<ControllerEvents> {
   }
 
   async saveRecording(audio: Float32Array, name: string, source: RecordingRecord['source'], detections: Score[] = []): Promise<RecordingRecord> {
-    const loc = this.location.get().location;
+    // While listening the watch is the truth; otherwise fall back to the filter's coarse
+    // fix, which is all an imported file can have.
+    const live = this.positions.current();
+    const loc = live ?? this.location.get().location;
+    const fixTime = live ? live.time : null;
     const blob = new Blob([encodeWav(audio, SAMPLE_RATE)], { type: 'audio/wav' });
     const rec: RecordingRecord = {
       id: newId(),
@@ -543,6 +559,7 @@ export class AppController extends Emitter<ControllerEvents> {
       lat: loc?.lat ?? null,
       lon: loc?.lon ?? null,
       accuracy: loc?.accuracy ?? null,
+      fixTime,
       summary: this.summarize(detections.map((d) => ({ index: d.index, prob: d.prob }))),
       analyzedAt: detections.length ? Date.now() : null,
     };

@@ -91,7 +91,7 @@ function historyBody(ctx: ViewContext, sp: Species): { el: HTMLElement; dispose:
 
     list.replaceChildren();
     for (const s of sightings.slice().reverse()) {
-      const where = s.lat != null && s.lon != null ? locationBlock(s.lat, s.lon, { accuracy: s.accuracy, compact: true }) : el('div', { class: 'small muted' }, 'No position recorded');
+      const where = s.lat != null && s.lon != null ? locationBlock(s.lat, s.lon, { accuracy: s.accuracy, fixTime: s.fixTime ?? null, time: s.firstTime, compact: true }) : el('div', { class: 'small muted' }, 'No position recorded');
       const link = s.recordingId ? el('a', { class: 'small', href: hrefFor({ name: 'recording', id: s.recordingId }) }, 'Open recording') : null;
       list.appendChild(el('div', { class: 'list-item' }, el('div', { class: 'row between' }, el('div', { class: 'title' }, fmtDateTime(s.firstTime)), el('div', null, `${pct(s.peakConfidence)} · ${s.source}`)), el('div', { class: 'small muted' }, describeSighting(s)), where, link));
     }

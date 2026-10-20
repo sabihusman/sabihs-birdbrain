@@ -61,6 +61,21 @@ describe('sightings: merging rules', () => {
     applyDetection(s, det({ time: 2500, confidence: 0.99, lat: 30, lon: 40 }));
     expect(s).toMatchObject({ peakConfidence: 0.99, lat: 30, lon: 40 });
   });
+
+  /** The fix time travels with the position, so the card can say whether it was approximate (DECISIONS.md #58). */
+  it('carries the fix time of whichever position it kept', () => {
+    const s = sightingFromDetection(det({ time: 0, confidence: 0.5, lat: 1, lon: 2, accuracy: 9, fixTime: 500 }), 'x');
+    expect(s).toMatchObject({ lat: 1, lon: 2, accuracy: 9, fixTime: 500 });
+    // A better window with its own, newer fix replaces all four values together.
+    applyDetection(s, det({ time: 3000, confidence: 0.9, lat: 3, lon: 4, accuracy: 7, fixTime: 2900 }));
+    expect(s).toMatchObject({ lat: 3, lon: 4, accuracy: 7, fixTime: 2900 });
+    // A detection saved without a position leaves the known one, fix time included.
+    applyDetection(s, det({ time: 4000, confidence: 0.95 }));
+    expect(s).toMatchObject({ lat: 3, lon: 4, fixTime: 2900 });
+    // A row from before the change has no fix time, and keeps none.
+    const legacy = sightingFromDetection(det({ time: 0, confidence: 0.5, lat: 5, lon: 6, accuracy: 20 }), 'y');
+    expect(legacy.fixTime).toBeNull();
+  });
 });
 
 describe('sightings: storage', () => {

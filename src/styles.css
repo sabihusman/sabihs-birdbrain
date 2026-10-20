@@ -429,3 +429,5 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .fold > summary::after, .pchip, .pnum { transition: none; }
 }
+/* An approximate position is said in words, never by colour alone (DESIGN_GUIDE.md §8). */
+.approx { color: var(--warn); }
