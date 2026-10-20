@@ -1513,3 +1513,28 @@ other open branches, so this may be renumbered at merge.)
   runaway), the oversized case against the real route (400), the live filter
   redacting a coordinate pair and a planted secret in a member answer, the
   dry run, and a forced provider without its key.
+
+## 55. Backups stay on the server: 14-day retention plus a hard 5 GiB cap, no off-box copy
+
+- **Decision (Sabih, 2026-10-20):** the nightly `VACUUM INTO` backup keeps its
+  14-day retention and gains a hard size cap on the backup folder
+  (`BACKUP_MAX_BYTES`, default 5 GiB): before a backup is written, the oldest
+  files are deleted until the existing ones plus the new one (estimated from
+  the live database's size) fit; a single backup larger than the cap is still
+  written, with a warning. The logic moved to `server/src/backup-lib.ts`
+  (`runBackup`, injectable clock and logger) so `server/test/backup.test.ts`
+  can run it against real SQLite files in a temp folder; `backup.ts` stays the
+  container entry point and only reads the environment.
+- **Removed:** the monthly copy to Sabih's PC (Windows scheduled task,
+  `pull-backup.ps1`, the optional Seagate copy and the local folder, which held
+  e-mail addresses and password hashes), the proposed sudoers rule for the
+  restore test and any idea of a scheduled restore test. The restore-test
+  script stays for runs by hand (docs/SERVER_RUNBOOK.md).
+- **Why:** one place to protect and to wipe. The privacy note promises only
+  "copies in the nightly server backup are removed within 14 days", which the
+  retention rule keeps true; the cap protects the shared host's disk if the
+  database ever grows, without needing anyone to notice.
+- **Alternatives rejected:** counting files instead of bytes (a few large files
+  would still fill the disk); pruning after writing (the write itself could be
+  what fills the disk); an off-box copy to a paid store (Sabih: no paid
+  services, keep it simple).
