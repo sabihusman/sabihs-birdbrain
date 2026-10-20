@@ -389,6 +389,8 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .row-item.danger[disabled] { color: var(--muted); font-weight: var(--weight-regular); }
 .row-switch input { width: 24px; height: 24px; flex: none; accent-color: var(--accent); }
 .row-static { min-height: 36px; }
+/* .row-item sets `font: inherit`, which would otherwise beat the .small class on a status row. */
+.row-item.small { font-size: var(--text-sm); }
 .contents-row { display: contents; }
 .btn.block { width: 100%; justify-content: center; }
 .name-host:empty { display: none; }
