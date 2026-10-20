@@ -8,6 +8,7 @@ import { CLIP_MAX_SECONDS, clipRange, saveClipIfBetter, shouldReplaceClip, windo
 import { decodeWav, encodeWav, toMono } from '../audio/wav';
 import { resampleLinear } from '../audio/resample';
 import { LABELS_JSON, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
+import { MODEL_BASE_URL, MODEL_DOWNLOAD_ERROR } from '../model/model-source';
 import { parseLabels, type Species } from '../model/labels';
 import { selectDetections, type Score } from '../model/postprocess';
 import { InferenceClient, type ModelStatus } from '../model/worker-client';
@@ -186,14 +187,27 @@ export class AppController extends Emitter<ControllerEvents> {
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Could not load the species list: ${(e as Error).message}` });
     }
+    await this.loadModel();
+    if (this.settings.get().locationMode === 'auto') void this.location.refresh();
+  }
+
+  /**
+   * Download and warm up the models from MODEL_BASE_URL (the API host in production).
+   * Called by init() and again by the Listen screen's "Try again" after a failed
+   * download, which is the common case on a flaky phone connection.
+   */
+  async loadModel(): Promise<boolean> {
     try {
-      await this.inference.init(this.baseUrl, this.settings.get().backend);
+      await this.inference.init(MODEL_BASE_URL, this.settings.get().backend);
       await this.pushGeo();
       void this.refreshLocalSpecies();
+      return true;
     } catch (e) {
-      this.emit('notice', { kind: 'error', text: `Model failed to load: ${(e as Error).message}` });
+      // The technical reason stays in the console; the member reads what to do about it.
+      console.warn('[model] load failed', e);
+      this.emit('notice', { kind: 'error', text: MODEL_DOWNLOAD_ERROR });
+      return false;
     }
-    if (this.settings.get().locationMode === 'auto') void this.location.refresh();
   }
 
   private onSettings(s: Settings): void {

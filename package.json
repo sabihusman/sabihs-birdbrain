@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:dist": "node scripts/check-dist-size.mjs"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",

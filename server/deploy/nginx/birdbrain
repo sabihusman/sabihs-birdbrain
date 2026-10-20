@@ -6,6 +6,21 @@
 limit_req_zone  $binary_remote_addr zone=birdbrain:10m      rate=6r/m;
 limit_conn_zone $binary_remote_addr zone=birdbrain_conn:10m;
 
+# The BirdNET model files (/models/, see below) are static and downloaded in a burst of
+# ~23 requests per phone, so they get their own, much more lenient limits.
+limit_req_zone  $binary_remote_addr zone=birdbrain_models:10m rate=240r/m;
+limit_conn_zone $binary_remote_addr zone=birdbrain_models_conn:10m;
+
+# CORS for the model files only, and only for this app's own origins: the production
+# site and its Vercel preview deployments (sabihs-birdbrain-<something>.vercel.app).
+# Any other Origin maps to "", and nginx then omits the header, so the browser blocks
+# the response. Local development points VITE_MODEL_BASE_URL at its own file server.
+map $http_origin $birdbrain_model_origin {
+    default                                                       "";
+    "https://sabihs-birdbrain.vercel.app"                         $http_origin;
+    "~^https://sabihs-birdbrain-[a-z0-9-]+\.vercel\.app$"         $http_origin;
+}
+
 server {
     listen 80;
     listen [::]:80;
@@ -48,6 +63,49 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer always;
     # No CORS headers here: the app sets them for the exact allowed origin.
+
+    # The BirdNET V2.4 export (~78 MiB, 23 files), published by
+    # scripts/server/publish-model.sh into /opt/birdbrain/models/<version>/ and served
+    # here instead of from Vercel (DECISIONS.md #56). Read-only static files; the API
+    # container is not involved.
+    location ^~ /models/ {
+        # root, not alias: /models/<file> maps to /opt/birdbrain/models/<file> directly,
+        # which keeps try_files simple (alias + try_files resolves the prefix twice).
+        root /opt/birdbrain;
+        try_files $uri =404;
+        autoindex off;
+
+        # Replaces the inherited API limits: a cold start fetches every shard at once.
+        limit_req zone=birdbrain_models burst=40 nodelay;
+        limit_conn birdbrain_models_conn 8;
+
+        limit_except GET HEAD OPTIONS {
+            deny all;
+        }
+
+        # A location-level add_header drops the server-level ones, so repeat them here.
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
+        # Version folders never change in place: publish a new folder instead.
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        # Empty value = header omitted, which is what we want for every other origin.
+        add_header Access-Control-Allow-Origin $birdbrain_model_origin always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+        add_header Access-Control-Max-Age 86400 always;
+        add_header Vary Origin always;
+
+        # model.json is topology JSON; the .bin shards are already-packed float32 weights
+        # (application/octet-stream), which gzip would only slow down.
+        gzip on;
+        gzip_types application/json;
+        gzip_proxied any;
+        gzip_min_length 1024;
+
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8010;

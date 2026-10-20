@@ -7,12 +7,16 @@ export const NUM_CLASSES = 6522;
 export const DEFAULT_OVERLAP_SECONDS = 1.5;
 /** BirdNET-Analyzer's default location-filter threshold on the geo model output. */
 export const GEO_FILTER_THRESHOLD = 0.03;
-/** Model files, relative to the app base URL. */
+/** Species list, relative to the app's own base URL (precached for the offline list). */
 export const MODEL_DIR = 'models/birdnet-v2.4/';
-export const ACOUSTIC_MODEL_JSON = `${MODEL_DIR}model.json`;
-export const GEO_MODEL_JSON = `${MODEL_DIR}mdata/model.json`;
 export const LABELS_JSON = `${MODEL_DIR}labels.json`;
-/** Exact byte size of the model files served from MODEL_DIR (for the download progress bar). */
+/**
+ * The two model entry points, relative to MODEL_BASE_URL (src/model/model-source.ts),
+ * which is the server that serves the weights, not necessarily this app's origin.
+ */
+export const ACOUSTIC_MODEL_FILE = 'model.json';
+export const GEO_MODEL_FILE = 'mdata/model.json';
+/** Exact byte size of the model files behind MODEL_BASE_URL (for the download progress bar). */
 export const ACOUSTIC_MODEL_BYTES = 52_215_312;
 export const GEO_MODEL_BYTES = 29_546_297;
 export const MODEL_TOTAL_BYTES = ACOUSTIC_MODEL_BYTES + GEO_MODEL_BYTES;
