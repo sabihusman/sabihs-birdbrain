@@ -448,7 +448,9 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     // "How BirdNET decides" is the one row on Listen and starts closed, with its chip strip.
     await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
     // Result cards from the sample clip: thumbnail tile, dot + name, scientific name, confidence.
-    await page.getByTestId('demo').click();
+    // Focus shows no sample button by design (DECISIONS.md #59), so click it through the DOM there.
+    if (layout === 'focus') await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
+    else await page.getByTestId('demo').click();
     await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
     const card = page.getByTestId('result-card').first();
     if (layout === 'focus') {

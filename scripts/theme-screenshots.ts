@@ -13,6 +13,10 @@ const out = path.resolve(import.meta.dirname, '../docs/screenshots');
 fs.mkdirSync(out, { recursive: true });
 const GL = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'];
 const LAYOUT = process.env.LAYOUT ?? 'consolidated';
+// Bottom dock has no round mic button and Focus hides the sample button: both by design
+// (DECISIONS.md #59), so the script asks each layout for its own controls.
+const START = LAYOUT === 'dock' ? 'dock-start' : 'start-stop';
+const STOP = LAYOUT === 'dock' ? 'dock-stop' : 'stop';
 
 async function withPage(browser: Browser, theme: 'dark' | 'light', mic: 'fake' | 'denied', run: (page: import('@playwright/test').Page) => Promise<void>) {
   const context = await browser.newContext({ ...devices['iPhone 13'], permissions: mic === 'fake' ? ['microphone'] : [] });
@@ -46,17 +50,17 @@ for (const theme of ['dark', 'light'] as const) {
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(out, `listen-ready-${suffix}.png`) });
     // Result cards from the sample clip (Ready state), then the Listening state with the fake microphone.
-    await page.getByTestId('demo').click();
+    // Focus shows no sample button, so click it through the DOM to fill the hero card with a real bird.
+    if (LAYOUT === 'focus') await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
+    else await page.getByTestId('demo').click();
     await page.getByTestId('listen-status').filter({ hasText: /Sample analysed/ }).waitFor({ timeout: 120_000 });
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(out, `listen-results-${suffix}.png`) });
-    const start = LAYOUT === 'dock' ? page.getByTestId('dock-start') : page.getByTestId('start-stop');
-    await start.click();
+    await page.getByTestId(START).click();
     await page.getByTestId('model-status').filter({ hasText: /Listening/ }).waitFor({ timeout: 30_000 });
     await page.waitForTimeout(4000);
     await page.screenshot({ path: path.join(out, `listen-listening-${suffix}.png`) });
-    const stop = LAYOUT === 'dock' ? page.getByTestId('dock-stop') : page.getByTestId('stop');
-    await stop.click();
+    await page.getByTestId(STOP).click();
     await page.goto(`${BASE}#/species/Acanthis%20cabaret`);
     await page.waitForTimeout(2500);
     await page.screenshot({ path: path.join(out, `species-${theme}.png`) });
@@ -64,7 +68,7 @@ for (const theme of ['dark', 'light'] as const) {
   await withPage(plain, theme, 'denied', async (page) => {
     await page.goto(BASE);
     await page.getByTestId('model-status').filter({ hasText: 'Model ready' }).waitFor({ timeout: 240_000 });
-    await page.getByTestId('start-stop').click();
+    await page.getByTestId(START).click();
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(out, `listen-mic-blocked-${suffix}.png`) });
   });

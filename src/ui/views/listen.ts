@@ -137,7 +137,8 @@ export function listenView(ctx: ViewContext): View {
   });
 
   // ---- layout ----------------------------------------------------------------
-  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, el('div', { class: 'state-row' }, stateIcon, stateTitle), stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), chips, noLocationNote, el('div', { class: 'row' }, demoBtn), lastBirdLine, status);
+  const stateRow = el('div', { class: 'state-row' }, stateIcon, stateTitle);
+  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), chips, noLocationNote, el('div', { class: 'row' }, demoBtn), lastBirdLine, status);
   const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, resultsEmpty);
   const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00')), dockStartBtn, dockStopBtn);
   const focusLatest = el('div', { class: 'focus-latest', 'data-testid': 'focus-latest' });
@@ -216,7 +217,16 @@ export function listenView(ctx: ViewContext): View {
     setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || layout === 'dock');
     setHidden(chips, listening || layout === 'focus');
     setHidden(demoBtn, listening || st.status === 'loading' || layout === 'focus');
-    setHidden(readyBlock, listening ? true : layout === 'dock' && plainReady);
+    setHidden(readyBlock, listening);
+    if (layout === 'dock') {
+      // Cards fill the screen, so the state row only appears when there is something to say
+      // (loading, mic blocked, paused, an error). The sample-clip button stays reachable.
+      setHidden(stateRow, plainReady);
+      setHidden(stateHint, plainReady);
+    } else {
+      setHidden(stateRow, false);
+      setHidden(stateHint, false);
+    }
     startBtn.classList.toggle('big', layout === 'focus');
     setHidden(panel, !listening || layout === 'dock');
     setHidden(dock, layout !== 'dock');
