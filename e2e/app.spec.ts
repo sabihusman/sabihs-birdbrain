@@ -212,16 +212,31 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('history-list')).toContainText('No position recorded');
   await expect(page.getByTestId('history-map')).toBeHidden();
 
-  // Account card for a member: display name with the email under it, the friends panel with the exact consent text, sharing off by default, delete with an inline confirmation (DECISIONS.md #43).
+  // Account card for a member: grouped rows, long text behind collapsed rows, deleting on its own
+  // screen (DECISIONS.md #43, #57).
   await page.goto('./#/settings');
   await expect(page.getByTestId('account-name')).toHaveText('member');
   await expect(page.getByTestId('account-email')).toHaveText('member@example.com');
-  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
+  await expect(page.getByTestId('account-role')).toHaveText('Member');
   await expect(page.getByTestId('share-species')).not.toBeChecked();
   await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
+  // The consent text and the invite form sit behind the Friends row until it is opened.
+  await expect(page.getByTestId('invite-send')).toBeHidden();
+  await page.getByTestId('friends-fold').getByText('Friends and invites').click();
+  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
   await expect(page.getByTestId('invite-send')).toBeVisible();
-  await expect(page.getByTestId('what-we-store')).toContainText('Copies in the nightly server backup are removed within 14 days.');
-  // Delete section: the button stays disabled until the password and the word are typed; a wrong word does nothing.
+  // "What we store" is the last thing on Settings, closed, with every fact inside.
+  const wws = page.getByTestId('what-we-store');
+  await expect(wws).not.toHaveAttribute('open', /.*/);
+  await expect(wws).toContainText('Sightings stay on your phone');
+  await wws.getByText('What we store').click();
+  await expect(wws).toContainText('Only on this phone');
+  await expect(wws).toContainText('Copies in the nightly server backup are removed within 14 days.');
+  // Delete: the row opens its own screen, and the button stays disabled until the password and the
+  // word are typed; a wrong word does nothing.
+  await expect(page.getByTestId('delete-password')).toHaveCount(0);
+  await page.getByTestId('delete-row').click();
+  await expect(page.getByTestId('delete-screen')).toBeVisible();
   await expect(page.getByTestId('delete-account')).toBeDisabled();
   await page.getByTestId('delete-password').fill('correct horse battery staple');
   await expect(page.getByTestId('delete-account')).toBeDisabled();
@@ -230,6 +245,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await page.getByTestId('delete-account').click();
   await expect(page.getByTestId('account')).toContainText('Type DELETE in capitals to confirm. Your account was not deleted.');
   await expect(page.getByTestId('account-deleted')).toHaveCount(0);
+  await page.getByTestId('delete-cancel').click();
   await expect(page.getByTestId('account-name')).toHaveText('member');
   // The species page shows the "Spotted by" card with the member's own row (friends unreachable: only "You").
   await page.goto('./#/species/Acanthis%20cabaret');
@@ -268,6 +284,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await page.goto('./#/settings');
   await page.reload();
   await expect(page.getByTestId('account-name')).toHaveText('member');
+  await page.getByTestId('delete-row').click();
   await page.getByTestId('delete-password').fill('correct horse battery staple');
   await page.getByTestId('delete-word').fill('DELETE');
   await page.getByTestId('delete-account').click();
@@ -429,6 +446,8 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       expect(box!.width).toBeGreaterThanOrEqual(120);
     }
     await expect(page.getByTestId('how-it-works')).not.toHaveAttribute('open', /.*/);
+    // "How BirdNET decides" replaces the seven step cards and starts closed, with its chip strip.
+    await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
     // Result cards from the sample clip: thumbnail tile, dot + name, scientific name, confidence.
     await page.getByTestId('demo').click();
     await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
@@ -458,12 +477,74 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       await expect(page.getByTestId('more-birds')).toBeVisible();
     }
     await page.waitForTimeout(1500);
+    if (layout === 'consolidated') {
+      // Live pipeline chips (DECISIONS.md #57): the stages light in order while the mic is on.
+      await page.getByTestId('how-it-works').getByText('How it works').click();
+      await expect(page.getByTestId('pipeline-live')).toBeVisible();
+      const chips = page.getByTestId('pipeline-chips');
+      await expect(chips.locator('.pchip.active, .pchip.done')).not.toHaveCount(0, { timeout: 15_000 });
+      // Mic runs before Result, so it is lit (active or done) before Result ever is.
+      await expect(chips.locator('.pchip[data-stage="mic"]')).toHaveClass(/active|done/, { timeout: 15_000 });
+    }
     const stop = layout === 'dock' ? page.getByTestId('dock-stop') : page.getByTestId('stop');
     await stop.click();
     await expect(page.getByTestId('model-status')).toContainText('Model ready');
     await expect(page.getByTestId('listen-status')).toContainText('Stopped.');
+    if (layout === 'consolidated') {
+      // Stopped: every chip plain again.
+      const chips = page.getByTestId('pipeline-chips');
+      await expect(chips.locator('.pchip.active, .pchip.done')).toHaveCount(0);
+      await expect(page.getByTestId('pipeline-live')).toBeHidden();
+      // Reduce motion: no stepping, only a finished window lights Result.
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await start.click();
+      await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
+      await page.waitForTimeout(4000);
+      for (const stage of ['mic', 'resample', 'window', 'spectrogram', 'network', 'filter']) {
+        await expect(chips.locator(`.pchip[data-stage="${stage}"]`), `${stage} stays plain with reduce motion`).not.toHaveClass(/active|done/);
+      }
+      await page.getByTestId('stop').click();
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+    }
   });
 }
+
+test('Settings rows: the admin delete row is disabled, and the folds fit 320 px closed and open', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  // A cached admin session: the delete row must be greyed out, with the reason on the row.
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e-admin', expiresAt: null, user: { id: 'a1', email: 'admin@example.com', name: 'Sabih', status: 'approved', role: 'admin' } }));
+  });
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('account-role')).toHaveText('Admin');
+  await expect(page.getByTestId('account-name')).toHaveText('Sabih');
+  const del = page.getByTestId('delete-row');
+  await expect(del).toBeDisabled();
+  await expect(del).toContainText('Not available for the admin account');
+  await del.click({ force: true });
+  await expect(page.getByTestId('delete-screen')).toHaveCount(0);
+  // No horizontal scrolling with every section open either.
+  const noScroll = async (label: string) => {
+    const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    expect(m.sw, label).toBeLessThanOrEqual(m.iw);
+  };
+  await noScroll('settings closed at 320px');
+  await page.getByTestId('what-we-store').getByText('What we store').click();
+  await noScroll('what we store open at 320px');
+  await page.goto('./#/listen');
+  await page.getByTestId('how-it-works').getByText('How it works').click();
+  await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
+  await expect(page.getByTestId('pipeline-list')).toBeVisible();
+  await expect(page.getByTestId('pipeline-list')).toContainText('An EfficientNet-style network scores all 6,522 classes');
+  await expect(page.getByTestId('pipeline-list')).toContainText('More about limits');
+  await noScroll('pipeline open at 320px');
+  // The summary is a real tap target and keeps the focus ring.
+  const box = await page.getByTestId('pipeline').locator('summary').boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  await context.close();
+});
 
 test('mic blocked state explains the iPhone steps and offers Try again and import', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 13'], permissions: [] });

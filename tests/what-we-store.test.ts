@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WHAT_WE_STORE_TEXT } from '../src/ui/components/what-we-store';
+import { SIGN_UP_PRIVACY_LINE, WHAT_WE_STORE_GROUPS, WHAT_WE_STORE_SUMMARY, WHAT_WE_STORE_TEXT } from '../src/ui/components/what-we-store';
 
 /** The paragraph must name what the code actually stores and sends (server/src/db.ts, app.ts, ask.ts, ebird.ts). */
 describe('what we store', () => {
@@ -13,5 +13,26 @@ describe('what we store', () => {
     expect(WHAT_WE_STORE_TEXT).toContain('busy or fails');
     // Nothing the server does not do.
     expect(WHAT_WE_STORE_TEXT).not.toMatch(/recordings are uploaded|password is stored|not stored/);
+  });
+});
+
+/** The facts moved into five groups behind a collapsed section (DECISIONS.md #57); none was dropped. */
+describe('what we store, regrouped', () => {
+  it('has the five groups in the order the data flows', () => {
+    expect(WHAT_WE_STORE_GROUPS.map((g) => g.title)).toEqual(['On the server', 'Only on this phone', 'If sharing is on', 'When you ask about a bird', 'Deleting your account']);
+  });
+
+  it('keeps every fact: the one-line paragraph is built from the groups', () => {
+    expect(WHAT_WE_STORE_TEXT).toBe(WHAT_WE_STORE_GROUPS.flatMap((g) => g.items).join(' '));
+    expect(WHAT_WE_STORE_GROUPS.every((g) => g.items.length > 0)).toBe(true);
+    // Each bullet is one short sentence, so the groups stay readable on a phone.
+    for (const g of WHAT_WE_STORE_GROUPS) for (const item of g.items) expect(item.endsWith('.')).toBe(true);
+  });
+
+  it('promises only what the app does, in the closed row and on the sign-up form', () => {
+    expect(WHAT_WE_STORE_SUMMARY).toBe('Sightings stay on your phone');
+    expect(SIGN_UP_PRIVACY_LINE).toBe('Your sightings stay on your phone. We store your email and a few account details.');
+    // The phone-only promise must still be a fact in the groups, not only a headline.
+    expect(WHAT_WE_STORE_GROUPS.find((g) => g.title === 'Only on this phone')?.items.join(' ')).toContain('never uploaded');
   });
 });

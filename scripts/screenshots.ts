@@ -23,6 +23,16 @@ for (const scheme of ['light', 'dark'] as const) {
   await page.goto(`${BASE}#/species/Acanthis%20cabaret`);
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(out, `species-${scheme}.png`) });
+  // Settings in both themes: the grouped account rows, and the pipeline section open on Listen.
+  await page.goto(`${BASE}#/settings`);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(out, `settings-${scheme}.png`) });
+  await page.goto(`${BASE}#/listen`);
+  await page.getByTestId('how-it-works').getByText('How it works').click();
+  await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
+  await page.getByTestId('pipeline-list').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(out, `how-birdnet-decides-${scheme}.png`) });
   if (scheme === 'light') {
     await page.goto(`${BASE}#/species`);
     await page.getByRole('searchbox').fill('warbler');
@@ -31,9 +41,6 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.goto(`${BASE}#/map`);
     await page.waitForTimeout(2500);
     await page.screenshot({ path: path.join(out, 'map.png') });
-    await page.goto(`${BASE}#/settings`);
-    await page.waitForTimeout(500);
-    await page.screenshot({ path: path.join(out, 'settings.png') });
     await page.goto(`${BASE}#/recordings`);
     await page.locator('#import-file').setInputFiles(path.resolve(import.meta.dirname, '../public/samples/birdnet-sample.wav'));
     await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });

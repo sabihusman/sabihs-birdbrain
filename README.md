@@ -12,9 +12,9 @@ Live app: **https://sabihs-birdbrain.vercel.app**. API: `https://bird-brain.duck
 | --- | --- | --- | --- |
 | ![Listen view, light mode](docs/screenshots/listen-light.png) | ![Listen view, dark mode](docs/screenshots/listen-dark.png) | ![Species page](docs/screenshots/species-light.png) | ![Map view](docs/screenshots/map.png) |
 
-| Recording analysed | “Why this ID” heatmap | Species search | Settings |
+| Recording analysed | “Why this ID” heatmap | Species search | Settings (grouped rows) |
 | --- | --- | --- | --- |
-| ![Recording detail](docs/screenshots/recording-detail.png) | ![Occlusion heatmap over the spectrogram](docs/screenshots/why-this-id.png) | ![Species search](docs/screenshots/species-list.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Recording detail](docs/screenshots/recording-detail.png) | ![Occlusion heatmap over the spectrogram](docs/screenshots/why-this-id.png) | ![Species search](docs/screenshots/species-list.png) | ![Settings](docs/screenshots/settings-light.png) |
 
 *Screenshots taken with Playwright at iPhone 13 size from the built app. The
 species page shows the retry state because the build machine’s shared network

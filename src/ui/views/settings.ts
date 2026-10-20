@@ -7,6 +7,7 @@ import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../s
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
 import { accountSection } from './account';
+import { whatWeStoreFold } from '../components/what-we-store';
 import { layoutPicker } from '../components/layout-picker';
 import { describeVoiceProcessing } from '../../audio/mic-constraints';
 
@@ -199,6 +200,8 @@ export function settingsView(ctx: ViewContext): View {
     el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), el('p', { class: 'small muted' }, 'One row per sighting: first and last time, species, peak confidence, number of windows, position and recording link.')),
     el('section', { class: 'card' }, el('h2', null, 'Data'), el('div', { class: 'row' }, clearBtn)),
     el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works, limitations and licences')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
+    // Last thing on the page, closed: the full privacy facts are there when wanted and out of the way otherwise.
+    whatWeStoreFold(),
   );
 
   return {
