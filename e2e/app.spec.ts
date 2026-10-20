@@ -446,7 +446,9 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       expect(box!.width).toBeGreaterThanOrEqual(120);
     }
     // "How BirdNET decides" is the one row on Listen and starts closed, with its chip strip.
-    await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
+    // Focus shows no such row (DECISIONS.md #59).
+    if (layout === 'focus') await expect(page.getByTestId('pipeline')).toHaveCount(0);
+    else await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
     // Result cards from the sample clip: thumbnail tile, dot + name, scientific name, confidence.
     // Focus shows no sample button by design (DECISIONS.md #59), so click it through the DOM there.
     if (layout === 'focus') await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
@@ -545,7 +547,6 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   await expect(page.getByText('Only on this phone')).toBeVisible();
   await noScroll('what we store open at 320px');
   await page.goto('./#/listen');
-  await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
   await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
   await expect(page.getByTestId('pipeline-list')).toBeVisible();
   await expect(page.getByTestId('pipeline-list')).toContainText('An EfficientNet-style network scores all 6,522 classes');
@@ -666,8 +667,12 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     }, layout);
     await page.goto('./#/listen');
     await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-    await expect(page.getByTestId('recent-empty')).toBeAttached(); // inside the collapsed fold until opened
-    await page.getByTestId('demo').click();
+    // Consolidated keeps the cards behind the collapsed row, Bottom dock shows them on the page,
+    // and Focus has no list at all (DECISIONS.md #59).
+    if (layout === 'focus') await expect(page.getByTestId('recent-fold')).toHaveCount(0);
+    else await expect(page.getByTestId('recent-empty')).toBeAttached();
+    if (layout === 'focus') await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
+    else await page.getByTestId('demo').click();
     await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
     // The live results list shows the best confidence labelled "best" and the count.
     if (layout !== 'focus') {
@@ -678,9 +683,19 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       await expect(page.getByTestId('focus-latest')).toContainText('Heard once');
     }
     // Recent sightings: one card per species, a real button with aria-expanded, at least 44 px tall.
-    const fold = page.getByTestId('recent-fold');
-    await expect(page.getByTestId('recent-summary')).toHaveText(/^\d+ birds? · \d+ detections?$/);
-    await fold.locator('summary').click();
+    if (layout === 'focus') {
+      // Nothing more to check here: Focus shows the hero card and "N more birds" instead.
+      await expect(page.getByTestId('more-birds')).toBeAttached();
+      return;
+    }
+    const summaryId = layout === 'dock' ? 'recent-inline-summary' : 'recent-summary';
+    await expect(page.getByTestId(summaryId)).toHaveText(/^\d+ birds? · \d+ detections?$/);
+    if (layout === 'dock') {
+      // The cards are already on the page in this layout.
+      await expect(page.getByTestId('recent-inline')).toBeVisible();
+    } else {
+      await page.getByTestId('recent-fold').locator('summary').click();
+    }
     await expect(page.getByTestId('recent-empty')).toBeHidden();
     const cards = page.getByTestId('recent-card');
     const n = await cards.count();
