@@ -284,9 +284,28 @@ cd server && npm install && npm test   # API unit + integration tests (fake mail
 ```
 
 Front-end build settings live in `.env.example` (`VITE_API_BASE_URL`,
-`VITE_BASE_PATH`). The API is in `server/` with its own `README`-style notes in
-`server/deploy/README.md`, `server/.env.example` (variable names only) and
-`docs/SECURITY.md`.
+`VITE_BASE_PATH`, `VITE_MODEL_BASE_URL`). The API is in `server/` with its own
+`README`-style notes in `server/deploy/README.md`, `server/.env.example`
+(variable names only) and `docs/SECURITY.md`.
+
+### The BirdNET model is not part of the build
+
+The 23 weight files (78 MiB) live in `models/birdnet-v2.4/` and are served by
+Nginx from the API host, not by Vercel, which keeps deployments small and the
+monthly data transfer low (DECISIONS.md #56). Only `labels.json` stays in
+`public/`, because the offline species list needs it.
+
+```
+scripts/server/publish-model.sh --dry-run   # compare the local files with the server
+scripts/server/publish-model.sh             # copy and hash-check them (tar over ssh)
+npm run check:dist                          # fails if weights ever end up in dist/
+```
+
+`npm run dev` serves `models/` itself, so nothing extra is needed locally. For a
+`npm run preview` or Playwright run against a local copy of the model, build with
+`VITE_MODEL_BASE_URL=/models/birdnet-v2.4/` (what CI does); a plain `npm run build`
+points the app at `https://bird-brain.duckdns.org/models/birdnet-v2.4/`, which
+sends CORS headers only to this app's own origins.
 
 Unit tests (Vitest) cover the FFT/STFT, resampling and windowing, threshold and
 multi-label logic, the week-of-year calculation, species colours, WAV encoding
