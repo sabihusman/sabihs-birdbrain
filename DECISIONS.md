@@ -1538,3 +1538,45 @@ other open branches, so this may be renumbered at merge.)
   would still fill the disk); pruning after writing (the write itself could be
   what fills the disk); an off-box copy to a paid store (Sabih: no paid
   services, keep it simple).
+## 56. The BirdNET weights are served from the API host, not from the front end
+
+- **Problem:** every Vercel deployment carried the 23 model files (78 MiB), so
+  each push paid for them twice over: deployment storage per build, and Fast
+  Data Transfer every time a phone downloaded the model (3.07 GB in the last 30
+  days, nearly all of it model traffic).
+- **Decision:** the weights live in `models/birdnet-v2.4/` in the repository
+  (out of `public/`, so no build copies them) and are published to the server
+  with `scripts/server/publish-model.sh`, which hash-checks them against
+  `models/birdnet-v2.4/SHA256SUMS` locally and again on the server, stages them
+  in `<dir>.new` and swaps that into place, so a failed copy never replaces a
+  working folder. Nginx serves `/models/` from `/opt/birdbrain/models` (`root`,
+  not `alias`, so `try_files` stays simple) with `Cache-Control: public,
+  max-age=31536000, immutable`, its own lenient `limit_req`/`limit_conn` zones
+  (the API's 6 r/min would block a cold start), `limit_except GET HEAD OPTIONS`,
+  and CORS only for this app's origins through an http-level `map` on
+  `$http_origin` (the production site and `sabihs-birdbrain-*.vercel.app`
+  previews; any other origin gets no header, so the browser blocks it). The
+  security headers are repeated inside the location, because a location-level
+  `add_header` drops the server-level ones.
+- **In the app:** `src/model/model-source.ts` is the single place that decides
+  where the model comes from: `VITE_MODEL_BASE_URL` if set, else the app's own
+  origin in `vite dev` (`scripts/serve-models.mts` serves the repository folder
+  in dev and preview), else `https://bird-brain.duckdns.org/models/birdnet-v2.4/`.
+  `labels.json` stays in `public/` and is still precached: the offline species
+  list must work without the weights. The service worker gets a second
+  `CacheFirst` route for the absolute model URL, because a Workbox regular
+  expression only matches a cross-origin request when it matches from the start
+  of the URL; the worker's own Cache API copy is unchanged.
+- **When the download fails** the member sees "Couldn't download the bird model.
+  Check your connection and try again." with a Try again button that re-runs the
+  download (`AppController.loadModel`), instead of the old generic
+  "Something went wrong"; the technical reason goes to the console only.
+- **Guards:** `npm run check:dist` fails the build if any weight file or model
+  topology is in `dist/`, or if `dist/` grows past 12 MiB (it is 3.4 MiB now);
+  CI runs it, and builds with `VITE_MODEL_BASE_URL=/models/birdnet-v2.4/` so the
+  e2e run never downloads from the live server.
+- **Alternatives rejected:** a paid CDN or object store (Sabih: no paid
+  services); keeping the files on Vercel and caching harder (does not reduce the
+  first download, which is the bulk of the transfer); a wildcard
+  `Access-Control-Allow-Origin` (any site could then use our bandwidth); `alias`
+  with `try_files` (resolves the prefix twice and 404s).

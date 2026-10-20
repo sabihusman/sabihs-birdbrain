@@ -305,7 +305,7 @@ versions and licences of everything third-party are in
 ## Licensing and credits
 
 - **Application code:** MIT (see [LICENSE](LICENSE)).
-- **BirdNET models** (`public/models/birdnet-v2.4/`, acoustic and
+- **BirdNET models** (`models/birdnet-v2.4/`, acoustic and
   location/season models, label list, and the sample clip): © the BirdNET team,
   Stefan Kahl et al., K. Lisa Yang Center for Conservation Bioacoustics at the
   Cornell Lab of Ornithology and Chemnitz University of Technology, licensed

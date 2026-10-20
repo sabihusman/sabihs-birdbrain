@@ -4,7 +4,7 @@ import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm';
 import wasmSimdUrl from '@tensorflow/tfjs-backend-wasm/dist/tfjs-backend-wasm-simd.wasm?url';
 import wasmThreadedUrl from '@tensorflow/tfjs-backend-wasm/dist/tfjs-backend-wasm-threaded-simd.wasm?url';
 import wasmUrl from '@tensorflow/tfjs-backend-wasm/dist/tfjs-backend-wasm.wasm?url';
-import { ACOUSTIC_MODEL_JSON, GEO_MODEL_JSON, MODEL_CACHE_NAME, MODEL_TOTAL_BYTES, SAMPLE_RATE, WINDOW_SAMPLES } from './constants';
+import { ACOUSTIC_MODEL_FILE, GEO_MODEL_FILE, MODEL_CACHE_NAME, MODEL_TOTAL_BYTES, SAMPLE_RATE, WINDOW_SAMPLES } from './constants';
 import { registerMelSpecLayer } from './melspec-layer';
 import { analysisStft, melBandEdges, occludeAudio, regionFor } from './occlusion';
 import { rankScores, type GeoMask } from './postprocess';
@@ -156,9 +156,9 @@ async function handleInit(msg: Extract<WorkerRequest, { type: 'init' }>): Promis
   const fetchFunc = progressFetch((loaded) => {
     post({ type: 'progress', id: msg.id, phase: 'acoustic', loadedBytes: loaded, totalBytes: MODEL_TOTAL_BYTES, message: `Downloading BirdNET (${(loaded / 1048576).toFixed(0)} MB of ${(MODEL_TOTAL_BYTES / 1048576).toFixed(0)} MB)` });
   });
-  acoustic = await tf.loadLayersModel(msg.baseUrl + ACOUSTIC_MODEL_JSON, { fetchFunc });
+  acoustic = await tf.loadLayersModel(msg.baseUrl + ACOUSTIC_MODEL_FILE, { fetchFunc });
   post({ type: 'progress', id: msg.id, phase: 'geo', loadedBytes: MODEL_TOTAL_BYTES * 0.64, totalBytes: MODEL_TOTAL_BYTES, message: 'Downloading location model…' });
-  geoModel = await tf.loadGraphModel(msg.baseUrl + GEO_MODEL_JSON, { fetchFunc });
+  geoModel = await tf.loadGraphModel(msg.baseUrl + GEO_MODEL_FILE, { fetchFunc });
   const loadMs = performance.now() - t0;
 
   post({ type: 'progress', id: msg.id, phase: 'warmup', loadedBytes: MODEL_TOTAL_BYTES, totalBytes: MODEL_TOTAL_BYTES, message: `Warming up on ${backendName}…` });

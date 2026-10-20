@@ -5,7 +5,7 @@ from and under which licence. Verified during the build on 2026-10-18 from
 the VM; the GitHub repository was read through a blobless `git clone` because
 the GitHub web UI and REST API were blocked by the session's network policy.
 
-## BirdNET models (shipped in `public/models/birdnet-v2.4/`)
+## BirdNET models (in `models/birdnet-v2.4/`, served from the API host; see DECISIONS.md #56)
 
 | Item | Source | Version | Licence |
 | --- | --- | --- | --- |

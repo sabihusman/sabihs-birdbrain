@@ -20,7 +20,12 @@ jobs:
       - run: npm test
       - name: Server maintenance scripts (fake tree, no docker)
         run: bash scripts/server/test.sh
-      - run: npm run build
+      - name: Build (model from the local server, so CI never downloads from the API host)
+        run: npm run build
+        env:
+          VITE_MODEL_BASE_URL: /models/birdnet-v2.4/
+      - name: Build must not contain the BirdNET weights (DECISIONS.md #56)
+        run: npm run check:dist
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: End-to-end test (loads model, runs inference on the BirdNET sample clip)

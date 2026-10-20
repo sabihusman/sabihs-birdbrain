@@ -170,7 +170,7 @@ export function listenView(ctx: ViewContext): View {
     const text = STATE_TEXT[st.status];
     stateIcon.textContent = st.icon;
     stateTitle.textContent = text.title;
-    stateHint.textContent = text.hint;
+    stateHint.textContent = st.hint ?? text.hint;
     readyBlock.dataset.status = st.status;
     root.dataset.status = st.status;
     const listening = st.status === 'listening' || st.status === 'paused';
@@ -331,7 +331,17 @@ export function listenView(ctx: ViewContext): View {
   };
   startBtn.addEventListener('click', () => void start());
   dockStartBtn.addEventListener('click', () => void start());
-  tryAgainBtn.addEventListener('click', () => void start());
+  tryAgainBtn.addEventListener('click', () => {
+    // After a failed model download there is nothing to start: fetch the model again first.
+    if (controller.inference.getStatus().state === 'error') {
+      void controller.loadModel().then((ok) => {
+        renderState();
+        if (ok) void start();
+      });
+      return;
+    }
+    void start();
+  });
   stopBtn.addEventListener('click', () => void stop());
   dockStopBtn.addEventListener('click', () => void stop());
   resumeBtn.addEventListener('click', () => void controller.resumeListening().then(renderState));
