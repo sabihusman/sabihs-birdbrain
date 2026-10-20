@@ -548,7 +548,9 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
   await expect(page.getByTestId('pipeline-list')).toBeVisible();
   await expect(page.getByTestId('pipeline-list')).toContainText('An EfficientNet-style network scores all 6,522 classes');
-  await expect(page.getByTestId('pipeline-list')).toContainText('More about limits');
+  // The limits note sits after the list, inside the same section.
+  await expect(page.getByTestId('pipeline')).toContainText('It does not separate overlapping calls or count individuals.');
+  await expect(page.getByTestId('pipeline').getByRole('link', { name: 'More about limits' })).toBeVisible();
   await noScroll('pipeline open at 320px');
   // The summary is a real tap target and keeps the focus ring.
   const box = await page.getByTestId('pipeline').locator('summary').boundingBox();
