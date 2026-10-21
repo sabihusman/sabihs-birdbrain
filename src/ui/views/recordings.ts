@@ -9,6 +9,7 @@ import { downloadBlob } from '../../export/download';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
 import { el, fmtDateTime, fmtDuration, pct } from '../dom';
+import { whyExplanationText } from '../why-text';
 import { hrefFor } from '../router';
 import { SpectrogramView } from '../viz/spectrogram';
 import { formatBytes } from '../../storage/quota';
@@ -136,9 +137,19 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
 
     root.replaceChildren(
       el('section', { class: 'card sighting-card', 'data-testid': 'sighting-card' }, title, sciName, metaLine, player, el('div', { class: 'row' }, analyzeBtn, cancelBtn, exportBtn, deleteBtn), progress, progressText, locationPart),
-      el('section', { class: 'card' }, el('h2', null, 'Spectrogram'), specBox, el('div', { class: 'viz-label' }, 'Our own FFT, an approximation of what the model sees. Colour strips mark species per analysed window. Tap to seek.'), confidenceBox),
+      // "Why this ID" lives in the Spectrogram card: its result is drawn on this spectrogram (DECISIONS.md #62).
+      el(
+        'section',
+        { class: 'card', 'data-testid': 'spectrogram-card' },
+        el('h2', null, 'Spectrogram'),
+        specBox,
+        el('div', { class: 'viz-label' }, 'Our own FFT, an approximation of what the model sees. Colour strips mark species per analysed window. Tap to seek.'),
+        confidenceBox,
+        el('h3', null, 'Why this ID'),
+        el('p', { class: 'small muted' }, 'Silences one small part of the sound at a time and re-runs the model, to show which parts the ID depends on.'),
+        whyBox,
+      ),
       el('section', { class: 'card' }, el('h2', null, 'Detections'), detectionsBox),
-      el('section', { class: 'card' }, el('h2', null, 'Why this ID'), el('p', { class: 'small muted' }, 'Occlusion analysis: silence parts of the spectrogram, re-run the model and see which parts the confidence depends on.'), whyBox),
       aboutSlot,
       askSlot,
     );
@@ -352,7 +363,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         spectrogram.setHeatmap({ map: res.map, timeSteps: res.timeSteps, freqBands: res.freqBands, bandEdgesHz: res.bandEdgesHz, color: speciesColor(sp.scientific), startSec: offsetSec, endSec: offsetSec + WINDOW_SECONDS });
         let maxDrop = 0;
         for (const v of res.map) maxDrop = Math.max(maxDrop, v);
-        box.replaceChildren(el('div', { class: 'small' }, `${sp.common}: baseline ${pct(res.baseline)}. Silencing the most important region (shaded) drops it by ${pct(maxDrop)}. Window ${fmtDuration(offsetSec)}–${fmtDuration(offsetSec + WINDOW_SECONDS)}, ${res.timeSteps}×${res.freqBands} grid.`), btn);
+        box.replaceChildren(whyExplanation(sp.common, res.baseline, maxDrop, offsetSec, res.timeSteps, res.freqBands), btn);
         specBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } catch (e) {
         ctx.notify({ kind: 'error', text: `Occlusion failed: ${(e as Error).message}` });
@@ -384,3 +395,8 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
 }
 
 export type { RecordingRecord };
+
+function whyExplanation(...args: Parameters<typeof whyExplanationText>): HTMLElement {
+  const [first, ...rest] = whyExplanationText(...args);
+  return el('div', { class: 'stack', 'data-testid': 'why-explanation' }, el('p', { class: 'small' }, first), ...rest.map((t) => el('p', { class: 'small muted' }, t)));
+}

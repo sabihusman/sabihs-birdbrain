@@ -193,7 +193,7 @@ export function settingsView(ctx: ViewContext): View {
           ['medium', 'Medium (8×6 grid, 49 runs)'],
           ['fine', 'Fine (12×8 grid, 97 runs)'],
         ],
-        'Finer grids take proportionally longer on a phone.',
+        'Finer uses more CPU and battery; Coarse uses less.',
       ),
     ),
     el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, el('div', { class: 'row' }, persistBtn)),

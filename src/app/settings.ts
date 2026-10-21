@@ -34,7 +34,7 @@ export interface Settings {
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
-export const SETTINGS_VERSION = 3;
+export const SETTINGS_VERSION = 4;
 /** Default confidence threshold before version 2; a saved 25 % is migrated once to the new default. */
 export const LEGACY_DEFAULT_THRESHOLD = 0.25;
 
@@ -50,7 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoSaveClips: true,
   autoSaveMinConfidence: 0.6,
   backend: 'auto',
-  occlusionResolution: 'coarse',
+  occlusionResolution: 'medium',
   includeNonBird: false,
   showAdvancedViz: true,
   lowCut: true,
@@ -104,6 +104,7 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
  * stays. Once stamped with version 2, a threshold of 25 % is a choice too.
  * Version 2 → 3: auto-saving 3-second detection windows is switched on once
  * (new default for everyone); turning it off afterwards is kept.
+ * Version 3 → 4: "Why this ID" resolution set to Medium once; later choices are kept.
  */
 export function migrate(parsed: Partial<Settings>): Settings {
   const stored = { ...DEFAULT_SETTINGS, ...parsed };
@@ -112,6 +113,8 @@ export function migrate(parsed: Partial<Settings>): Settings {
   // Version 3: auto-saving detection windows became the default for everyone, so it is switched on once for
   // settings saved earlier (the old default was off and saved settings cannot tell a choice from the default).
   if (from < 3) stored.autoSaveClips = true;
+  // Version 4: "Why this ID" resolution moved to Medium for everyone, once (DECISIONS.md #62).
+  if (from < 4) stored.occlusionResolution = 'medium';
   stored.version = SETTINGS_VERSION;
   return stored;
 }
