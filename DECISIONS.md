@@ -1775,8 +1775,6 @@ other open branches, so this may be renumbered at merge.)
 
 ## 62. "Why this ID" sits in the Spectrogram card, explains itself, and defaults to Medium
 
-(Numbered after #61 on the open user-management PR; renumber at merge if needed.)
-
 - **Placement:** the occlusion result is drawn on the recording's spectrogram,
   so the button and result moved from their own card into the Spectrogram
   card, under the confidence line.
