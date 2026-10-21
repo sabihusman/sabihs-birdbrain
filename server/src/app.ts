@@ -7,6 +7,7 @@ import { APIError } from 'better-auth/api';
 import { answerQuestion, type AnswerModel, type CapConfig } from './ask.js';
 import { publicUser, toAppUser, type AppUser, type Auth, type UserStatus } from './auth.js';
 import { deleteUserCompletely, deletionMail } from './account-deletion.js';
+import { passwordChangedMail, resetMail, setPasswordAndRevoke, temporaryPassword } from './admin-users.js';
 import type { Config } from './config.js';
 import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
 import { createAnswerCache, type AnswerCache } from './answer-cache.js';
@@ -77,6 +78,10 @@ const sharedSpeciesSchema = z
   .strict();
 /** Account deletion: the password again and the word DELETE, nothing else. */
 const deleteSchema = z.object({ password: z.string().min(1).max(128), confirm: z.string().max(16) }).strict();
+/** Change my password: the current one (any length, older rules) and a new one within today's bounds. */
+const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: passwordSchema }).strict();
+/** Admin deletes a user: the user's address typed again, nothing else. */
+const adminDeleteSchema = z.object({ confirm: z.string().max(254) }).strict();
 
 const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 502 | 503, body: unknown) => c.json(body, status);
 
@@ -96,7 +101,7 @@ export function createApp(deps: AppDeps) {
   const loginByEmail = new RateLimiter(deps.limits?.emailPerWindow ?? 6, windowMs);
   const askByIp = new RateLimiter(deps.limits?.askPerMinute ?? 10, 60 * 1000);
   // Admin page lives on the first allowed origin (the production front end).
-  const signups = new SignupNotifier(mailer, config.adminEmail, `${config.allowedOrigins[0]}/#/admin`, deps.limits?.signupNotifyWindowMs, deps.now);
+  const signups = new SignupNotifier(mailer, config.adminEmail, `${config.allowedOrigins[0]}/#/admin/users`, deps.limits?.signupNotifyWindowMs, deps.now);
 
   const app = new Hono();
 
@@ -246,6 +251,35 @@ export function createApp(deps: AppDeps) {
     if (!body) return json(c, 400, { error: 'invalid_request' });
     users.setName(s.user.id, body.name);
     return json(c, 200, { ok: true, user: publicUser({ ...s.user, name: body.name }) });
+  });
+
+  /**
+   * Change my own password with Better Auth's `changePassword` (it checks the
+   * current password and hashes the new one). Every other session ends; the
+   * caller gets a fresh token. A short notice mail follows; its failure is logged only.
+   */
+  app.post('/v1/me/password', async (c) => {
+    if (!requireAuthRate(c)) return json(c, 429, { error: 'rate_limited' });
+    const s = await sessionUser(c);
+    if (!s) return json(c, 401, { error: 'unauthorized' });
+    const body = await readJson(c, changePasswordSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    let token: string | null;
+    try {
+      const res = await auth.api.changePassword({ body: { currentPassword: body.currentPassword, newPassword: body.newPassword, revokeOtherSessions: true }, headers: c.req.raw.headers });
+      token = res.token;
+    } catch (err) {
+      if (err instanceof APIError) return json(c, 400, { error: 'wrong_current_password' });
+      throw err;
+    }
+    const expiresAt = token ? users.sessionExpiry(token) : null;
+    if (!token || !expiresAt) return json(c, 401, { error: 'unauthorized' });
+    try {
+      await mailer.send(passwordChangedMail(s.user.email));
+    } catch (err) {
+      console.error(`[error] password-changed mail failed: ${describeMailError(err)}`);
+    }
+    return json(c, 200, { token, expiresAt: expiresAt.toISOString(), user: publicUser(s.user) });
   });
 
   /**
@@ -408,6 +442,57 @@ export function createApp(deps: AppDeps) {
       models: { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL },
       providers: providerUsage.totals(PROVIDER_SUMMARY_DAYS),
     });
+  });
+
+  /** The target of an admin action on another account: 400 for the admin's own (or any admin) account, 404 if unknown. */
+  async function adminTarget(c: Context): Promise<{ target: AppUser } | { error: Response }> {
+    const admin = await requireAdmin(c);
+    if (!admin) return { error: json(c, 403, { error: 'forbidden' }) };
+    const id = idParam.safeParse(c.req.param('id'));
+    if (!id.success) return { error: json(c, 400, { error: 'invalid_request' }) };
+    const target = users.get(id.data);
+    if (id.data === admin.id || target?.role === 'admin') return { error: json(c, 400, { error: 'own_account' }) };
+    if (!target) return { error: json(c, 404, { error: 'not_found' }) };
+    return { target };
+  }
+
+  /**
+   * Reset a user's password (DECISIONS.md #60): a random temporary password is
+   * set with Better Auth's hashing, every session ends, and the password goes
+   * to the user by mail only. The admin never sees it. A mail failure keeps
+   * the reset and answers `emailed: false`.
+   */
+  app.post('/v1/admin/users/:id/reset-password', async (c) => {
+    const t = await adminTarget(c);
+    if ('error' in t) return t.error;
+    const password = temporaryPassword();
+    if (!(await setPasswordAndRevoke(auth, db, t.target.id, password))) return json(c, 400, { error: 'no_password_account' });
+    let emailed = false;
+    try {
+      await mailer.send(resetMail(t.target.email, password));
+      emailed = true;
+    } catch (err) {
+      console.error(`[error] reset mail failed: ${describeMailError(err)}`);
+    }
+    return json(c, 200, { ok: true, emailed });
+  });
+
+  /** Delete a user with the same one-transaction wipe as /v1/me/delete; the body must repeat the address. */
+  app.post('/v1/admin/users/:id/delete', async (c) => {
+    const t = await adminTarget(c);
+    if ('error' in t) return t.error;
+    const body = await readJson(c, adminDeleteSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    if (body.confirm.trim().toLowerCase() !== t.target.email.toLowerCase()) return json(c, 400, { error: 'confirm_mismatch' });
+    deleteUserCompletely(db, t.target.id, t.target.email);
+    let emailed = false;
+    try {
+      await mailer.send(deletionMail(t.target.email));
+      emailed = true;
+    } catch (err) {
+      console.error(`[error] deletion mail failed: ${describeMailError(err)}`);
+    }
+    return json(c, 200, { ok: true, emailed });
   });
 
   const transitions: Record<string, UserStatus> = { approve: 'approved', reject: 'rejected', disable: 'disabled' };

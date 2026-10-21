@@ -1712,3 +1712,48 @@ other open branches, so this may be renumbered at merge.)
   would tear down the canvases and risk the audio path for a purely visual setting);
   three separate view modules (they share every component and state, so it would be three
   copies of the same wiring).
+
+## 60. Admin user management on its own page; 8-character passwords; reset by emailed temporary password
+
+- **Request:** Sabih (the only admin) asked for sign-off on every new account (already the
+  case: Better Auth's create hook stores `pending` unless the address is `ADMIN_EMAIL`, and
+  `server/test/admin-users.test.ts` now asserts it), a password minimum of 8, and an
+  admin-only place to reset passwords and delete accounts, reached by a button in Settings.
+- **Password length:** 8 to 128, in Better Auth's `minPasswordLength` and in the request
+  schema (`passwordSchema`), and in the form hints. Only the minimum moved, so every
+  existing password (10+) still signs in.
+- **Page and route:** `#/admin` already held the member list and the cost tables. The member
+  list moved to a new `#/admin/users` page titled "User management"; `#/admin` keeps the
+  cost tables under "Ask costs" with a "‹ User management" link back, and User management
+  links to Ask costs at the bottom. Settings › Account shows one row, "Manage users", only
+  when the cached user is the approved admin (`canManageUsers` in `src/app/access.ts`);
+  anyone else who opens either URL sees "Only the admin can open this page." The server
+  is the real gate: every admin route answers 403 without an approved admin session. The
+  sign-up notification mail now links to `#/admin/users`.
+- **Reset password:** `POST /v1/admin/users/:id/reset-password` draws a 16-character
+  temporary password (57-symbol alphabet without look-alikes, `crypto.randomBytes` with
+  rejection sampling), stores it through Better Auth's own context, ends every session,
+  drops half-finished sign-in codes and emails it to the user. The admin never sees it;
+  the answer is `{ ok, emailed }`, and a failed mail keeps the reset with `emailed: false`
+  so the page can say "Password reset, but the email could not be sent. Try again."
+  Hashing: `(await auth.$context).password.hash` and `internalAdapter.updatePassword` /
+  `deleteUserSessions` (better-auth 1.7.11, `dist/db/internal-adapter.mjs`), the same calls
+  the admin plugin's `setUserPassword` makes. The plugin itself was not added: it brings
+  its own roles, bans and impersonation endpoints and schema fields that would overlap our
+  `status`/`role` columns.
+- **Change password:** so the mail's "change it in Settings → Account" is true,
+  `POST /v1/me/password` calls Better Auth's documented `changePassword` with
+  `revokeOtherSessions: true`; the device that changed it gets the new token and a notice
+  mail goes to the address.
+- **Delete user:** `POST /v1/admin/users/:id/delete` reuses `deleteUserCompletely` (one
+  transaction) and the existing confirmation mail. The body must repeat the address, and
+  the page enables the button only once the address is typed.
+- **Not on the admin:** reset and delete answer 400 `own_account` for the admin's own id or
+  any admin account; the admin's row has no buttons.
+- **Every action asks first,** inside the row (Approve, Reject and Disable too), and the
+  result is one plain sentence in a polite live region.
+- **Alternatives rejected:** a reset link by email (needs a token flow, expiry and a
+  landing page, more to review than a temporary password for a handful of accounts);
+  letting the admin type or see the new password (the admin should never hold a member's
+  password); keeping users and costs on one `#/admin` page under a new heading (the page
+  is long on a phone, and the request was for a dedicated page).

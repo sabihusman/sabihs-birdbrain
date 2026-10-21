@@ -451,3 +451,7 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 
 /* Bottom dock: no round mic button anywhere, and the cards fill the screen. */
 .listen-dock-layout .mic-wrap { display: none; }
+/* User management (DECISIONS.md #60): long addresses wrap at 320 px; the confirmation sits inside the row. */
+.user-item { display: flex; flex-direction: column; gap: 4px; }
+.user-email, .user-name { overflow-wrap: anywhere; min-width: 0; }
+.confirm-panel { padding: 10px; border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid var(--border); }

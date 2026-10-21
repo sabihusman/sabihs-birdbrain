@@ -8,6 +8,7 @@ export type Route =
   | { name: 'map' }
   | { name: 'settings' }
   | { name: 'admin' }
+  | { name: 'admin-users' }
   | { name: 'help' };
 
 export function parseHash(hash: string): Route {
@@ -27,7 +28,7 @@ export function parseHash(hash: string): Route {
     case 'settings':
       return { name: 'settings' };
     case 'admin':
-      return { name: 'admin' };
+      return rest[0] === 'users' ? { name: 'admin-users' } : { name: 'admin' };
     case 'help':
       return { name: 'help' };
     default:
@@ -55,6 +56,8 @@ export function hrefFor(route: Route): string {
       return '#/settings';
     case 'admin':
       return '#/admin';
+    case 'admin-users':
+      return '#/admin/users';
     case 'help':
       return '#/help';
   }

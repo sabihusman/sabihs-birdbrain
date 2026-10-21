@@ -63,7 +63,7 @@ describe('sign-up notification to the admin', () => {
     expect(adminMails()).toHaveLength(0);
     await signUpAndLogin(t, 'first@example.com');
     expect(adminMails()).toHaveLength(1);
-    expect(adminMails()[0].text).toBe(`New Birdbrain sign-up: first@example.com is waiting for approval.\n\nApprove or reject: ${ORIGIN}/#/admin`);
+    expect(adminMails()[0].text).toBe(`New Birdbrain sign-up: first@example.com is waiting for approval.\n\nApprove or reject: ${ORIGIN}/#/admin/users`);
     expect(adminMails()[0].text).not.toMatch(/password|name:|id:/i);
     // the same user logging in again is not a new sign-up
     await signUpAndLogin(t, 'first@example.com');

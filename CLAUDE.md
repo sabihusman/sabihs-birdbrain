@@ -63,7 +63,11 @@ Key modules:
 - `src/api/client.ts` — bearer-token client for the API (`src/api/config.ts`
   holds the base URL from `VITE_API_BASE_URL`); `src/ui/views/account.ts`,
   `admin.ts`, `src/ui/components/ask-box.ts`, `location-block.ts`,
-  `src/geo/pluscode.ts`, `src/audio/import-cap.ts`.
+  `src/geo/pluscode.ts`, `src/audio/import-cap.ts`. `admin.ts` holds two
+  admin-only pages: `#/admin/users` (User management: approve, reset password,
+  delete; the only entry is Settings › Account › "Manage users") and `#/admin`
+  (Ask costs). Server side: `server/src/admin-users.ts` (temporary password,
+  reset through Better Auth's `$context`). See DECISIONS.md #60.
 
 Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 

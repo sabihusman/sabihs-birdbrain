@@ -730,3 +730,83 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 }
+
+test('User management: admin-only button in Settings, confirmations, plain results, fits 320 px in both themes', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e-admin', expiresAt: null, user: { id: 'a1', email: 'admin@example.com', name: 'Sabih', status: 'approved', role: 'admin' } }));
+  });
+  const users = [
+    { id: 'a1', email: 'admin@example.com', name: 'Sabih', status: 'approved', role: 'admin', emailVerified: true, createdAt: '2026-10-01T10:00:00Z' },
+    { id: 'u2', email: 'a.really.long.address.for.a.new.member@example-birding-club.org', name: 'Robin', status: 'pending', role: 'member', emailVerified: true, createdAt: '2026-10-20T10:00:00Z' },
+  ];
+  const posted: string[] = [];
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/admin\/users$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ users }) }));
+  await page.route(/\/v1\/admin\/users\/u2\/(reset-password|delete)$/, (route) => {
+    posted.push(`${new URL(route.request().url()).pathname} ${route.request().postData()}`);
+    const reset = route.request().url().endsWith('reset-password');
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, emailed: !reset }) });
+  });
+  await page.goto('./#/settings');
+  const manage = page.getByTestId('manage-users');
+  await expect(manage).toContainText('Manage users');
+  await manage.dispatchEvent('click');
+  await expect(page).toHaveURL(/#\/admin\/users$/);
+  await expect(page.getByRole('heading', { name: 'User management' })).toBeVisible();
+  const rows = page.getByTestId('admin-user');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText('(you)');
+  await expect(rows.nth(0).getByRole('button')).toHaveCount(0);
+  const robin = rows.nth(1);
+  await expect(robin).toContainText('Robin');
+  await expect(robin.getByTestId('admin-user-status')).toContainText('Waiting for approval');
+  for (const name of ['Approve', 'Reject', 'Reset password', 'Delete']) {
+    const box = await robin.getByRole('button', { name, exact: true }).boundingBox();
+    expect(box!.height, `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
+  }
+  const noScroll = async (label: string) => {
+    const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    expect(m.sw, label).toBeLessThanOrEqual(m.iw);
+  };
+  await noScroll('user list at 320px, dark');
+
+  // Reset asks first; a failed mail is said plainly.
+  await robin.getByTestId('user-reset').dispatchEvent('click');
+  await expect(robin.getByTestId('confirm-panel')).toContainText('temporary password');
+  await robin.getByTestId('confirm-reset').dispatchEvent('click');
+  await expect(page.getByTestId('admin-result')).toHaveText('Password reset, but the email could not be sent. Try again.');
+
+  // Delete stays disabled until the address is typed.
+  await rows.nth(1).getByTestId('user-delete').dispatchEvent('click');
+  const go = rows.nth(1).getByTestId('confirm-delete');
+  await expect(go).toBeDisabled();
+  await rows.nth(1).getByTestId('delete-email').fill('someone@else.org');
+  await expect(go).toBeDisabled();
+  await rows.nth(1).getByTestId('delete-email').fill(users[1].email);
+  await expect(go).toBeEnabled();
+  await noScroll('delete confirmation at 320px, dark');
+  await page.getByTestId('theme-toggle').click();
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('light');
+  await noScroll('delete confirmation at 320px, light');
+  await go.dispatchEvent('click');
+  await expect(page.getByTestId('admin-result')).toContainText('was deleted');
+  expect(posted).toEqual(['/v1/admin/users/u2/reset-password {}', `/v1/admin/users/u2/delete ${JSON.stringify({ confirm: users[1].email })}`]);
+  await expect(page.getByTestId('admin-costs-link')).toHaveAttribute('href', '#/admin');
+  await context.close();
+
+  // A member sees no button, and the page itself refuses.
+  const member = await browser.newContext({ viewport: { width: 375, height: 740 } });
+  const mp = await member.newPage();
+  await mp.addInitScript(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e-member', expiresAt: null, user: { id: 'm1', email: 'm@example.com', name: 'Mo', status: 'approved', role: 'member' } }));
+  });
+  await mp.route(/\/v1\//, (route) => route.abort());
+  await mp.goto('./#/settings');
+  await expect(mp.getByTestId('account-role')).toHaveText('Member');
+  await expect(mp.getByTestId('manage-users')).toHaveCount(0);
+  await mp.goto('./#/admin/users');
+  await expect(mp.getByTestId('admin-only')).toContainText('Only the admin can open this page.');
+  await member.close();
+});

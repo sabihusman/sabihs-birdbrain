@@ -48,8 +48,8 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 | Requirement | Status | Notes |
 | --- | --- | --- |
 | 6.1.1 Documented anti-automation | Met | This file plus Nginx: app limits 20 auth requests / 10 min per IP, 6 logins / 10 min per email, 5 code attempts per challenge; Nginx adds 6 r/min per IP with burst 5 and 3 connections per IP. |
-| 6.2.1 / 6.2.9 Password length | Met | Minimum 10, maximum 128 characters (Better Auth `minPasswordLength` / `maxPasswordLength`). |
-| 6.2.2 / 6.2.3 Password change | **Gap** | No password change or reset endpoint in this phase. Better Auth provides both; they are deliberately not exposed yet because a reset flow via email would need its own review. Users must ask the admin. |
+| 6.2.1 / 6.2.9 Password length | Met | Minimum 8, maximum 128 characters (Better Auth `minPasswordLength` / `maxPasswordLength`, mirrored by the request schema); lowered from 10 on 2026-10-21 at the owner's request (DECISIONS.md #60). Existing passwords keep working. |
+| 6.2.2 / 6.2.3 Password change | Met | `POST /v1/me/password` uses Better Auth's `changePassword` (current password required, every other session revoked, a notice mail sent). There is no self-service "forgot password" link; the admin can reset a password from User management, which mails a random temporary password to the user (see "Admin user management" below). |
 | 6.2.4 / 6.2.12 Breached-password check | **Gap** | Not implemented. Better Auth's `haveibeenpwned` plugin can add this without storing passwords; candidate for a follow-up. |
 | 6.2.5 / 6.2.8 No composition rules, exact verification | Met | Any characters; Better Auth hashes the exact string (scrypt). |
 | 6.2.6 / 6.2.7 Masked input, paste allowed | Met | `type=password`, no paste blocking. |
@@ -72,7 +72,7 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 | 7.3.1 Inactivity timeout | Met | 24 h without use expires the session. |
 | 7.3.2 Absolute maximum lifetime | **Gap** | Not enforced beyond inactivity; a continuously used session can live indefinitely. Mitigation: `disableSessionRefresh` or an absolute cap on `createdAt` can be added in a follow-up. |
 | 7.4.x Token transport | Met | Bearer header only, HTTPS only (HSTS at Nginx), never in URLs; the client stores the token in `localStorage`, which is the accepted trade-off for a cross-site PWA that cannot use cookies on iOS. XSS is mitigated by the strict CSP and by never rendering HTML from data. |
-| 7.5.x Logout and revocation | Met | `/v1/auth/logout` deletes the session; admin disable/reject deletes all of the user's sessions; expired challenges delete the session they guarded. |
+| 7.5.x Logout and revocation | Met | `/v1/auth/logout` deletes the session; admin disable/reject, an admin password reset and a password change delete all of the user's sessions (a change keeps only the new one for the device that made it); expired challenges delete the session they guarded. |
 
 ## Other controls
 
@@ -227,6 +227,36 @@ invite cap bounds growth to 10 per day).
   actually follows an injected instruction is not measured.
 - The CSP on the real Vercel edge (it was verified locally by serving the
   build with the exact `vercel.json` headers in Chromium; see `scripts/csp-check.mts`).
+
+## Admin user management (2026-10-21)
+
+`#/admin/users`, reached only from the "Manage users" row that Settings
+shows to the approved admin (DECISIONS.md #60). The app hides the page from
+everyone else ("Only the admin can open this page."), but the control is the
+server: every `/v1/admin/*` route runs `requireAdmin` (approved session with
+role `admin`) and answers 403 `forbidden` otherwise.
+
+- **Reset password** (`POST /v1/admin/users/:id/reset-password`). The server
+  draws a 16-character password from a 57-symbol alphabet with
+  `crypto.randomBytes` (rejection sampling, about 93 bits), hashes and
+  stores it through Better Auth's own context (`password.hash`,
+  `internalAdapter.updatePassword`), deletes every session with
+  `internalAdapter.deleteUserSessions` and drops any half-finished sign-in
+  code. The password is mailed to the user and nowhere else: the response
+  is `{ ok, emailed }`, nothing is logged. A mail failure keeps the reset
+  (`emailed: false`) and the page says so. Accepted risk: the temporary
+  password travels by email in clear text, the same channel that already
+  carries the sign-in code; the mail asks the user to change it at once.
+  Note that `MAIL_TRANSPORT=console` (development only) prints mail bodies,
+  this one included.
+- **Delete user** (`POST /v1/admin/users/:id/delete`, body
+  `{ confirm: <the user's email> }`). The same one-transaction wipe as
+  `/v1/me/delete` and the same confirmation mail to the deleted address.
+- **Not on the admin.** Both answer 400 `own_account` for the admin's own
+  id or any admin account, before anything changes.
+- Tests: `server/test/admin-users.test.ts` (old password and old tokens dead,
+  temporary password signs in, mail only to the user, 403 for members,
+  pending users and anonymous callers, full-table check after delete).
 
 ## Account deletion (2026-10-19)
 

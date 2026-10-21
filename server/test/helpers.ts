@@ -1,3 +1,4 @@
+import type { DatabaseSync } from 'node:sqlite';
 import { createApp, type App } from '../src/app.js';
 import type { AnswerModel } from '../src/ask.js';
 import { createAuth, migrateAuth } from '../src/auth.js';
@@ -98,4 +99,18 @@ export async function approvedMember(t: TestApp, adminToken: string, email: stri
   const token = await signUpAndLogin(t, email);
   const id = await approveByEmail(t, adminToken, email);
   return { token, id };
+}
+
+/** Every (table, column) pair whose value equals the id or address, plus the ask counter scope. */
+export function rowsReferencing(db: DatabaseSync, userId: string, email: string): string[] {
+  const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>).map((r) => r.name);
+  const hits: string[] = [];
+  for (const table of tables) {
+    const cols = (db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>).map((c) => c.name);
+    for (const col of cols) {
+      const n = db.prepare(`SELECT count(*) AS n FROM "${table}" WHERE "${col}" = ? OR lower("${col}") = lower(?) OR "${col}" = ?`).get(userId, email, `user:${userId}`) as { n: number };
+      if (Number(n.n) > 0) hits.push(`${table}.${col}=${n.n}`);
+    }
+  }
+  return hits;
 }

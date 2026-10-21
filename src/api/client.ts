@@ -167,6 +167,14 @@ export function describeApiError(e: unknown): string {
       return 'That password is wrong. Your account was not deleted.';
     case 'confirm_mismatch':
       return 'Type DELETE in capitals to confirm. Your account was not deleted.';
+    case 'wrong_current_password':
+      return 'Your current password is wrong. Nothing was changed.';
+    case 'own_account':
+      return 'You can’t reset or delete the admin account from this page.';
+    case 'no_password_account':
+      return 'This account has no password to reset.';
+    case 'forbidden':
+      return 'Only the admin can do that.';
     default:
       return `Request failed (${e.status}).`;
   }
@@ -295,6 +303,16 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     this.setSession(null);
   }
 
+  /**
+   * Change my password (the server uses Better Auth's changePassword). Every
+   * other session ends; the server hands back a new token for this device,
+   * which replaces the cached one.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const s = await this.call<StoredSession>('/v1/me/password', { currentPassword, newPassword });
+    this.setSession(s);
+  }
+
   /** Always resolves with "Invite sent" (the server never says whether the address has an account). */
   inviteFriend(email: string): Promise<{ ok: boolean; message: string }> {
     return this.call('/v1/friends/invite', { email });
@@ -330,8 +348,18 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return this.call('/v1/admin/users');
   }
 
-  adminSetStatus(id: string, action: 'approve' | 'reject' | 'disable'): Promise<{ ok: boolean; user: AuthUser }> {
+  adminSetStatus(id: string, action: 'approve' | 'reject' | 'disable'): Promise<{ ok: boolean; user: AuthUser; emailed?: boolean }> {
     return this.call(`/v1/admin/users/${encodeURIComponent(id)}/${action}`, {});
+  }
+
+  /** The server mails the user a temporary password; the admin never sees it. `emailed: false` means the reset applied but the mail failed. */
+  adminResetPassword(id: string): Promise<{ ok: boolean; emailed: boolean }> {
+    return this.call(`/v1/admin/users/${encodeURIComponent(id)}/reset-password`, {});
+  }
+
+  /** Delete the account and everything the server holds for it; `confirm` is the user's email typed again. */
+  adminDeleteUser(id: string, confirm: string): Promise<{ ok: boolean; emailed: boolean }> {
+    return this.call(`/v1/admin/users/${encodeURIComponent(id)}/delete`, { confirm });
   }
 
   /** The last 30 days of /v1/ask token and cost totals, newest first. */

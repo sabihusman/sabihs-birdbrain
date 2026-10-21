@@ -8,7 +8,7 @@ import { speciesHistoryView } from './views/species-history';
 import { mapView } from './views/map';
 import { settingsView } from './views/settings';
 import { helpView } from './views/help';
-import { adminView } from './views/admin';
+import { adminView, userManagementView } from './views/admin';
 import type { ApiClient } from '../api/client';
 import { FriendsCache } from '../species/friends';
 import { SpeciesSharer } from '../species/sharing';
@@ -55,6 +55,7 @@ function tabGroup(route: Route): string {
       return 'species';
     case 'help':
     case 'admin':
+    case 'admin-users':
       return 'settings';
     default:
       return route.name;
@@ -185,6 +186,9 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
         break;
       case 'admin':
         current = adminView(ctx);
+        break;
+      case 'admin-users':
+        current = userManagementView(ctx);
         break;
     }
     main.appendChild(current.el);

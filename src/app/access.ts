@@ -31,3 +31,15 @@ export function lockedNote(access: Exclude<MemberAccess, 'member'>, feature: str
       return `Your account cannot use ${feature}.`;
   }
 }
+
+/**
+ * The admin-only "Manage users" button and page (DECISIONS.md #60): the cached
+ * user must be the approved admin. This only decides what the app shows; the
+ * server refuses every admin endpoint to anyone else with 403.
+ */
+export function canManageUsers(user: AuthUser | null | undefined): boolean {
+  return !!user && user.role === 'admin' && user.status === 'approved';
+}
+
+/** What a non-admin sees on the admin pages. */
+export const ADMIN_ONLY_MESSAGE = 'Only the admin can open this page.';
