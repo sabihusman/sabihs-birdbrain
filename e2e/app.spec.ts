@@ -132,7 +132,8 @@ test('imports a recording, analyses it and explains an identification', async ({
 
   const why = page.getByRole('button', { name: /^Why Lesser Redpoll/ });
   await why.click();
-  await expect(page.getByText(/baseline \d+%/)).toBeVisible({ timeout: 240_000 });
+  // The result sits in the Spectrogram card and explains what the shading means (DECISIONS.md #62).
+  await expect(page.getByTestId('spectrogram-card').getByTestId('why-explanation')).toContainText('How to read it', { timeout: 240_000 });
 
   // Free user: the member-only ID card is replaced by a sign-in note.
   await page.goto('./#/species/Acanthis%20cabaret');

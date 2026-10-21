@@ -1772,3 +1772,17 @@ other open branches, so this may be renumbered at merge.)
   letting the admin type or see the new password (the admin should never hold a member's
   password); keeping users and costs on one `#/admin` page under a new heading (the page
   is long on a phone, and the request was for a dedicated page).
+
+## 62. "Why this ID" sits in the Spectrogram card, explains itself, and defaults to Medium
+
+- **Placement:** the occlusion result is drawn on the recording's spectrogram,
+  so the button and result moved from their own card into the Spectrogram
+  card, under the confidence line.
+- **Explanation:** after a run, three short lines say what was found (the
+  confidence on that window and how far it falls when its most important
+  part is silenced), how to read the coloured boxes (stronger colour = the
+  model relied on it more; clear = barely mattered; time left to right, pitch
+  low to high) and which grid was used (`src/ui/why-text.ts`).
+- **Default:** Medium (8×6, 49 runs) for everyone. Settings version 3 → 4 sets
+  it once on phones that saved settings earlier; a later choice is kept. The
+  Settings hint is one line: "Finer uses more CPU and battery; Coarse uses less."
