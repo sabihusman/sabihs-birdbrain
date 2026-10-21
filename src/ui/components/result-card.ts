@@ -1,7 +1,6 @@
 import type { Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
 import { heardLabel } from '../../species/recent';
-import { getSpeciesSummary } from '../../species/wiki';
 import { getClip } from '../../storage/db';
 import type { ViewContext } from '../app';
 import { el, pct } from '../dom';
@@ -10,25 +9,7 @@ import { timeAgo } from '../status';
 import { clipPlayer } from './clip-player';
 import { isMember } from '../../app/access';
 
-/** Sage tile with a bird outline, shown until a Wikipedia thumbnail is available (or when there is none). */
-export function birdPlaceholder(): HTMLElement {
-  const box = el('span', { class: 'result-thumb placeholder', 'aria-hidden': 'true' });
-  box.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 20c2-8 8-13 16-14-1 8-6 14-14 14H4zM4 20l6-6"/></svg>';
-  return box;
-}
-
-const thumbCache = new Map<string, Promise<string | null>>();
-/** Thumbnail URL from the cached Wikipedia summary; fetched once per species per session, never blocks the card. */
-export function speciesThumbnail(species: Species): Promise<string | null> {
-  let p = thumbCache.get(species.scientific);
-  if (!p) {
-    p = getSpeciesSummary(species)
-      .then((r) => (r.status === 'ok' && r.thumbnail ? r.thumbnail.source : null))
-      .catch(() => null);
-    thumbCache.set(species.scientific, p);
-  }
-  return p;
-}
+import { birdPlaceholder, speciesThumbnail } from './bird-thumb';
 
 export interface ResultCardOptions {
   confidence: number;

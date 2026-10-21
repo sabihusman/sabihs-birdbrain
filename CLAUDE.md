@@ -67,7 +67,7 @@ Key modules:
   admin-only pages: `#/admin/users` (User management: approve, reset password,
   delete; the only entry is Settings › Account › "Manage users") and `#/admin`
   (Ask costs). Server side: `server/src/admin-users.ts` (temporary password,
-  reset through Better Auth's `$context`). See DECISIONS.md #60.
+  reset through Better Auth's `$context`). See DECISIONS.md #61.
 
 Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 

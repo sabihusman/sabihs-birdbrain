@@ -1713,7 +1713,22 @@ other open branches, so this may be renumbered at merge.)
   three separate view modules (they share every component and state, so it would be three
   copies of the same wiring).
 
-## 60. Admin user management on its own page; 8-character passwords; reset by emailed temporary password
+## 60. Auto-save of detection windows is on by default
+
+- **Why:** members and non-members alike saw ticks on the Species tab but an
+  empty Recordings tab, because only sightings are stored by default and the
+  audio auto-save was off. Sabih asked for it on for everyone.
+- **Decision:** `autoSaveClips` defaults to `true`. Settings version 2 → 3
+  switches it on once for settings saved earlier, because a saved `false`
+  cannot be told apart from the old default; turning it off afterwards is kept
+  (version 3 values are respected). It is a per-device setting, the same for
+  signed-out, member and admin use.
+- **Cost:** each saved window is about 280 KB of browser storage (16-bit WAV,
+  3 s at 48 kHz); the existing storage-quota warning still applies.
+- **Not changed:** the 3-second window itself, which is BirdNET V2.4's fixed
+  input (144,000 samples at 48 kHz).
+
+## 61. Admin user management on its own page; 8-character passwords; reset by emailed temporary password
 
 - **Request:** Sabih (the only admin) asked for sign-off on every new account (already the
   case: Better Auth's create hook stores `pending` unless the address is `ADMIN_EMAIL`, and

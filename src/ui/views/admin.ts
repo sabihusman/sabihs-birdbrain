@@ -139,7 +139,7 @@ function errorText(e: unknown): string {
 }
 
 /**
- * User management (#/admin/users), admin only (DECISIONS.md #60): every account
+ * User management (#/admin/users), admin only (DECISIONS.md #61): every account
  * with its address, display name, status and sign-up date, and per account
  * Approve / Reject / Disable, Reset password and Delete. Each action asks first,
  * inside the row; Delete also wants the address typed again.

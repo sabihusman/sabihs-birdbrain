@@ -276,6 +276,8 @@ textarea { color: inherit; }
 .result-wrap { display: flex; flex-direction: column; gap: var(--space-1); }
 .result-card { display: flex; gap: var(--space-3); align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2); min-height: 72px; text-decoration: none; color: inherit; }
 .result-thumb { width: 64px; height: 64px; border-radius: var(--radius-control); object-fit: cover; flex: none; background: var(--sage); display: flex; align-items: center; justify-content: center; }
+.chip-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; background: var(--sage); display: flex; align-items: center; justify-content: center; }
+.chip-thumb.placeholder svg { width: 22px; height: 22px; fill: none; stroke: var(--text); stroke-width: 1.5; opacity: 0.7; }
 .result-thumb.placeholder svg { width: 32px; height: 32px; fill: none; stroke: var(--text); stroke-width: 1.5; opacity: 0.7; }
 .result-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .result-name { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-semibold); font-size: var(--text-md); overflow-wrap: anywhere; }
@@ -453,7 +455,7 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 
 /* Bottom dock: no round mic button anywhere, and the cards fill the screen. */
 .listen-dock-layout .mic-wrap { display: none; }
-/* User management (DECISIONS.md #60): long addresses wrap at 320 px; the confirmation sits inside the row. */
+/* User management (DECISIONS.md #61): long addresses wrap at 320 px; the confirmation sits inside the row. */
 .user-item { display: flex; flex-direction: column; gap: 4px; }
 .user-email, .user-name { overflow-wrap: anywhere; min-width: 0; }
 .confirm-panel { padding: 10px; border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid var(--border); }

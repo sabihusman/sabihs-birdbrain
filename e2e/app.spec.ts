@@ -103,6 +103,8 @@ test('imports a recording, analyses it and explains an identification', async ({
   await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
   await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
   await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
+  // Every species row starts with a small bird photo (placeholder until Wikipedia answers).
+  await expect(page.locator('.chip .chip-thumb').first()).toBeVisible();
   await expect(page.getByTestId('recording-detections')).toContainText('Redpoll');
 
   // Sighting card: the bird's names as the title, confidence as text, map preview above the coordinates,

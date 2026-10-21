@@ -33,7 +33,7 @@ export function lockedNote(access: Exclude<MemberAccess, 'member'>, feature: str
 }
 
 /**
- * The admin-only "Manage users" button and page (DECISIONS.md #60): the cached
+ * The admin-only "Manage users" button and page (DECISIONS.md #61): the cached
  * user must be the approved admin. This only decides what the app shows; the
  * server refuses every admin endpoint to anyone else with 403.
  */

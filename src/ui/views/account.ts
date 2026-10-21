@@ -150,7 +150,7 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
     const accountRows = [
       actionRow('Display name', { hint: u.name || u.email, testId: 'edit-name', onClick: () => nameForm(u, nameHost) }),
       actionRow('Change password', { hint: '8 to 128 characters', testId: 'change-password', onClick: () => passwordForm(nameHost) }),
-      // Admin only (DECISIONS.md #60): one entry to the user management page; Ask costs is linked from there.
+      // Admin only (DECISIONS.md #61): one entry to the user management page; Ask costs is linked from there.
       canManageUsers(u) ? linkRow('Manage users', '#/admin/users', { hint: 'Approve, reset passwords, delete accounts', testId: 'manage-users' }) : null,
     ];
 

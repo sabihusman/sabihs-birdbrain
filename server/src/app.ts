@@ -457,7 +457,7 @@ export function createApp(deps: AppDeps) {
   }
 
   /**
-   * Reset a user's password (DECISIONS.md #60): a random temporary password is
+   * Reset a user's password (DECISIONS.md #61): a random temporary password is
    * set with Better Auth's hashing, every session ends, and the password goes
    * to the user by mail only. The admin never sees it. A mail failure keeps
    * the reset and answers `emailed: false`.

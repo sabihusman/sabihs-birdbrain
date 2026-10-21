@@ -48,7 +48,7 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 | Requirement | Status | Notes |
 | --- | --- | --- |
 | 6.1.1 Documented anti-automation | Met | This file plus Nginx: app limits 20 auth requests / 10 min per IP, 6 logins / 10 min per email, 5 code attempts per challenge; Nginx adds 6 r/min per IP with burst 5 and 3 connections per IP. |
-| 6.2.1 / 6.2.9 Password length | Met | Minimum 8, maximum 128 characters (Better Auth `minPasswordLength` / `maxPasswordLength`, mirrored by the request schema); lowered from 10 on 2026-10-21 at the owner's request (DECISIONS.md #60). Existing passwords keep working. |
+| 6.2.1 / 6.2.9 Password length | Met | Minimum 8, maximum 128 characters (Better Auth `minPasswordLength` / `maxPasswordLength`, mirrored by the request schema); lowered from 10 on 2026-10-21 at the owner's request (DECISIONS.md #61). Existing passwords keep working. |
 | 6.2.2 / 6.2.3 Password change | Met | `POST /v1/me/password` uses Better Auth's `changePassword` (current password required, every other session revoked, a notice mail sent). There is no self-service "forgot password" link; the admin can reset a password from User management, which mails a random temporary password to the user (see "Admin user management" below). |
 | 6.2.4 / 6.2.12 Breached-password check | **Gap** | Not implemented. Better Auth's `haveibeenpwned` plugin can add this without storing passwords; candidate for a follow-up. |
 | 6.2.5 / 6.2.8 No composition rules, exact verification | Met | Any characters; Better Auth hashes the exact string (scrypt). |
@@ -231,7 +231,7 @@ invite cap bounds growth to 10 per day).
 ## Admin user management (2026-10-21)
 
 `#/admin/users`, reached only from the "Manage users" row that Settings
-shows to the approved admin (DECISIONS.md #60). The app hides the page from
+shows to the approved admin (DECISIONS.md #61). The app hides the page from
 everyone else ("Only the admin can open this page."), but the control is the
 server: every `/v1/admin/*` route runs `requireAdmin` (approved session with
 role `admin`) and answers 403 `forbidden` otherwise.

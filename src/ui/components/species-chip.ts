@@ -2,18 +2,22 @@ import type { Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
 import { el, pct } from '../dom';
 import { speciesHref } from '../router';
+import { birdThumb } from './bird-thumb';
 
 export interface ChipOptions {
   confidence?: number;
   outOfRange?: boolean;
   subtitle?: string;
   link?: boolean;
+  /** Small bird photo at the start of the row (default on). */
+  thumb?: boolean;
 }
 
 /** Species name next to its fixed colour; optionally with a confidence bar. Always shows the name. */
 export function speciesChip(species: Species, opts: ChipOptions = {}): HTMLElement {
   const color = speciesColor(species.scientific);
   const inner = [
+    opts.thumb === false ? null : birdThumb(species),
     el('span', { class: 'swatch', style: `background:${color.css}`, 'aria-hidden': 'true' }),
     el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, species.common), el('span', { class: 'chip-sci' }, species.scientific)),
     opts.confidence != null
