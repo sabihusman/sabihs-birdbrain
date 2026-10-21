@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from '../../app/settings';
 import { ApiError, describeApiError, type AuthUser } from '../../api/client';
 import { canManageUsers, isMember } from '../../app/access';
 import { setSharingOn } from '../../species/sharing';
@@ -264,6 +265,7 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
       try {
         if (wipe.checked) {
           await clearAllData();
+          controller.settings.update({ listenLayout: DEFAULT_SETTINGS.listenLayout }); // fresh start: default layout (DECISIONS.md #63)
           controller.emit('detections-changed', undefined);
           message = 'Sightings on this phone were cleared.';
         } else {

@@ -369,8 +369,10 @@ test('Listen layout picker: tiles select and persist, arrow keys move, height bu
   await expect(tiles).toHaveText([/^Consoli\u00AD?dated$/, 'Bottom dock', 'Focus']);
   for (const name of [/^Consolidated: /, /^Bottom dock: /, /^Focus: /]) await expect(group.getByRole('radio', { name })).toHaveAttribute('aria-checked', /true|false/);
   // Default selection and roving tabindex: the checked tile is the only one in the tab order.
-  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('tabindex', '0');
+  // First run opens in Focus (DECISIONS.md #63).
+  await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('tabindex', '0');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('tabindex', '-1');
   await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('tabindex', '-1');
   // Height budget: the whole card is no taller than 1.5× the old dropdown card at 375 px.
   const card = group.locator('xpath=ancestor::section[contains(@class, "card")][1]');

@@ -56,7 +56,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lowCut: true,
   speciesShowAll: false,
   speciesSpottedOnly: false,
-  listenLayout: 'consolidated',
+  // First run (and after the user deletes all data) opens in Focus; a chosen layout is remembered (DECISIONS.md #63).
+  listenLayout: 'focus',
 };
 
 const KEY = 'birdbrain.settings.v1';
@@ -128,7 +129,7 @@ export function sanitize(s: Settings): Settings {
     threshold,
     overlapSeconds: clamp(s.overlapSeconds, 0, 2.5, DEFAULT_SETTINGS.overlapSeconds),
     geoThreshold: clamp(s.geoThreshold, 0, 1, DEFAULT_SETTINGS.geoThreshold),
-    listenLayout: s.listenLayout === 'dock' || s.listenLayout === 'focus' ? s.listenLayout : 'consolidated',
+    listenLayout: s.listenLayout === 'dock' || s.listenLayout === 'consolidated' || s.listenLayout === 'focus' ? s.listenLayout : DEFAULT_SETTINGS.listenLayout,
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),
