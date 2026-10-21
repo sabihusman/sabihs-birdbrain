@@ -65,3 +65,14 @@ describe('SettingsStore', () => {
   });
 });
 
+
+describe('auto-save detection windows (settings version 3)', () => {
+  it('is on by default for new devices', () => {
+    expect(new SettingsStore(null).get().autoSaveClips).toBe(true);
+  });
+  it('is switched on once for settings saved before version 3, and a later "off" is kept', () => {
+    expect(migrate({ version: 2, autoSaveClips: false }).autoSaveClips).toBe(true);
+    expect(migrate({ autoSaveClips: false }).autoSaveClips).toBe(true);
+    expect(migrate({ version: 3, autoSaveClips: false }).autoSaveClips).toBe(false);
+  });
+});
