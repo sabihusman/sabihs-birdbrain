@@ -1,6 +1,31 @@
 import { devices, expect, test } from '@playwright/test';
 
 /**
+ * Most tests below were written for the Consolidated layout. The app now opens in
+ * Focus on first run (DECISIONS.md #63), so pages from the default fixture start in
+ * Consolidated unless the test stored its own settings; the first-run test below
+ * uses a fresh context to check the real default.
+ */
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+  });
+});
+
+test('first run opens Listen in Focus, and a chosen layout is kept after a reload', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'] });
+  const page = await context.newPage();
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'focus');
+  await page.goto('./#/settings');
+  await page.getByTestId('listen-layout-dock').click();
+  await page.goto('./#/listen');
+  await page.reload();
+  await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'dock');
+  await context.close();
+});
+
+/**
  * Loads the built app, waits for the BirdNET models to load inside the Web
  * Worker, then runs inference on the sample clip that ships with the official
  * BirdNET-Analyzer TF.js export (a redpoll) and checks the result.
@@ -81,7 +106,7 @@ test('tabs, settings and map render', async ({ page }) => {
 
 test('WebAssembly backend fallback loads the model and runs inference', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ backend: 'wasm' }));
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ backend: 'wasm', listenLayout: 'consolidated' }));
   });
   await page.goto('./');
   const status = page.getByTestId('model-status');
@@ -523,6 +548,8 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   // A cached admin session: the delete row must be greyed out, with the reason on the row.
   await page.addInitScript(() => {
     localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e-admin', expiresAt: null, user: { id: 'a1', email: 'admin@example.com', name: 'Sabih', status: 'approved', role: 'admin' } }));
+    // The Listen folds checked below belong to the Consolidated layout (Focus is the first-run default).
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
   });
   await page.route(/\/v1\//, (route) => route.abort());
   await page.goto('./#/settings');
