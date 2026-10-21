@@ -85,11 +85,13 @@ p { margin: 0.4em 0; }
 .tabular { font-variant-numeric: tabular-nums; }
 .app { display: flex; flex-direction: column; min-height: 100dvh; }
 .app-header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: var(--space-2); padding: calc(var(--space-2) + var(--sat)) calc(var(--space-3) + var(--sar)) var(--space-2) calc(var(--space-3) + var(--sal)); background: var(--surface); border-bottom: 1px solid var(--border); }
-.theme-toggle { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); padding: 0; }
+.theme-toggle { flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); padding: 0; }
 .theme-toggle svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .app-header img { width: 28px; height: 28px; border-radius: 7px; }
-.app-header h1 { font-size: var(--text-lg); margin: 0; flex: 1; }
-.app-header .model-pill { font-size: var(--text-xs); padding: 3px 8px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.app-header h1 { font-size: var(--text-lg); margin: 0; flex: 1; min-width: 0; }
+.app-header .model-pill { font-size: var(--text-xs); padding: 3px 8px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+/* At 320 px the title, the pill and the 44 px theme button must share the row: the pill shrinks (and clips) instead of covering the button. */
+@media (max-width: 360px) { .app-header .model-pill { padding: 3px 6px; gap: 4px; } }
 .app-header .model-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .app-header .model-pill.tone-ok::before { background: var(--ok); }
 .app-header .model-pill.tone-warn::before { background: var(--warn); }
