@@ -9,6 +9,7 @@ import type { View, ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { speciesHref } from '../router';
 import { locationBlock } from '../components/location-block';
+import { speciesChip } from '../components/species-chip';
 import { cssToken } from '../../theme/theme';
 
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -79,7 +80,10 @@ function popupFor(s: SightingRecord, controller: AppController, colorCss: string
   const popup = el(
     'div',
     null,
-    el('div', { class: 'chip', style: 'margin-bottom:6px' }, el('span', { class: 'swatch', style: `background:${color.css}` }), el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, sp?.common ?? s.common), el('span', { class: 'chip-sci' }, s.scientific))),
+    // Same row as everywhere else (bird photo, colour, names); a plain row only for a species missing from the label list.
+    sp
+      ? speciesChip(sp, { link: false })
+      : el('div', { class: 'chip' }, el('span', { class: 'swatch', style: `background:${color.css}` }), el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, s.common), el('span', { class: 'chip-sci' }, s.scientific))),
     el('div', { class: 'small' }, describeSighting(s)),
     locationBlock(s.lat!, s.lon!, { accuracy: s.accuracy, fixTime: s.fixTime ?? null, time: s.firstTime, compact: true }),
     el('div', null, el('a', { href: speciesHref(s.scientific) }, 'Open species page')),
