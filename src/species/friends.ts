@@ -65,9 +65,21 @@ export function fmtDay(day: string): string {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(undefined, { dateStyle: 'medium' });
 }
 
+/** Waits between refresh attempts after a failure, in milliseconds (DECISIONS.md #64). */
+export const REFRESH_BACKOFF_MS = [2_000, 8_000, 30_000] as const;
+
+/** What to tell a member when the list could not be refreshed. */
+export function describeRefreshFailure(message: string): string {
+  return /\b429\b|rate/i.test(message) ? 'The server was busy; friends’ birds may be out of date. Trying again…' : `Couldn’t refresh friends’ birds: ${message}`;
+}
+
 export class FriendsCache extends Emitter<{ change: Map<string, SpottedBy[]> }> {
   private index = new Map<string, SpottedBy[]>();
   private friends: FriendSpecies[] = [];
+  /** Null while the last refresh succeeded; otherwise what to show the member. */
+  lastError: string | null = null;
+  private retries = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private userId: string | null = null;
   private loading: Promise<void> | null = null;
   private readonly unsub: () => void;
@@ -79,7 +91,11 @@ export class FriendsCache extends Emitter<{ change: Map<string, SpottedBy[]> }> 
   ) {
     super();
     this.load();
-    this.unsub = api.on('change', () => this.load());
+    void this.refresh();
+    this.unsub = api.on('change', () => {
+      this.load();
+      void this.refresh();
+    });
   }
 
   /** Available only to a signed-in approved member; empty otherwise (and after sign-out). */
@@ -102,21 +118,53 @@ export class FriendsCache extends Emitter<{ change: Map<string, SpottedBy[]> }> 
     return this.available ? this.friends.length : 0;
   }
 
-  /** Fetch when online and a member; otherwise keep what is cached. Resolves either way. */
+  /**
+   * Fetch when online and a member; otherwise keep what is cached. Resolves either way.
+   * A failure is remembered in `lastError` (the Species tab says so) and retried with a
+   * backoff, because a refused call used to leave a stale list and no explanation at all.
+   */
   async refresh(): Promise<void> {
     if (!this.available || !this.online()) return;
     if (this.loading) return this.loading;
+    this.clearRetry();
     this.loading = (async () => {
       try {
         const res = await this.api.friendsSpecies();
+        this.retries = 0;
+        this.lastError = null;
         this.set(res.friends, true);
-      } catch {
-        /* offline or server down: the cached copy stays */
+      } catch (e) {
+        // Offline or server down: the cached copy stays, but say so and try again.
+        this.lastError = describeRefreshFailure((e as Error).message);
+        this.scheduleRetry();
+        this.emit('change', this.index);
       } finally {
         this.loading = null;
       }
     })();
     return this.loading;
+  }
+
+  /** Stop any pending retry; call when the view goes away. */
+  dispose(): void {
+    this.clearRetry();
+    this.unsub();
+  }
+
+  private clearRetry(): void {
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  private scheduleRetry(): void {
+    const wait = REFRESH_BACKOFF_MS[Math.min(this.retries, REFRESH_BACKOFF_MS.length - 1)];
+    this.retries += 1;
+    if (this.retries > REFRESH_BACKOFF_MS.length) return; // tried enough; the next tab open retries
+    this.clearRetry();
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.refresh();
+    }, wait);
   }
 
   private set(friends: FriendSpecies[], persist: boolean): void {
@@ -160,9 +208,6 @@ export class FriendsCache extends Emitter<{ change: Map<string, SpottedBy[]> }> 
     this.set(cached, false);
   }
 
-  dispose(): void {
-    this.unsub();
-  }
 }
 
 function isFriendSpecies(x: unknown): x is FriendSpecies {

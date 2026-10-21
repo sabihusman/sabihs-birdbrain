@@ -14,7 +14,7 @@ import { switchRow, textRow } from './rows';
 /** One line under the sharing switch. */
 export function shareStatusText(enabled: boolean, lastError: string | null): string {
   if (!enabled) return 'Sharing is off. Nothing about your sightings is on the server.';
-  if (lastError) return `Sharing is on, but the last upload failed: ${lastError}. It retries after your next sighting.`;
+  if (lastError) return `Sharing is on, but the last upload failed: ${lastError}. Trying again shortly; your next sighting also retries.`;
   return 'Sharing is on. Your list is updated after each new sighting.';
 }
 

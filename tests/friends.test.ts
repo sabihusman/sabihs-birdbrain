@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApiClient, SESSION_KEY, type AuthUser, type FriendSpecies } from '../src/api/client';
-import { describeSpottedBy, fmtDay, FriendsCache, friendsKey, indexFriendsSpecies } from '../src/species/friends';
+import { describeRefreshFailure, describeSpottedBy, fmtDay, FriendsCache, friendsKey, indexFriendsSpecies, REFRESH_BACKOFF_MS } from '../src/species/friends';
 import { MemoryStorage } from './helpers/memory-storage';
 
 const member = { id: 'u1', email: 'a@b.co', name: 'Alex', status: 'approved' as const, role: 'member' as const };
@@ -85,6 +85,44 @@ describe('FriendsCache', () => {
     expect(store.getItem(friendsKey('u1'))).toBeNull();
     cache.dispose();
     again.dispose();
+  });
+
+  it('says so and retries when the refresh is refused, instead of showing a stale list in silence', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const calls: string[] = [];
+      let status = 429;
+      const fetchImpl: typeof fetch = async (input) => {
+        calls.push(String(input));
+        return status === 429
+          ? new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json' } })
+          : new Response(JSON.stringify({ friends: DATA }), { status: 200, headers: { 'content-type': 'application/json' } });
+      };
+      const api = new ApiClient('https://api.test', session(member), fetchImpl);
+      const cache = new FriendsCache(api, new MemoryStorage(), () => true);
+      // The cache refreshes itself, so a copy written before a new friendship is not kept until
+      // the Species tab happens to be opened.
+      await vi.waitFor(() => expect(cache.lastError).toMatch(/server was busy/));
+      expect(calls).toHaveLength(1);
+      // First retry after the first backoff step; it succeeds and clears the message.
+      status = 200;
+      await vi.advanceTimersByTimeAsync(REFRESH_BACKOFF_MS[0] + 1);
+      await vi.waitFor(() => expect(cache.lastError).toBeNull());
+      expect(calls).toHaveLength(2);
+      expect(cache.spottedBy('Turdus merula').map((r) => r.name)).toEqual(['Riley', 'Sam']);
+      cache.dispose();
+      // Nothing is left ticking after dispose.
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('words a rate-limited refresh differently from any other failure', () => {
+    expect(describeRefreshFailure('rate_limited (429)')).toMatch(/server was busy/);
+    expect(describeRefreshFailure('Rate limit')).toMatch(/server was busy/);
+    expect(describeRefreshFailure('Failed to fetch')).toBe('Couldn’t refresh friends’ birds: Failed to fetch');
   });
 
   it('ignores a malformed stored copy and a failing server', async () => {

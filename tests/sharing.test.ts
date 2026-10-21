@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient, SESSION_KEY, type AuthUser } from '../src/api/client';
 import { Emitter } from '../src/shared/emitter';
-import { buildSharedSpeciesList, isSharingOn, localDay, setSharingOn, SHARING_CONSENT_TEXT, SpeciesSharer, UPLOAD_DEBOUNCE_MS } from '../src/species/sharing';
+import { buildSharedSpeciesList, isSharingOn, localDay, setSharingOn, SHARING_CONSENT_TEXT, SpeciesSharer, UPLOAD_BACKOFF_MS, UPLOAD_DEBOUNCE_MS } from '../src/species/sharing';
 import { clearAllData, recordDetections } from '../src/storage/db';
 import type { DetectionRecord } from '../src/storage/types';
 import { MemoryStorage } from './helpers/memory-storage';
@@ -136,6 +136,32 @@ describe('SpeciesSharer', () => {
     await settle();
     expect(calls).toHaveLength(2);
     sharer.dispose();
+  });
+
+  it('retries a refused upload and reports it until one succeeds', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(SESSION_KEY, JSON.stringify({ token: 't', expiresAt: null, user: member }));
+    setSharingOn(member.id, true, storage);
+    const calls: Array<{ url: string; body: unknown }> = [];
+    let status = 429;
+    const api = new ApiClient('https://api.test', storage, async (input, init) => {
+      calls.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      return new Response(JSON.stringify(status === 429 ? { error: 'rate_limited' } : { ok: true, count: 0 }), { status, headers: { 'content-type': 'application/json' } });
+    });
+    const sharer = new SpeciesSharer(api, new Emitter<{ 'detections-changed': undefined }>(), storage, () => true);
+    await settle();
+    // The refused upload is remembered (Settings shows the line) rather than dropped.
+    expect(calls).toHaveLength(1);
+    expect(sharer.lastError).toBeTruthy();
+    status = 200;
+    await vi.advanceTimersByTimeAsync(UPLOAD_BACKOFF_MS[0] + 1);
+    await settle();
+    expect(calls).toHaveLength(2);
+    expect(sharer.lastError).toBeNull();
+    sharer.dispose();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await settle();
+    expect(calls).toHaveLength(2);
   });
 
   it('the consent does not follow the session to another account', async () => {

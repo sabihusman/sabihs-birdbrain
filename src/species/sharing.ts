@@ -81,8 +81,13 @@ export function buildSharedSpeciesList(sightings: readonly Pick<SightingRecord, 
  * the server copy immediately. Failures are swallowed (the next change
  * retries); nothing is uploaded while signed out or not yet approved.
  */
+/** Waits between upload attempts after a failure, in milliseconds (DECISIONS.md #64). */
+export const UPLOAD_BACKOFF_MS = [3_000, 15_000, 60_000] as const;
+
 export class SpeciesSharer {
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retries = 0;
   private dirty = false;
   private inFlight: Promise<void> | null = null;
   private readonly unsubs: Array<() => void> = [];
@@ -154,8 +159,12 @@ export class SpeciesSharer {
         const list = buildSharedSpeciesList(await listSightings());
         await this.api.uploadSharedSpecies(list);
         this.lastError = null;
+        this.retries = 0;
       } catch (e) {
+        // A refused upload (the server's rate limit, a flaky connection) used to be dropped
+        // silently, so a friend simply never appeared. Say so and try again (DECISIONS.md #64).
         this.lastError = (e as Error).message;
+        this.scheduleRetry();
       } finally {
         this.inFlight = null;
       }
@@ -169,8 +178,22 @@ export class SpeciesSharer {
     this.timer = null;
   }
 
+  /** Try again after a failure, a few times, with growing waits. */
+  private scheduleRetry(): void {
+    if (this.retries >= UPLOAD_BACKOFF_MS.length) return; // the next sighting or sign-in retries
+    const wait = UPLOAD_BACKOFF_MS[this.retries];
+    this.retries += 1;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.syncNow();
+    }, wait);
+  }
+
   dispose(): void {
     this.cancel();
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     for (const u of this.unsubs.splice(0)) u();
   }
 }

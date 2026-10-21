@@ -50,6 +50,8 @@ export function speciesListView(ctx: ViewContext): View {
   // "Spotted by friends": species any accepted friend has shared (DECISIONS.md #44). Members only; the chip hides otherwise.
   let friendsOnly = false;
   const friendsCount = el('span', { class: 'filter-chip-count' }, '');
+  /** Says so when friends' birds could not be refreshed, instead of quietly showing a stale list. */
+  const friendsNote = el('p', { class: 'small muted', 'data-testid': 'friends-note', hidden: true }, '');
   const friendsChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': 'false', 'data-testid': 'friends-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '👥'), 'Spotted by friends', friendsCount);
   friendsChip.addEventListener('click', () => {
     friendsOnly = !friendsOnly;
@@ -112,6 +114,8 @@ export function speciesListView(ctx: ViewContext): View {
     friendsChip.style.display = ctx.friends.available ? '' : 'none';
     friendsChip.setAttribute('aria-pressed', String(friendsOnly));
     friendsCount.textContent = scope.friendsCount;
+    friendsNote.textContent = ctx.friends.available ? (ctx.friends.lastError ?? '') : '';
+    friendsNote.hidden = friendsNote.textContent === '';
     spottedCount.textContent = scope.spottedCount;
     localLine.textContent = scope.line;
     note.textContent = scope.note ?? '';
@@ -136,7 +140,7 @@ export function speciesListView(ctx: ViewContext): View {
   refreshSpotted();
   void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list. A tick marks a species you have a sighting of; it stays on this device.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list. A tick marks a species you have a sighting of; it stays on this device.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {

@@ -3,7 +3,17 @@
 # Birdbrain API only. Never merge with the mba-vault or sentinel files.
 # Never claims default_server: the catch-all in sites-available/mba-vault owns it.
 # Zones must be declared at http level; sites-enabled files are included inside http {}.
-limit_req_zone  $binary_remote_addr zone=birdbrain:10m      rate=6r/m;
+# The API. 6r/m with a burst of 5 was too tight for the app itself: signing in, opening the
+# Species tab and saving a sighting each fire several calls within a second, and the refill of
+# one request per ten seconds never caught up, so real calls were refused with 429 (seen on
+# 2026-10-21: friends/species, auth/refresh and the shared-species upload). Those failures are
+# silent by design, which made "Spotted by friends" look broken.
+#
+# 1 r/s with a burst of 20 covers every burst the app makes (the busiest second observed was 4
+# requests, and the whole service sees about 130 calls a day), and still caps a flood. The real
+# protection for sign-in lives in the API itself and is unchanged: 20 auth attempts per IP per
+# 10 minutes, 6 per email address, and 5 tries on a 6-digit code before it is burned.
+limit_req_zone  $binary_remote_addr zone=birdbrain:10m      rate=60r/m;
 limit_conn_zone $binary_remote_addr zone=birdbrain_conn:10m;
 
 # The BirdNET model files (/models/, see below) are static and downloaded in a burst of
@@ -58,9 +68,10 @@ server {
     ssl_prefer_server_ciphers off;
 
     # Abuse limits (the app has its own on top).
-    limit_req zone=birdbrain burst=5 nodelay;
+    limit_req zone=birdbrain burst=20 nodelay;
     limit_req_status 429;
-    limit_conn birdbrain_conn 3;
+    # HTTP/2 counts every stream, and a phone opens several calls at once.
+    limit_conn birdbrain_conn 10;
     limit_conn_status 429;
     client_max_body_size 16k;
 

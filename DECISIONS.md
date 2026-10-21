@@ -1800,3 +1800,32 @@ other open branches, so this may be renumbered at merge.)
 - **Not migrated:** phones already in use keep their stored layout, because a
   stored value cannot be told apart from a choice and the request was about
   first-time use.
+
+## 64. The API's nginx rate limit is a coarse guard, and a refused sync says so
+
+- **Bug:** "Spotted by friends" stayed at 0 for two members who had both turned
+  sharing on. The friendship and the server query were fine. Two things hid it:
+  nginx refused real calls, and the app treated a refusal as nothing at all.
+- **Measured first.** The vhost had `rate=6r/m burst=5`, written for abuse, not
+  for use. On 2026-10-21 that refused `/v1/friends/species` (5×), the token
+  refresh (5×) and the shared-species upload (2×). Real traffic is about 130
+  `/v1/` calls a day from two phones, and the busiest single second was four
+  requests — a phone opens several calls at once when a screen loads, and
+  HTTP/2 counts every stream against `limit_conn` (the same trap as #62).
+- **Decision:** the vhost is now `rate=60r/m`, `burst=20 nodelay`,
+  `limit_conn 10`, with `limit_req_status 429`. That is still far below what a
+  flood looks like, and it leaves the API's own limits as the real guard
+  (`authByIp` 20 per 10 min, `loginByEmail` 6 per window, `askByIp` 10/min,
+  5 code attempts) — those are unchanged, because they protect the mailbox and
+  the AI bill, which nginx cannot see. Applied live with `nginx -t` and a
+  reload (never a restart); `verify.sh` clean before and after.
+- **No silent failures:** `FriendsCache.refresh()` records `lastError` and the
+  Species tab shows it under the chips ("The server was busy; friends’ birds
+  may be out of date. Trying again…" for a 429, the message itself otherwise),
+  and both the refresh and the shared-species upload retry with a backoff
+  (`REFRESH_BACKOFF_MS` 2/8/30 s, `UPLOAD_BACKOFF_MS` 3/15/60 s) instead of
+  waiting for the next tab open or the next sighting. The cache also refreshes
+  when it is created and when the session changes, which is what left a copy
+  written *before* a friendship in place for hours.
+- **Not done:** no retry loop beyond three attempts (the next tab open or
+  sighting retries anyway), and nothing new is sent to the server.
