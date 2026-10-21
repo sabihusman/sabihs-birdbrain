@@ -76,3 +76,20 @@ describe('auto-save detection windows (settings version 3)', () => {
     expect(migrate({ version: 3, autoSaveClips: false }).autoSaveClips).toBe(false);
   });
 });
+
+describe('Listen layout default (DECISIONS.md #63)', () => {
+  it('opens in Focus on first run and when stored settings are gone', () => {
+    expect(new SettingsStore(null).get().listenLayout).toBe('focus');
+    expect(new SettingsStore(new MemoryStorage()).get().listenLayout).toBe('focus');
+  });
+  it('remembers a chosen layout across visits', () => {
+    const storage = new MemoryStorage();
+    new SettingsStore(storage).update({ listenLayout: 'dock' });
+    expect(new SettingsStore(storage).get().listenLayout).toBe('dock');
+    new SettingsStore(storage).update({ listenLayout: 'consolidated' });
+    expect(new SettingsStore(storage).get().listenLayout).toBe('consolidated');
+  });
+  it('falls back to Focus for an unknown stored value', () => {
+    expect(sanitize({ ...DEFAULT_SETTINGS, listenLayout: 'grid' as never }).listenLayout).toBe('focus');
+  });
+});

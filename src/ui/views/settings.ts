@@ -1,7 +1,7 @@
 import { sightingsToCsv } from '../../export/csv';
 import { downloadBlob, timestampForFilename } from '../../export/download';
 import { sightingsToGeoJson } from '../../export/geojson';
-import type { BackendPreference, LocationMode, OcclusionResolution } from '../../app/settings';
+import { DEFAULT_SETTINGS, type BackendPreference, type LocationMode, type OcclusionResolution } from '../../app/settings';
 import { clearAllData, countDetections, countSightings, listSightings } from '../../storage/db';
 import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
@@ -104,6 +104,8 @@ export function settingsView(ctx: ViewContext): View {
   clearBtn.addEventListener('click', async () => {
     if (!confirm('Delete every recording, detection and cached species page on this device? This cannot be undone.')) return;
     await clearAllData();
+    // A fresh start opens in the default Listen layout again (DECISIONS.md #63).
+    controller.settings.update({ listenLayout: DEFAULT_SETTINGS.listenLayout });
     controller.emit('detections-changed', undefined);
     ctx.notify({ kind: 'info', text: 'All data deleted.' });
     void refreshStorage();

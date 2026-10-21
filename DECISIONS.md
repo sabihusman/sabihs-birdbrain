@@ -1786,3 +1786,17 @@ other open branches, so this may be renumbered at merge.)
 - **Default:** Medium (8×6, 49 runs) for everyone. Settings version 3 → 4 sets
   it once on phones that saved settings earlier; a later choice is kept. The
   Settings hint is one line: "Finer uses more CPU and battery; Coarse uses less."
+
+## 63. Listen opens in Focus on first run; a chosen layout is remembered
+
+- **Request:** first-time users, and anyone who deletes all their data, start
+  in the Focus layout; a layout the user picks is kept for later visits.
+- **Decision:** `listenLayout` defaults to `'focus'` (an unknown stored value
+  also falls back to it). The choice is stored with the other settings in
+  localStorage, so it survives reloads and app restarts. Both "delete all
+  data" paths (Settings › Data, and the after-deletion "Also clear sightings
+  saved on this phone") set it back to Focus; clearing site data in the
+  browser removes the settings and therefore also starts in Focus.
+- **Not migrated:** phones already in use keep their stored layout, because a
+  stored value cannot be told apart from a choice and the request was about
+  first-time use.
