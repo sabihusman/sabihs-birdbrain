@@ -34,7 +34,7 @@ export interface Settings {
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 /** Default confidence threshold before version 2; a saved 25 % is migrated once to the new default. */
 export const LEGACY_DEFAULT_THRESHOLD = 0.25;
 
@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   manualLon: null,
   geoThreshold: GEO_FILTER_THRESHOLD,
   useWeek: true,
-  autoSaveClips: false,
+  autoSaveClips: true,
   autoSaveMinConfidence: 0.6,
   backend: 'auto',
   occlusionResolution: 'coarse',
@@ -102,11 +102,16 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
  * Version 1 (or none) → 2: a saved threshold equal to the old default (25 %)
  * becomes the new default (60 %); any other value was chosen by the user and
  * stays. Once stamped with version 2, a threshold of 25 % is a choice too.
+ * Version 2 → 3: auto-saving 3-second detection windows is switched on once
+ * (new default for everyone); turning it off afterwards is kept.
  */
 export function migrate(parsed: Partial<Settings>): Settings {
   const stored = { ...DEFAULT_SETTINGS, ...parsed };
   const from = typeof parsed.version === 'number' ? parsed.version : 1;
   if (from < 2 && parsed.threshold === LEGACY_DEFAULT_THRESHOLD) stored.threshold = DEFAULT_SETTINGS.threshold;
+  // Version 3: auto-saving detection windows became the default for everyone, so it is switched on once for
+  // settings saved earlier (the old default was off and saved settings cannot tell a choice from the default).
+  if (from < 3) stored.autoSaveClips = true;
   stored.version = SETTINGS_VERSION;
   return stored;
 }
