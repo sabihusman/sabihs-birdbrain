@@ -33,7 +33,7 @@ export function authOptions(db: DatabaseSync, config: Config) {
     emailAndPassword: {
       enabled: true,
       autoSignIn: false,
-      minPasswordLength: 10,
+      minPasswordLength: 8,
       maxPasswordLength: 128,
     },
     session: {

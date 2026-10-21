@@ -1,5 +1,5 @@
 import { ApiError, describeApiError, type AuthUser } from '../../api/client';
-import { isMember } from '../../app/access';
+import { canManageUsers, isMember } from '../../app/access';
 import { setSharingOn } from '../../species/sharing';
 import { clearAllData } from '../../storage/db';
 import type { ViewContext } from '../app';
@@ -106,11 +106,52 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
     input.focus();
   };
 
+  /** Change my password: the current one, then the new one twice. Other devices are signed out. */
+  const passwordForm = (host: HTMLElement) => {
+    const current = el('input', { type: 'password', autocomplete: 'current-password', required: true, maxlength: '128', 'aria-label': 'Current password', 'data-testid': 'current-password' });
+    const next = el('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: '8', maxlength: '128', 'aria-label': 'New password (8+ characters)', 'data-testid': 'new-password' });
+    const again = el('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: '8', maxlength: '128', 'aria-label': 'New password again', 'data-testid': 'new-password-again' });
+    const save = el('button', { class: 'btn small primary', type: 'submit' }, 'Change password');
+    const cancel = el('button', { class: 'btn small', type: 'button' }, 'Cancel');
+    const form = el(
+      'form',
+      { class: 'stack name-form', 'data-testid': 'password-form' },
+      el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'Current password (or the temporary one from the email)'), current),
+      el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'New password (8+ characters)'), next),
+      el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'New password again'), again),
+      el('div', { class: 'row' }, save, cancel),
+    );
+    const match = () => again.setCustomValidity(again.value && again.value !== next.value ? 'The two new passwords are different.' : '');
+    next.addEventListener('input', match);
+    again.addEventListener('input', match);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      match();
+      if (!form.reportValidity() || busy) return;
+      busy = true;
+      save.disabled = true;
+      try {
+        await api.changePassword(current.value, next.value);
+        message = 'Password changed. Other devices were signed out.';
+      } catch (err) {
+        message = describeApiError(err);
+      } finally {
+        busy = false;
+        render();
+      }
+    });
+    cancel.addEventListener('click', () => render());
+    host.replaceChildren(form);
+    current.focus();
+  };
+
   const renderSignedIn = (u: AuthUser) => {
     const nameHost = el('div', { class: 'stack name-host' });
     const accountRows = [
       actionRow('Display name', { hint: u.name || u.email, testId: 'edit-name', onClick: () => nameForm(u, nameHost) }),
-      u.role === 'admin' ? linkRow('Admin page', '#/admin', { hint: 'Approve members and see costs', testId: 'admin-link' }) : null,
+      actionRow('Change password', { hint: '8 to 128 characters', testId: 'change-password', onClick: () => passwordForm(nameHost) }),
+      // Admin only (DECISIONS.md #61): one entry to the user management page; Ask costs is linked from there.
+      canManageUsers(u) ? linkRow('Manage users', '#/admin/users', { hint: 'Approve, reset passwords, delete accounts', testId: 'manage-users' }) : null,
     ];
 
     const groups: Array<HTMLElement | null> = [identityCard(u), el('div', { class: 'small', 'data-testid': 'account-status' }, statusText(u)), rowGroup(null, ...accountRows), nameHost];
@@ -239,7 +280,7 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
 
   const renderSignedOut = () => {
     const email = el('input', { type: 'email', autocomplete: 'email', placeholder: 'Email', required: true, 'aria-label': 'Email' });
-    const password = el('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Password (10+ characters)', minlength: '10', required: true, 'aria-label': 'Password' });
+    const password = el('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Password (8+ characters)', minlength: '8', required: true, 'aria-label': 'Password' });
     const signIn = el('button', { class: 'btn primary', type: 'submit' }, 'Sign in');
     const signUp = el('button', { class: 'btn', type: 'button' }, 'Create account');
     const form = el(

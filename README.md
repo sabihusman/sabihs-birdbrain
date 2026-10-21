@@ -130,7 +130,11 @@ The name is always shown next to the colour.
 - **Accounts (optional):** email + password + emailed code; approved members
   can ask AI questions about a species (on the species page and on each
   sighting card), answered only from its Wikipedia article with section
-  citations; Sabih approves members on an admin page.
+  citations; Sabih approves members on a User management page (Settings ›
+  Account › Manage users, admin only), where he can also reset a member's
+  password (a temporary one is emailed to them) or delete an account.
+  Passwords are 8 to 128 characters and can be changed under Settings ›
+  Account › Change password.
 - **Species:** offline browser of the BirdNET classes, listing by default the
   species the location model expects near you in some week of the year
   ("312 local species · 6,511 total", with a "Show all species" toggle and a

@@ -34,4 +34,5 @@ export async function readJson<T extends z.ZodTypeAny>(c: Context, schema: T): P
 }
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
-export const passwordSchema = z.string().min(10).max(128);
+/** 8 to 128 characters (DECISIONS.md #61); Better Auth enforces the same bounds. */
+export const passwordSchema = z.string().min(8).max(128);

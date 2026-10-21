@@ -1,40 +1,41 @@
-import { describeApiError, type AdminUser, type AskCostDay, type AskCostSummary } from '../../api/client';
+import { ApiError, describeApiError, type AdminUser, type AskCostDay, type AskCostSummary } from '../../api/client';
+import { ADMIN_ONLY_MESSAGE, canManageUsers } from '../../app/access';
 import type { View, ViewContext } from '../app';
-import { el, fmtDateTime } from '../dom';
+import { linkRow, rowGroup } from '../components/rows';
+import { el } from '../dom';
 
+/** Shown instead of either admin page to anyone but the approved admin; the server answers 403 regardless. */
+function adminOnly(title: string): HTMLElement {
+  return el('section', { class: 'card', 'data-testid': 'admin-only' }, el('h2', null, title), el('p', null, ADMIN_ONLY_MESSAGE), el('a', { class: 'btn small', href: '#/settings' }, 'Go to Settings'));
+}
+
+/** Ask costs (#/admin): provider totals, the monthly Gemini cap and the per-day spend. Reached from User management. */
 export function adminView(ctx: ViewContext): View {
   const { api } = ctx;
   const root = el('div', null);
-  const list = el('div', { class: 'list', 'data-testid': 'admin-users' });
-  const status = el('div', { class: 'small muted' }, '');
   const costStatus = el('div', { class: 'small muted' }, '');
   const capLine = el('p', { class: 'cap-line', 'data-testid': 'admin-gemini-cap' }, '');
   const costTable = el('div', { class: 'table-wrap', 'data-testid': 'admin-ask-costs' });
   const providerTable = el('div', { class: 'table-wrap', 'data-testid': 'admin-ask-providers' });
 
   const load = async () => {
-    const me = api.user;
-    if (!me || me.role !== 'admin' || me.status !== 'approved') {
-      root.replaceChildren(el('section', { class: 'card' }, el('h2', null, 'Admin'), el('p', null, 'Sign in as the admin account from Settings to manage members.'), el('a', { class: 'btn small', href: '#/settings' }, 'Go to Settings')));
+    if (!canManageUsers(api.user)) {
+      root.replaceChildren(adminOnly('Ask costs'));
       return;
     }
     root.replaceChildren(
-      el('section', { class: 'card' }, el('h2', null, 'Members'), el('p', { class: 'small muted' }, 'Approve people you know. Rejecting or disabling signs them out everywhere.'), status),
-      list,
+      el('div', { class: 'row' }, el('a', { class: 'btn small', href: '#/admin/users', 'data-testid': 'to-user-management' }, '‹ User management')),
       el('section', { class: 'card' }, el('h2', null, 'Ask costs'), el('p', { class: 'small muted' }, 'Which service answered over the last 30 days, then the estimated Gemini spend per UTC day from token counts and list prices. Ollama Cloud usage counts against its plan allowance, not a price. Cache hits cost nothing.'), providerTable, capLine, costStatus, costTable),
     );
-    status.textContent = 'Loading…';
     costStatus.textContent = 'Loading…';
-    const [usersResult, costsResult] = await Promise.allSettled([api.adminListUsers(), api.adminAskCosts()]);
-    if (usersResult.status === 'fulfilled') {
-      render(usersResult.value.users);
-      status.textContent = `${usersResult.value.users.length} account${usersResult.value.users.length === 1 ? '' : 's'}`;
-    } else status.textContent = describeApiError(usersResult.reason);
-    if (costsResult.status === 'fulfilled') {
-      renderProviders(costsResult.value);
-      renderCosts(costsResult.value.model, costsResult.value.days);
-      renderCap(costsResult.value.month);
-    } else costStatus.textContent = describeApiError(costsResult.reason);
+    try {
+      const summary = await api.adminAskCosts();
+      renderProviders(summary);
+      renderCosts(summary.model, summary.days);
+      renderCap(summary.month);
+    } catch (e) {
+      costStatus.textContent = describeApiError(e);
+    }
   };
 
   /** One row per provider: answers given, how many came after a fallback, tokens. */
@@ -73,34 +74,188 @@ export function adminView(ctx: ViewContext): View {
     costTable.appendChild(el('table', { class: 'cost-table' }, el('thead', null, row(['Day', 'Calls', 'Cached', 'Prompt tokens', 'Output tokens', 'USD'], 'th')), body));
   };
 
-  const render = (users: AdminUser[]) => {
-    list.replaceChildren();
-    for (const u of users) {
-      const actions = el('div', { class: 'row' });
-      const mk = (label: string, action: 'approve' | 'reject' | 'disable', cls = '') => {
-        const b = el('button', { class: `btn small ${cls}`, type: 'button' }, label);
-        b.addEventListener('click', async () => {
-          b.disabled = true;
-          try {
-            await api.adminSetStatus(u.id, action);
-            await load();
-          } catch (e) {
-            status.textContent = describeApiError(e);
-            b.disabled = false;
-          }
-        });
-        return b;
-      };
-      const self = u.id === api.user?.id;
-      if (!self) {
-        if (u.status !== 'approved') actions.appendChild(mk('Approve', 'approve', 'primary'));
-        if (u.status === 'pending') actions.appendChild(mk('Reject', 'reject', 'danger'));
-        if (u.status === 'approved') actions.appendChild(mk('Disable', 'disable', 'danger'));
-      }
-      list.appendChild(el('div', { class: 'list-item' }, el('div', { class: 'title' }, u.email, self ? ' (you)' : ''), el('div', { class: 'small muted' }, `${u.status} · ${u.role} · joined ${fmtDateTime(new Date(u.createdAt).getTime())}${u.emailVerified ? '' : ' · email not yet confirmed'}`), actions));
+  void load();
+  const unsub = api.on('change', () => void load());
+  return { el: root, dispose: unsub };
+}
+
+export type UserAction = 'approve' | 'reject' | 'disable' | 'reset' | 'delete';
+
+/** The buttons a user row gets, by status; none for the admin's own account. */
+export function userActions(u: Pick<AdminUser, 'status' | 'role'>, self: boolean): UserAction[] {
+  if (self || u.role === 'admin') return [];
+  const out: UserAction[] = [];
+  if (u.status !== 'approved') out.push('approve');
+  if (u.status === 'pending') out.push('reject');
+  if (u.status === 'approved') out.push('disable');
+  out.push('reset', 'delete');
+  return out;
+}
+
+export const ACTION_LABEL: Record<UserAction, string> = { approve: 'Approve', reject: 'Reject', disable: 'Disable', reset: 'Reset password', delete: 'Delete' };
+
+/** The question asked before each action, in plain words. */
+export function confirmText(action: UserAction, email: string): string {
+  switch (action) {
+    case 'approve':
+      return `Approve ${email}? They get member features the next time they sign in, and an email saying so.`;
+    case 'reject':
+      return `Reject ${email}? They are signed out and cannot use member features.`;
+    case 'disable':
+      return `Disable ${email}? They are signed out everywhere and cannot sign in until you approve them again.`;
+    case 'reset':
+      return `Reset the password for ${email}? They get an email with a temporary password and are signed out everywhere. You will not see the password.`;
+    case 'delete':
+      return `Delete ${email} for good? Their sign-in, sessions, friends, invites and shared species list are removed at once. There is no undo. Type their email to confirm.`;
+  }
+}
+
+/** What happened, in plain words, after a successful action. */
+export function resultText(action: UserAction, email: string, emailed?: boolean): string {
+  switch (action) {
+    case 'approve':
+      return emailed === false ? `${email} is approved, but the email could not be sent.` : `${email} is approved.`;
+    case 'reject':
+      return `${email} was rejected.`;
+    case 'disable':
+      return `${email} is disabled and signed out.`;
+    case 'reset':
+      return emailed ? `Password reset. ${email} was emailed a temporary password and signed out everywhere.` : 'Password reset, but the email could not be sent. Try again.';
+    case 'delete':
+      return emailed ? `${email} was deleted. A confirmation email was sent to them.` : `${email} was deleted. The confirmation email could not be sent.`;
+  }
+}
+
+/** The delete button enables only when the typed text is the user's address (case and outer spaces ignored, as on the server). */
+export function deleteConfirmed(typed: string, email: string): boolean {
+  return typed.trim().toLowerCase() === email.trim().toLowerCase();
+}
+
+const STATUS_LABEL: Record<AdminUser['status'], string> = { pending: 'Waiting for approval', approved: 'Approved', rejected: 'Rejected', disabled: 'Disabled' };
+
+function errorText(e: unknown): string {
+  if (e instanceof ApiError && e.status === 404) return 'That account no longer exists.';
+  return describeApiError(e);
+}
+
+/**
+ * User management (#/admin/users), admin only (DECISIONS.md #61): every account
+ * with its address, display name, status and sign-up date, and per account
+ * Approve / Reject / Disable, Reset password and Delete. Each action asks first,
+ * inside the row; Delete also wants the address typed again.
+ */
+export function userManagementView(ctx: ViewContext): View {
+  const { api } = ctx;
+  const root = el('div', null);
+  const list = el('div', { class: 'list', 'data-testid': 'admin-users' });
+  const count = el('div', { class: 'small muted' }, '');
+  const notice = el('div', { class: 'notice info', role: 'status', 'aria-live': 'polite', 'data-testid': 'admin-result' });
+  let busy = false;
+
+  const say = (text: string) => {
+    notice.textContent = text;
+    notice.hidden = !text;
+  };
+
+  const load = async () => {
+    if (!canManageUsers(api.user)) {
+      root.replaceChildren(adminOnly('User management'));
+      return;
+    }
+    root.replaceChildren(
+      el('div', { class: 'row' }, el('a', { class: 'btn small', href: '#/settings', 'data-testid': 'to-settings' }, '‹ Settings')),
+      el('section', { class: 'card' }, el('h2', null, 'User management'), el('p', { class: 'small muted' }, 'New accounts wait here until you approve them. Rejecting or disabling signs them out everywhere.'), count),
+      notice,
+      list,
+      el('section', { class: 'card' }, rowGroup(null, linkRow('Ask costs', '#/admin', { hint: 'Which service answered and what it cost', testId: 'admin-costs-link' }))),
+    );
+    notice.hidden = !notice.textContent;
+    count.textContent = 'Loading…';
+    try {
+      const { users } = await api.adminListUsers();
+      count.textContent = `${users.length} account${users.length === 1 ? '' : 's'}`;
+      render(users);
+    } catch (e) {
+      count.textContent = errorText(e);
     }
   };
 
+  const run = async (u: AdminUser, action: UserAction, confirmValue = '') => {
+    if (busy) return;
+    busy = true;
+    say('Working…');
+    try {
+      let emailed: boolean | undefined;
+      if (action === 'reset') emailed = (await api.adminResetPassword(u.id)).emailed;
+      else if (action === 'delete') emailed = (await api.adminDeleteUser(u.id, confirmValue)).emailed;
+      else emailed = (await api.adminSetStatus(u.id, action)).emailed;
+      say(resultText(action, u.email, emailed));
+    } catch (e) {
+      say(errorText(e));
+    } finally {
+      busy = false;
+    }
+    await load();
+  };
+
+  /** Replace the row's buttons with the question, a confirm button and Cancel. */
+  const askFirst = (u: AdminUser, action: UserAction, host: HTMLElement, buttons: HTMLElement) => {
+    const danger = action !== 'approve';
+    const go = el('button', { class: `btn small ${danger ? 'danger' : 'primary'}`, type: 'button', 'data-testid': `confirm-${action}` }, action === 'delete' ? 'Delete for good' : ACTION_LABEL[action]);
+    const cancel = el('button', { class: 'btn small', type: 'button', 'data-testid': 'confirm-cancel' }, 'Cancel');
+    const parts: HTMLElement[] = [el('p', { class: 'small' }, confirmText(action, u.email))];
+    let typed: HTMLInputElement | null = null;
+    if (action === 'delete') {
+      typed = el('input', { type: 'email', autocomplete: 'off', spellcheck: false, placeholder: u.email, 'aria-label': `Type ${u.email} to confirm`, 'data-testid': 'delete-email' });
+      go.disabled = true;
+      const t = typed;
+      t.addEventListener('input', () => {
+        go.disabled = !deleteConfirmed(t.value, u.email);
+      });
+      parts.push(el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'Their email'), typed));
+    }
+    parts.push(el('div', { class: 'row' }, go, cancel));
+    const panel = el('div', { class: 'stack confirm-panel', 'data-testid': 'confirm-panel' }, ...parts);
+    go.addEventListener('click', () => {
+      if (typed && !deleteConfirmed(typed.value, u.email)) return;
+      go.disabled = cancel.disabled = true;
+      void run(u, action, typed?.value.trim() ?? '');
+    });
+    cancel.addEventListener('click', () => {
+      host.replaceChildren(buttons);
+    });
+    host.replaceChildren(panel);
+    (typed ?? go).focus();
+  };
+
+  const render = (users: AdminUser[]) => {
+    list.replaceChildren();
+    for (const u of users) {
+      const self = u.id === api.user?.id;
+      const host = el('div', { class: 'stack' });
+      const buttons = el('div', { class: 'row' });
+      for (const action of userActions(u, self)) {
+        const cls = action === 'approve' ? 'primary' : action === 'reset' ? '' : 'danger';
+        const b = el('button', { class: `btn small ${cls}`, type: 'button', 'data-testid': `user-${action}` }, ACTION_LABEL[action]);
+        b.addEventListener('click', () => askFirst(u, action, host, buttons));
+        buttons.appendChild(b);
+      }
+      host.appendChild(self ? el('p', { class: 'small muted' }, 'Your own account. Change your password in Settings → Account.') : buttons);
+      const joined = new Date(u.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' });
+      list.appendChild(
+        el(
+          'div',
+          { class: 'list-item user-item', 'data-testid': 'admin-user' },
+          el('div', { class: 'title user-email' }, u.email, self ? ' (you)' : ''),
+          el('div', { class: 'small user-name' }, u.name ? `Name: ${u.name}` : 'No display name'),
+          el('div', { class: 'small muted', 'data-testid': 'admin-user-status' }, `${STATUS_LABEL[u.status]}${u.role === 'admin' ? ' · admin' : ''} · joined ${joined}${u.emailVerified ? '' : ' · email not yet confirmed'}`),
+          host,
+        ),
+      );
+    }
+  };
+
+  say('');
   void load();
   const unsub = api.on('change', () => void load());
   return { el: root, dispose: unsub };

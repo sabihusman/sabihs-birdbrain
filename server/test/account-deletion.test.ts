@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
 import { createApp } from '../src/app.js';
 import { createAuth, migrateAuth } from '../src/auth.js';
 import { openDatabase } from '../src/db.js';
 import { FakeMailer } from '../src/mailer.js';
-import { ADMIN, approvedMember, bearer, get, LABELS, post, signUpAndLogin, testConfig, type TestApp } from './helpers.js';
+import { ADMIN, approvedMember, bearer, get, LABELS, post, rowsReferencing, signUpAndLogin, testConfig, type TestApp } from './helpers.js';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -20,20 +19,6 @@ async function setup() {
   const t: TestApp = { app, mailer, config, modelCalls: [] };
   const admin = await signUpAndLogin(t, ADMIN);
   return { t, db, admin };
-}
-
-/** Every (table, column) pair whose value equals the id or address, plus the ask counter scope. */
-function rowsReferencing(db: DatabaseSync, userId: string, email: string): string[] {
-  const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>).map((r) => r.name);
-  const hits: string[] = [];
-  for (const table of tables) {
-    const cols = (db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>).map((c) => c.name);
-    for (const col of cols) {
-      const n = db.prepare(`SELECT count(*) AS n FROM "${table}" WHERE "${col}" = ? OR lower("${col}") = lower(?) OR "${col}" = ?`).get(userId, email, `user:${userId}`) as { n: number };
-      if (Number(n.n) > 0) hits.push(`${table}.${col}=${n.n}`);
-    }
-  }
-  return hits;
 }
 
 async function befriend(t: TestApp, a: { token: string }, b: { token: string; email: string }) {
