@@ -255,17 +255,20 @@ const MAP_SIGHTINGS = (now: number) => [
   { id: 'm4', scientific: 'Dryobates villosus', common: 'Hairy Woodpecker', lat: 41.8, lon: -93.6, t: now - 4 * 86_400_000 },
 ];
 
-async function seedSightings(page: import('@playwright/test').Page): Promise<void> {
+/** With `withRecording`, the newest chickadee (m1) also has a saved recording, `rec-m1` (DECISIONS.md #75). */
+async function seedSightings(page: import('@playwright/test').Page, withRecording = false): Promise<void> {
   // The app creates the database on start; wait for it, then add rows without changing its version.
   await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).some((d) => d.name === 'sabihs-birdbrain'))).toBe(true);
-  const rows = MAP_SIGHTINGS(Date.now()).map((s) => ({ id: s.id, label: `${s.scientific}_${s.common}`, scientific: s.scientific, common: s.common, firstTime: s.t, lastTime: s.t, peakConfidence: 0.8, hits: 2, lat: s.lat, lon: s.lon, accuracy: 10, fixTime: s.t, recordingId: null, offsetSec: null, source: 'live', sessionId: 'e2e', peakDetectionId: `d-${s.id}` }));
+  const rows = MAP_SIGHTINGS(Date.now()).map((s) => ({ id: s.id, label: `${s.scientific}_${s.common}`, scientific: s.scientific, common: s.common, firstTime: s.t, lastTime: s.t, peakConfidence: 0.8, hits: 2, lat: s.lat, lon: s.lon, accuracy: 10, fixTime: s.t, recordingId: withRecording && s.id === 'm1' ? 'rec-m1' : null, offsetSec: withRecording && s.id === 'm1' ? 0 : null, source: 'live', sessionId: 'e2e', peakDetectionId: `d-${s.id}` }));
+  const m1 = MAP_SIGHTINGS(Date.now())[0];
   await page.evaluate(
-    (rs) =>
+    ([rs, rec]) =>
       new Promise<void>((resolve, reject) => {
         const req = indexedDB.open('sabihs-birdbrain');
         req.onsuccess = () => {
-          const tx = req.result.transaction('sightings', 'readwrite');
+          const tx = req.result.transaction(rec ? ['sightings', 'recordings'] : ['sightings'], 'readwrite');
           for (const r of rs) tx.objectStore('sightings').put(r);
+          if (rec) tx.objectStore('recordings').put({ ...rec, blob: new Blob([new Uint8Array(44)], { type: 'audio/wav' }) });
           tx.oncomplete = () => {
             req.result.close();
             resolve();
@@ -274,7 +277,7 @@ async function seedSightings(page: import('@playwright/test').Page): Promise<voi
         };
         req.onerror = () => reject(req.error);
       }),
-    rows,
+    [rows, withRecording ? { id: 'rec-m1', createdAt: m1.t, name: 'E2E clip', durationSec: 3, sampleRate: 48000, bytes: 44, source: 'mic', lat: m1.lat, lon: m1.lon, accuracy: 10, fixTime: m1.t, summary: [], analyzedAt: null } : null] as const,
   );
 }
 
@@ -328,17 +331,17 @@ test('Map tab: no filter card; Birds and Places (1 km areas) cards under the map
   for (const box of await Promise.all((await birdCards.all()).map((c) => c.boundingBox()))) expect(box!.height).toBeGreaterThanOrEqual(44);
   expect(geocodeCalls, 'nothing goes to Nominatim from the Birds view').toHaveLength(0);
 
-  // Tap a bird: map zooms to its sightings, the others fade, the newest one's popup opens.
+  // Tap a bird: map zooms to its sightings, the others fade, its sightings become photo pins, nothing opens (#75).
   await page.getByTestId('map-bird-card').filter({ hasText: 'Black-capped Chickadee' }).click();
   await expect(page.getByTestId('map')).toHaveAttribute('data-focus', 'bird:Poecile atricapillus');
-  await expect(page.locator('.map-marker-selected')).toHaveCount(2);
-  await expect(page.locator('.leaflet-popup-content')).toContainText('Black-capped Chickadee');
+  await expect(page.getByTestId('map-bird-pin')).toHaveCount(2);
+  await expect(page.locator('.leaflet-popup')).toHaveCount(0);
   await expect(page.getByTestId('map-count')).toContainText('Showing Black-capped Chickadee · Show all');
   await expect(page.getByTestId('map-bird-card').first()).toHaveAttribute('aria-pressed', 'true');
   // Show all resets.
   await page.getByTestId('map-show-all').click();
   await expect(page.getByTestId('map')).not.toHaveAttribute('data-focus', /./);
-  await expect(page.locator('.map-marker-selected')).toHaveCount(0);
+  await expect(page.getByTestId('map-bird-pin')).toHaveCount(0);
   await expect(page.getByTestId('map-count')).toHaveText('3 species · 4 sightings with a location');
   // Tap twice: the species page.
   const rusty = page.getByTestId('map-bird-card').filter({ hasText: 'Rusty Blackbird' });
@@ -456,6 +459,162 @@ test('Map tab: no filter card; Birds and Places (1 km areas) cards under the map
       expect(widths.view, `${theme} ${v} view at 320px`).toBeLessThanOrEqual(320);
       expect(widths.right, `${theme} ${v} cards at 320px`).toBeLessThanOrEqual(320);
     }
+    await np.goto('./#/settings');
+  }
+  await narrow.close();
+});
+
+/**
+ * Height of the old details popup (bird card tap → the newest sighting's full popup) on the Map tab
+ * at 375 × 812, measured on main at 3a4e07e before #75 with these seeded sightings (dark theme):
+ * 303 px, already capped by its maxHeight (map height − 90). The compact card must stay ≤ 55 % of it.
+ */
+const OLD_MAP_POPUP_PX = 303;
+
+/** Leaflet auto-pans (animated) to bring an opened card inside the map; wait until it is fully inside. */
+async function waitForCardInsideMap(page: import('@playwright/test').Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const m = (await page.getByTestId('map').boundingBox())!;
+        const c = await page.locator('.leaflet-popup.compact-popup').boundingBox();
+        return !!c && c.x >= m.x && c.y >= m.y && c.x + c.width <= m.x + m.width;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+}
+
+test('Map tab photo pins: a bird card shows round photo pins and no popup; a pin opens the compact card; Details, Show all, dot tap, 320 px in both themes (DECISIONS.md #75)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/wikipedia\.org|wikimedia\.org|tile\.openstreetmap\.org|nominatim\.openstreetmap\.org/, (route) => route.abort());
+  await page.goto('./#/settings');
+  await seedSightings(page, true);
+  await page.goto('./#/map');
+  await expect(page.getByTestId('map-bird-card')).toHaveCount(3);
+  // Show all: plain dots only.
+  await expect(page.getByTestId('map-bird-pin')).toHaveCount(0);
+
+  // Card tap: one photo pin per located sighting of that bird, the newest larger, no popup, the hint for 4 s.
+  await page.getByTestId('map-bird-card').filter({ hasText: 'Black-capped Chickadee' }).click();
+  const pins = page.getByTestId('map-bird-pin');
+  await expect(pins).toHaveCount(2);
+  await expect(page.locator('.leaflet-popup')).toHaveCount(0);
+  await expect(page.getByTestId('map-hint')).toHaveText('Tap the bird for details');
+  await expect(page.getByTestId('map-hint')).toHaveAttribute('aria-live', 'polite');
+  const newest = page.locator('[data-testid="map-bird-pin"][data-newest="true"]');
+  await expect(newest).toHaveCount(1);
+  await expect(newest).toHaveAttribute('data-sighting', 'm1');
+  await expect(newest).toHaveAttribute('role', 'button');
+  await expect(newest).toHaveAttribute('tabindex', '0');
+  await expect(newest).toHaveAttribute('aria-label', /^Black-capped Chickadee, .+\. Show details$/);
+  const sizes = await pins.evaluateAll((els) => els.map((e) => ({ id: (e as HTMLElement).dataset.sighting, w: e.querySelector('.bird-pin')!.getBoundingClientRect().width })));
+  expect(sizes.find((p) => p.id === 'm1')!.w).toBeCloseTo(52, 1);
+  expect(sizes.find((p) => p.id === 'm3')!.w).toBeCloseTo(40, 1);
+  // The ring is the species colour, set through the CSSOM (no style attribute is allowed by the CSP).
+  const ring = await newest.evaluate((e) => ({ border: getComputedStyle(e.querySelector('.bird-pin')!).borderTopColor, styleAttr: e.querySelector('.bird-pin')!.getAttribute('style') }));
+  expect(ring.border).toMatch(/^rgb\(/);
+  expect(ring.styleAttr ?? '').toContain('--ring');
+  // The photo slot shows the bird outline while Wikipedia is unreachable.
+  await expect(newest.locator('.bird-pin-photo.placeholder')).toHaveCount(1);
+  await expect(page.getByTestId('map-hint')).toHaveText('', { timeout: 6_000 });
+
+  // Pin tap: the compact card, at most 55 % of the old popup's height.
+  await newest.click();
+  const card = page.getByTestId('compact-card');
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Black-capped Chickadee');
+  await expect(card).toContainText(/ · \d{1,2}:\d{2}\s?[AP]M · 80%/);
+  await expect(card).toContainText('41.70010, −93.70020 · ±10 m');
+  for (const id of ['compact-copy', 'compact-maps', 'compact-details']) {
+    const box = await page.getByTestId(id).boundingBox();
+    // 44 px, less sub-pixel rounding from the map pane's transform.
+    expect(box!.height, id).toBeGreaterThanOrEqual(43.5);
+  }
+  await expect(page.getByTestId('compact-maps')).toHaveAttribute('href', /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=41\.700100%2C-93\.700200$/);
+  await expect(page.getByTestId('compact-details')).toHaveAttribute('href', '#/recordings/rec-m1');
+  const mapBox = (await page.getByTestId('map').boundingBox())!;
+  await waitForCardInsideMap(page);
+  const popupBox = (await page.locator('.leaflet-popup.compact-popup').boundingBox())!;
+  console.log(`compact card ${popupBox.height.toFixed(1)} px vs old popup ${OLD_MAP_POPUP_PX} px (${((popupBox.height / OLD_MAP_POPUP_PX) * 100).toFixed(0)} %)`);
+  expect(popupBox.height).toBeLessThanOrEqual(OLD_MAP_POPUP_PX * 0.55);
+  expect(popupBox.y).toBeGreaterThanOrEqual(mapBox.y);
+  expect(popupBox.x + popupBox.width).toBeLessThanOrEqual(mapBox.x + mapBox.width);
+  // × closes it; the pin stays.
+  await page.locator('.compact-popup .leaflet-popup-close-button').click();
+  await expect(page.locator('.leaflet-popup')).toHaveCount(0);
+  await expect(pins).toHaveCount(2);
+  // Keyboard: Enter on a focused pin opens the card.
+  await newest.focus();
+  await page.keyboard.press('Enter');
+  await expect(card).toBeVisible();
+  await page.locator('.compact-popup .leaflet-popup-close-button').click();
+  await expect(page.locator('.leaflet-popup')).toHaveCount(0);
+  // The older sighting has no recording: Details falls back to the species page.
+  await page.locator('[data-testid="map-bird-pin"][data-sighting="m3"]').click();
+  await expect(page.getByTestId('compact-card')).toHaveAttribute('data-sighting', 'm3');
+  await expect(page.getByTestId('compact-details')).toHaveAttribute('href', '#/species/Poecile%20atricapillus');
+
+  // Show all: plain dots again, no card.
+  await page.getByTestId('map-show-all').click();
+  await expect(pins).toHaveCount(0);
+  await expect(page.locator('.leaflet-popup')).toHaveCount(0);
+
+  // A plain dot tapped: that bird is chosen (photo pins, others faded) and the tapped sighting's card opens.
+  // After Show all, the unclustered sightings are plain SVG dots (clusters are div icons).
+  const dot = page.locator('path.leaflet-interactive').first();
+  await expect(dot).toBeAttached();
+  await dot.click();
+  await expect(page.getByTestId('map')).toHaveAttribute('data-focus', /^bird:/);
+  const chosen = (await page.getByTestId('map').getAttribute('data-focus'))!.slice(5);
+  await expect(page.getByTestId('compact-card')).toBeVisible();
+  await expect(page.getByTestId('map-bird-card').first()).toHaveAttribute('data-species', chosen);
+  await expect(page.getByTestId('map-bird-card').first()).toHaveAttribute('aria-pressed', 'true');
+  expect(await pins.count()).toBeGreaterThan(0);
+  await context.close();
+
+  // Details on a sighting with a recording opens its sighting card in Recordings.
+  const ctx2 = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const p2 = await ctx2.newPage();
+  await p2.addInitScript(returningVisitor);
+  await p2.route(/wikipedia\.org|wikimedia\.org|tile\.openstreetmap\.org/, (route) => route.abort());
+  await p2.goto('./#/settings');
+  await seedSightings(p2, true);
+  await p2.goto('./#/map');
+  await p2.getByTestId('map-bird-card').filter({ hasText: 'Black-capped Chickadee' }).click();
+  await p2.locator('[data-testid="map-bird-pin"][data-newest="true"]').click();
+  await p2.getByTestId('compact-details').click();
+  await expect(p2).toHaveURL(/#\/recordings\/rec-m1$/);
+  await expect(p2.getByText('E2E clip', { exact: false })).toBeVisible();
+  await ctx2.close();
+
+  // 320 px, both themes: the pins and the card fit inside the map, the actions keep 44 px.
+  const narrow = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const np = await narrow.newPage();
+  await np.addInitScript(returningVisitor);
+  await np.route(/wikipedia\.org|wikimedia\.org|tile\.openstreetmap\.org/, (route) => route.abort());
+  await np.goto('./#/settings');
+  await seedSightings(np, true);
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await np.getByTestId('theme-toggle').click();
+    expect(await np.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
+    await np.goto('./#/map');
+    await np.getByTestId('map-bird-card').filter({ hasText: 'Black-capped Chickadee' }).click();
+    await expect(np.getByTestId('map-bird-pin')).toHaveCount(2);
+    await np.locator('[data-testid="map-bird-pin"][data-newest="true"]').click();
+    await expect(np.getByTestId('compact-card')).toBeVisible();
+    const m = (await np.getByTestId('map').boundingBox())!;
+    await waitForCardInsideMap(np);
+    const c = (await np.locator('.leaflet-popup.compact-popup').boundingBox())!;
+    expect(c.x, `${theme} card left`).toBeGreaterThanOrEqual(m.x);
+    expect(c.x + c.width, `${theme} card right`).toBeLessThanOrEqual(m.x + m.width);
+    expect(c.y, `${theme} card top`).toBeGreaterThanOrEqual(m.y);
+    for (const id of ['compact-copy', 'compact-maps', 'compact-details']) expect((await np.getByTestId(id).boundingBox())!.height, `${theme} ${id}`).toBeGreaterThanOrEqual(43.5);
+    const colors = await np.getByTestId('compact-card').evaluate((e) => ({ bg: getComputedStyle(e.closest('.leaflet-popup-content-wrapper')!).backgroundColor, text: getComputedStyle(e).color }));
+    expect(colors.bg, `${theme} card background follows the theme`).not.toBe(colors.text);
+    expect(await np.evaluate(() => document.querySelector('main.view')!.scrollWidth), `${theme} no horizontal scroll`).toBeLessThanOrEqual(320);
     await np.goto('./#/settings');
   }
   await narrow.close();

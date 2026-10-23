@@ -9,12 +9,14 @@ import { AREA_RADIUS_M, groupIntoAreas, type Area } from '../../geo/areas';
 import { formatNear, geocoder, type PlaceLabel } from '../../geo/geocode';
 import type { MapCardsView } from '../../app/settings';
 import { birdCardLine, birdsCountLine, placeCardLine, summarizeBirds, type BirdSummary } from '../map-summary';
-import { birdPlaceholder, birdThumb } from '../components/bird-thumb';
+import { birdPlaceholder, birdThumb, speciesThumbnail } from '../components/bird-thumb';
 import { placeIcon } from '../components/place-icon';
 import type { View, ViewContext } from '../app';
 import { el, fmtDateTime, pct } from '../dom';
 import { speciesHref } from '../router';
-import { locationBlock } from '../components/location-block';
+import { copyText, locationBlock } from '../components/location-block';
+import { compactWhen, compactWhere, detailsHref, newestSighting, PIN_NEWEST_PX, pinLabel, pinSize } from '../map-pins';
+import { formatLatLon, googleMapsUrl } from '../../geo/pluscode';
 import { speciesChip } from '../components/species-chip';
 import { cssToken } from '../../theme/theme';
 
@@ -73,13 +75,84 @@ export function describeSighting(s: SightingRecord): string {
   return `${when} · peak ${pct(s.peakConfidence)} · ${s.hits} window${s.hits === 1 ? '' : 's'}`;
 }
 
-function markerFor(s: SightingRecord, controller: AppController, look: 'normal' | 'faded' | 'selected' = 'normal', popupMaxHeight?: number): L.CircleMarker {
+type DotLook = 'normal' | 'faded' | 'selected';
+
+/** A plain coloured dot for one sighting (no popup bound). */
+function dotFor(s: SightingRecord, look: DotLook = 'normal'): L.CircleMarker {
   const color = speciesColor(s.scientific);
   const style = look === 'faded' ? { opacity: 0.35, fillOpacity: 0.25, className: 'map-marker-faded' } : look === 'selected' ? { radius: 10, weight: 2.5, className: 'map-marker-selected' } : {};
-  const m = L.circleMarker([s.lat!, s.lon!], { radius: 8, color: '#fff', weight: 1.5, fillColor: color.css, fillOpacity: 0.9, ...style });
-  // On the Map tab the popup scrolls inside the map instead of spilling over its top (popupMaxHeight).
-  m.bindPopup(popupFor(s, controller, color.css), { maxWidth: 300, ...(popupMaxHeight ? { maxHeight: popupMaxHeight } : {}) });
+  return L.circleMarker([s.lat!, s.lon!], { radius: 8, color: '#fff', weight: 1.5, fillColor: color.css, fillOpacity: 0.9, ...style });
+}
+
+/** Species page and history maps: a dot with the full details popup. */
+function markerFor(s: SightingRecord, controller: AppController): L.CircleMarker {
+  return dotFor(s).bindPopup(popupFor(s, controller, speciesColor(s.scientific).css), { maxWidth: 300 });
+}
+
+/** Height of the pointer under a photo pin, in px (drawn by CSS, counted in the icon's anchor). */
+const PIN_TIP_PX = 9;
+
+/**
+ * Round photo pin for one sighting of the chosen bird (DECISIONS.md #75): the Wikipedia photo (or the
+ * bird outline until there is one) in a ring of the species colour, with a pointer at the bottom. The
+ * icon is a real element (`L.divIcon({ html: element })`), so the ring colour is set through the CSSOM
+ * (`style.setProperty('--ring', …)`), never a style attribute the CSP would block.
+ */
+function photoPin(s: SightingRecord, controller: AppController, newestId: string | null): L.Marker {
+  const size = pinSize(s, newestId);
+  const newest = size === PIN_NEWEST_PX;
+  const face = el('span', { class: `bird-pin${newest ? ' newest' : ''}` }, birdPlaceholder('bird-pin-photo'));
+  face.style.setProperty('--ring', speciesColor(s.scientific).css);
+  const sp = controller.speciesByScientific(s.scientific);
+  if (sp) {
+    void speciesThumbnail(sp).then((src) => {
+      if (!src) return;
+      const img = el('img', { class: 'bird-pin-photo', src, alt: '', decoding: 'async' }) as HTMLImageElement;
+      img.addEventListener('error', () => img.replaceWith(birdPlaceholder('bird-pin-photo')));
+      face.replaceChildren(img);
+    });
+  }
+  const height = size + PIN_TIP_PX;
+  const icon = L.divIcon({ html: face, className: `bird-pin-icon${newest ? ' newest' : ''}`, iconSize: [size, height], iconAnchor: [size / 2, height], popupAnchor: [0, -height] });
+  const m = L.marker([s.lat!, s.lon!], { icon, keyboard: true, riseOnHover: true, zIndexOffset: newest ? 1000 : 0 });
+  // The icon element exists only once the marker is on the map; Leaflet already makes it a focusable role="button".
+  m.on('add', () => {
+    const node = m.getElement();
+    if (!node) return;
+    node.setAttribute('aria-label', pinLabel(s));
+    node.dataset.testid = 'map-bird-pin';
+    node.dataset.sighting = s.id;
+    if (newest) node.dataset.newest = 'true';
+  });
   return m;
+}
+
+/** "Copy · Google Maps · Details ›" card for one sighting, about half the old popup (DECISIONS.md #75). */
+function compactCard(s: SightingRecord, controller: AppController): HTMLElement {
+  const sp = controller.speciesByScientific(s.scientific);
+  const photo = el('span', { class: 'compact-photo-ring' }, sp ? birdThumb(sp, 'compact-photo') : birdPlaceholder('compact-photo'));
+  photo.style.setProperty('--ring', speciesColor(s.scientific).css);
+  const copy = el('button', { type: 'button', class: 'compact-action', 'aria-label': 'Copy coordinates', 'data-testid': 'compact-copy' }, 'Copy');
+  copy.addEventListener('click', () => void copyText(formatLatLon(s.lat!, s.lon!), copy));
+  return el(
+    'div',
+    { class: 'compact-card', 'data-testid': 'compact-card', 'data-sighting': s.id },
+    el('div', { class: 'compact-head' }, photo, el('div', { class: 'compact-names' }, el('strong', { class: 'compact-name' }, s.common), el('span', { class: 'compact-meta' }, compactWhen(s)))),
+    el('div', { class: 'compact-where' }, compactWhere(s)),
+    el(
+      'div',
+      { class: 'compact-actions' },
+      copy,
+      el('a', { class: 'compact-action', href: googleMapsUrl(s.lat!, s.lon!), target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'compact-maps' }, 'Google Maps'),
+      el('a', { class: 'compact-action', href: detailsHref(s), 'data-testid': 'compact-details' }, 'Details', el('span', { 'aria-hidden': 'true' }, '\u00a0›')),
+    ),
+  );
+}
+
+/** Small popup that keeps clear of the map's edges: at most 240 px wide, narrower on a narrow map (320 px screens). */
+function compactPopupOptions(map: L.Map | null): L.PopupOptions {
+  const maxWidth = Math.max(180, Math.min(240, (map?.getSize().x ?? 320) - 64));
+  return { className: 'compact-popup', maxWidth, minWidth: Math.min(200, maxWidth), autoPanPadding: [12, 16], closeButton: true };
 }
 
 function popupFor(s: SightingRecord, controller: AppController, colorCss: string): HTMLElement {
@@ -147,7 +220,8 @@ type NamesStatus = 'idle' | 'loading' | 'ok' | 'busy' | 'offline';
 /**
  * The Map tab: every located sighting on the map, and under it a Birds | Places switch with one
  * card per species or per 1 km area (DECISIONS.md #72, #73). Tapping a card zooms to its sightings
- * and fades the rest. Area names come from OpenStreetMap's Nominatim, asked only while the Places
+ * and fades the rest; a chosen bird's sightings show as round photo pins whose tap opens a compact
+ * card (#75). Area names come from OpenStreetMap's Nominatim, asked only while the Places
  * view is open.
  */
 export function mapView(ctx: ViewContext): View {
@@ -170,7 +244,7 @@ export function mapView(ctx: ViewContext): View {
     statusLine,
     list,
     credit,
-    el('p', { class: 'small muted' }, 'Markers use each species’ colour; tap one for details. Tiles come from OpenStreetMap and are not cached for offline use.'),
+    el('p', { class: 'small muted' }, 'Each dot is a sighting in its bird’s colour. Tap a dot or a bird card to show that bird’s photo on the map, then tap the photo for details. Tiles come from OpenStreetMap and are not cached for offline use.'),
   );
 
   let map: L.Map | null = null;
@@ -187,6 +261,17 @@ export function mapView(ctx: ViewContext): View {
   let namesStatus: NamesStatus = 'idle';
   let placesToken = 0;
   let disposed = false;
+  /** Photo pins of the chosen bird, by sighting id. */
+  const pins = new Map<string, L.Marker>();
+  // "Tap the bird for details": a polite status line over the bottom of the map, 4 s per selection.
+  const hint = el('p', { class: 'map-hint', role: 'status', 'aria-live': 'polite', 'data-testid': 'map-hint' });
+  let hintTimer: ReturnType<typeof setTimeout> | undefined;
+  const setHint = (text: string) => {
+    clearTimeout(hintTimer);
+    hint.textContent = text;
+    hint.classList.toggle('shown', !!text);
+    if (text) hintTimer = setTimeout(() => setHint(''), 4000);
+  };
 
   const areaFor = (key: string) => areas.find((a) => a.key === key) ?? null;
   const areaTitle = (a: Area<SightingRecord>) => names.get(a.key)?.name ?? formatNear(a.cell);
@@ -206,14 +291,26 @@ export function mapView(ctx: ViewContext): View {
     if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 15, animate: false });
   };
 
-  const popupHeight = () => Math.max(140, (map?.getSize().y ?? 300) - 90);
-  const marker = (s: SightingRecord, look: 'normal' | 'faded' | 'selected' = 'normal') => markerFor(s, controller, look, popupHeight());
+  /**
+   * A dot on the Map tab. Birds view: a tap chooses that bird and opens the compact card for the
+   * tapped sighting (as a card tap would, plus the card). Places view: a tap opens the compact card.
+   */
+  const marker = (s: SightingRecord, look: DotLook = 'normal') => {
+    const m = dotFor(s, look);
+    if (view === 'birds') m.on('click', () => selectBird(s.scientific, s.id));
+    else m.bindPopup(() => compactCard(s, controller), compactPopupOptions(map));
+    return m;
+  };
 
-  /** Markers: all in the cluster, or the selection on top at full strength and the rest faded. */
+  /**
+   * Markers: all in the cluster, or the selection on top and the rest faded. A chosen bird's
+   * sightings become photo pins (the newest larger); a chosen area's stay dots. Nothing opens.
+   */
   const drawMarkers = () => {
     if (!map || !cluster || !focusLayer) return;
     cluster.clearLayers();
     focusLayer.clearLayers();
+    pins.clear();
     if (outline) {
       map.removeLayer(outline);
       outline = null;
@@ -228,8 +325,16 @@ export function mapView(ctx: ViewContext): View {
     container.dataset.focus = selection.kind === 'bird' ? `bird:${selection.scientific}` : `place:${selection.key}`;
     const ids = new Set(chosen.map((s) => s.id));
     for (const s of located) if (!ids.has(s.id)) cluster.addLayer(marker(s, 'faded'));
-    const markers = chosen.map((s) => marker(s, 'selected'));
-    for (const m of markers) focusLayer.addLayer(m);
+    if (selection.kind === 'bird') {
+      const newestId = newestSighting(chosen)?.id ?? null;
+      for (const s of chosen) {
+        const pin = photoPin(s, controller, newestId).bindPopup(() => compactCard(s, controller), compactPopupOptions(map));
+        pins.set(s.id, pin);
+        focusLayer.addLayer(pin);
+      }
+    } else {
+      for (const s of chosen) focusLayer.addLayer(marker(s, 'selected'));
+    }
     const bounds = L.latLngBounds(chosen.map((s) => [s.lat!, s.lon!] as L.LatLngTuple));
     const accent = cssToken('accent', '#5FCB97');
     if (selection.kind === 'place') {
@@ -242,15 +347,13 @@ export function mapView(ctx: ViewContext): View {
       }
     }
     map.fitBounds(bounds.pad(0.3), { maxZoom: 16, animate: false });
-    // The newest sighting's details open, as if its marker had been tapped.
-    const newest = chosen.reduce((a, b) => (b.lastTime > a.lastTime ? b : a), chosen[0]);
-    markers[chosen.indexOf(newest)]?.openPopup();
   };
 
   const showAllButton = () => {
     const b = el('button', { type: 'button', class: 'link-button', 'data-testid': 'map-show-all' }, 'Show all');
     b.addEventListener('click', () => {
       selection = null;
+      setHint('');
       drawMarkers();
       fitAll();
       render();
@@ -263,6 +366,18 @@ export function mapView(ctx: ViewContext): View {
     drawMarkers();
     render();
     map?.getContainer().scrollIntoView?.({ block: 'nearest' });
+    setHint(next?.kind === 'bird' && pins.size ? 'Tap the bird for details' : '');
+  };
+
+  /** A dot tapped in the Birds view: that bird is chosen, and the tapped sighting's card opens on its pin. */
+  const selectBird = (scientific: string, sightingId: string) => {
+    setHint('');
+    if (!(selection?.kind === 'bird' && selection.scientific === scientific)) {
+      selection = { kind: 'bird', scientific };
+      drawMarkers();
+      render();
+    }
+    pins.get(sightingId)?.openPopup();
   };
 
   const birdCard = (b: BirdSummary<SightingRecord>): HTMLElement => {
@@ -418,6 +533,7 @@ export function mapView(ctx: ViewContext): View {
       view = next;
       settings.update({ mapCardsView: next });
       selection = null;
+      setHint('');
       drawMarkers();
     }
     render();
@@ -459,6 +575,8 @@ export function mapView(ctx: ViewContext): View {
   requestAnimationFrame(() => {
     if (disposed) return;
     map = baseMap(container);
+    container.append(hint);
+    map.on('popupopen', () => setHint(''));
     const loc = controller.location.get().location;
     map.setView(loc ? [loc.lat, loc.lon] : [20, 0], loc ? 11 : 2);
     cluster = L.markerClusterGroup({ maxClusterRadius: 50 });
@@ -472,6 +590,7 @@ export function mapView(ctx: ViewContext): View {
     el: root,
     dispose() {
       disposed = true;
+      clearTimeout(hintTimer);
       unsub();
       map?.remove();
     },

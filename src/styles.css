@@ -497,3 +497,31 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .map-pill .swatch { width: 10px; height: 10px; border-radius: 3px; }
 .place-icon { width: 48px; height: 48px; flex: none; border-radius: var(--radius-control); background: var(--sage); display: flex; align-items: center; justify-content: center; }
 .place-icon svg { width: 26px; height: 26px; fill: none; stroke: var(--text); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Photo pins and the compact card on the Map tab (DECISIONS.md #75). Each pin's ring colour is
+   --ring, set through the CSSOM (style.setProperty) because the CSP allows no style attributes. */
+.bird-pin-icon { background: transparent; border: 0; }
+.bird-pin-icon:focus-visible { outline: none; }
+.bird-pin-icon:focus-visible .bird-pin { outline: 3px solid var(--focus); outline-offset: 3px; }
+.bird-pin { position: relative; display: block; box-sizing: border-box; width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--ring, var(--accent)); background: var(--sage); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); cursor: pointer; }
+.bird-pin.newest { width: 52px; height: 52px; }
+/* The pointer: from the inner edge of the ring to 9 px below the circle (PIN_TIP_PX in map.ts). */
+.bird-pin::after { content: ''; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 7px solid transparent; border-top: 12px solid var(--ring, var(--accent)); border-bottom: 0; }
+.bird-pin-photo { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; overflow: hidden; }
+.bird-pin-photo.placeholder svg, .compact-photo.placeholder svg { width: 60%; height: 60%; fill: none; stroke: var(--text); stroke-width: 1.5; opacity: 0.7; }
+.map-hint { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 800; width: max-content; max-width: calc(100% - 32px); margin: 0; padding: 4px 12px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: var(--text-sm); text-align: center; pointer-events: none; opacity: 0; transition: opacity 200ms ease-out; }
+.map-hint.shown { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .map-hint { transition: none; } }
+.compact-popup .leaflet-popup-content-wrapper { padding: 0; border-radius: var(--radius-control); border: 1px solid var(--line); background: var(--card); color: var(--text); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25); }
+.compact-popup .leaflet-popup-tip { background: var(--card); }
+.compact-popup .leaflet-popup-content { margin: 10px 12px 2px; font-size: var(--text-sm); line-height: 1.35; }
+.leaflet-container .compact-popup a.leaflet-popup-close-button { width: 44px; height: 44px; font: 22px/44px system-ui, sans-serif; color: var(--muted); }
+.compact-head { display: flex; align-items: center; gap: 10px; padding-right: 30px; }
+.compact-photo-ring { display: flex; flex: none; box-sizing: border-box; width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--ring, var(--accent)); background: var(--sage); overflow: hidden; }
+.compact-photo { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; object-fit: cover; }
+.compact-names { display: flex; flex-direction: column; min-width: 0; }
+.compact-name { font-size: var(--text-md); font-weight: var(--weight-bold); line-height: 1.2; overflow-wrap: anywhere; }
+.compact-meta, .compact-where { color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.compact-where { margin-top: 6px; }
+.compact-actions { display: flex; flex-wrap: wrap; column-gap: 14px; }
+.leaflet-container .compact-action { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; }
