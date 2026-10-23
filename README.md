@@ -175,6 +175,13 @@ What does leave the phone, and why:
 
 - The one-time model download from the hosting origin, Wikipedia summaries
   when you open a species page, and OpenStreetMap tiles when you open the map.
+- When you open the Places view on the Map tab: the positions of your
+  sightings, rounded to three decimals (about 100 m) and deduplicated, go to
+  OpenStreetMap's Overpass API (`overpass-api.de`) in one query that asks only
+  for named parks, nature reserves and protected areas, botanical gardens,
+  woods and trails within 500 m. No species, times or account details are
+  sent; the answers are kept on the phone for 30 days. Never on app start,
+  and never from the Birds view.
 - If you create an account (optional): your email address and password go to
   the Birdbrain API at `bird-brain.duckdns.org`, which emails you a 6-digit
   code on every sign-in and keeps a short-lived session token (the API only

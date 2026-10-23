@@ -2114,3 +2114,151 @@ other open branches, so this may be renumbered at merge.)
   `isModelCached` the welcome uses).
 - **Not changed:** no Cancel button (Sabih's decision, #70); a returning visitor
   goes straight to loading, without the welcome card (#68).
+
+## 72. Map tab: Birds | Places cards under the map; nature places from OpenStreetMap's Overpass API
+
+- **Sabih's request:** remove the Species / From / To filter card; put cards for the
+  birds under the map, a toggle between bird cards and location cards, and group
+  sightings by the nearest natural place (parks, wildlife reserves, botanical
+  gardens, trails), never malls, bars, restaurants or gas stations. Decisions:
+  **(1a)** the phone asks OpenStreetMap's Overpass API itself, with positions
+  rounded to about 100 m; **(2a)** a sighting belongs to a place within 500 m.
+  Follows the approved mockup (`map-cards-mockup.html`).
+- **Layout (`src/ui/views/map.ts`):** the map (45vh, 260–420 px), a segmented
+  "Birds | Places" switch (`role="tablist"`, arrow keys / Home / End, remembered
+  as the setting `mapCardsView`, default Birds), a count line (`aria-live`), then
+  the cards. All cards are buttons of at least 64 px.
+  - **Birds:** one card per species with a located sighting, the most recently
+    seen first (`summarizeBirds`, `src/ui/map-summary.ts`): photo, colour square,
+    common name, "N sightings · last Oct 22" ("1 sighting · Oct 20"). A tap fits
+    the map to that species' sightings, draws them on top (unclustered) and fades
+    every other marker and cluster, opens the newest one's popup, and the count
+    line reads "Showing <bird> · Show all". A second tap opens the species page.
+  - **Places:** one card per place: an icon for the kind (park, reserve, garden,
+    woods, trail), the name, "Park · 14 sightings · 7 species" and up to two
+    species pills plus "+K". Sightings not within 500 m of a nature place are one
+    "Other spots" card under a "Not near a nature spot" heading. A tap fits the
+    group and draws a dashed outline: a 500 m circle round the centre of a node
+    or a small place, the dashed bounding box of a bigger one (the real outline
+    is never downloaded, see below). "Place names: OpenStreetMap contributors"
+    (linked to the copyright page) is under the Places cards, as #66 asks of a
+    source shown on a page; Help › Credits now says "Map tiles and place names
+    © OpenStreetMap contributors, ODbL".
+  - The popup on this tab gets a `maxHeight` (map height − 90 px) so it scrolls
+    inside the smaller map instead of spilling over the top.
+- **Overpass facts relied on** (read 2026-10-23):
+  - https://wiki.openstreetmap.org/wiki/Overpass_API, main instance
+    `https://overpass-api.de/api/interpreter`, usage policy: "You can assume that
+    you don't disturb other users when you do less than 10,000 queries per day",
+    "download less than 1 GB data per day", "Nowadays this server is overloaded -
+    be mindful of that, do not overconsume resources and do not expect high
+    reliability", "No parallel running of multiple scripts", "If you receive an
+    HTTP error code such as 429 or 406, pause for 30 seconds before making a new
+    request", "Cache and rate-limit calls", "If you have an app or website, then
+    the usage counts towards the sum of requests made by all your users",
+    "Commercial use should use self-hosted or paid Overpass servers" (Birdbrain
+    is non-commercial: the BirdNET licence is CC BY-NC-SA). The page's own
+    example POSTs a body starting `data=`.
+  - https://dev.overpass-api.de/overpass-doc/en/preface/commons.html: "Requests
+    that are denied due to the rate limit are answered with the HTTP status code
+    429"; resource refusals "are answered with an HTTP status code 504"; "If no
+    maximum run time is declared then a default limit of 180 seconds applies."
+  - https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL: `[out:json][timeout:25];`
+    is "a typical settings declaration line"; `around` takes a radius in metres
+    and one point, and "Since version 0.7.55" a list of points is a *linestring*
+    (so several cells cannot share one `around`; each cell gets its own
+    statements); `nwr` is "nodes, ways or relations"; regular expressions are
+    POSIX extended and `,i` makes them case-insensitive; keys with a colon are
+    quoted (`["name:fr"="Rue Feau"]`); named sets `->.name` / `.name`; union
+    `( ... );`; `out count` "reports only element totals by type" and "cannot be
+    combined with anything else"; `out` verbosity `ids` / `body` / `tags`, geometry
+    `bb` / `center` / `geom`.
+  - https://dev.overpass-api.de/overpass-doc/en/targets/formats.html: `tags` "can
+    also be combined with the two geometry flags center and bb"; "The flag bb
+    (for bounding box) triggers the addition of the bounding box for each way and
+    relation".
+  - **Not verified live:** overpass-api.de could not be reached from the build
+    sandbox (the connection was reset at the proxy), so no real answer for Iowa
+    was seen. Two details come from the docs and from general knowledge of the
+    JSON format, not from a response: the `out count` element arrives as
+    `{"type":"count",…}` and a way's box as `bounds: {minlat,minlon,maxlat,maxlon}`.
+    If the count markers are missing, `parseOverpass` falls back to offering every
+    place to every cell and the 500 m check on the phone still applies. CORS
+    (`Access-Control-Allow-Origin`) on the real server is also unverified; the
+    request is a "simple" one (POST, form-encoded), so no preflight is needed.
+- **The query (`buildOverpassQuery`, `src/geo/places.ts`), one per batch of up
+  to 25 cells, sent one batch at a time:**
+
+  ```
+  [out:json][timeout:15];
+  (
+    nwr(around:500,LAT,LON)["leisure"~"^(park|nature_reserve)$"]["name"];
+    nwr(around:500,LAT,LON)["leisure"="garden"]["garden:type"="botanical"]["name"];
+    nwr(around:500,LAT,LON)["leisure"="garden"]["name"~"botanic|arboretum",i];
+    nwr(around:500,LAT,LON)["boundary"~"^(protected_area|national_park)$"]["name"];
+    nwr(around:500,LAT,LON)["landuse"="forest"]["name"];
+    nwr(around:500,LAT,LON)["natural"="wood"]["name"];
+    way(around:500,LAT,LON)["highway"~"^(path|footway|track)$"]["name"];
+    rel(around:500,LAT,LON)["route"~"^(hiking|foot)$"]["name"];
+  )->.c0;
+  …one block per cell…
+  (.c0; .c1; …)->.all;
+  .c0 out count; .c0 out ids;   …per cell…
+  .all out count;
+  node.all; out;  way.all; out tags bb;  rel.all; out tags bb;
+  ```
+
+  LAT/LON are the cell, written with exactly three decimals.
+- **Tags:** included as above. Every feature needs a `name`. Gardens only when
+  `garden:type=botanical` or the name contains "Botanic" or "Arboretum" (a name
+  containing just "Garden" is too often a private or community plot).
+  `boundary=national_park` is included next to `protected_area` because US
+  national parks are mostly tagged that way. `leisure=recreation_ground` is left
+  out (mostly ball fields). Never asked for: shop, amenity, tourism, craft,
+  office, building or any other key; `classifyPlace()` checks every returned
+  element again and drops anything else.
+- **Rounding:** each sighting is rounded to 3 decimals (about 111 m north–south,
+  less east–west), deduplicated into cells. Only those cells are sent: no
+  species, times, accuracy or account.
+- **Nearest place:** Overpass decides which places are within 500 m of the cell,
+  using the places' real shapes (its `around`). Only ids per cell and, once per
+  place, its tags with a centre (nodes) or bounding box (ways, relations) come
+  back, so a large forest costs a few bytes, not its outline. On the phone each
+  sighting takes, from its cell's places, the one at the smallest distance to the
+  bounding box (0 inside it) or to the node, at most 500 m; when two are equally
+  close (inside both boxes) the smaller box wins, so a botanical garden inside a
+  park gets the garden. The box always contains the shape, so the distance is
+  never overstated; a long trail's box can make it look nearer than it is, which
+  matters only when it is the closest candidate already within 500 m of the cell.
+- **Cache (`src/geo/place-lookup.ts`):** one entry per cell in the existing
+  `wiki` store, key `places:<lat>,<lon>`, `{ places }`, 30 days. No DB version
+  bump. An older entry is still shown when a refresh fails. Delete all data
+  clears it with the wiki store.
+- **When it asks:** only when the Places view is showing (opening it, or the tab
+  opening on a remembered Places, or new sightings while it is showing); never on
+  app start or from the Birds view. One lookup at a time (a promise chain).
+- **Failures:** a 15 s `AbortController` timeout, HTTP 429, 504 or any non-OK
+  answer → keep what is cached, "Place names are busy, try again later." and a
+  Retry button; after such an answer no request for 30 s (the wiki's pause).
+  Offline (`navigator.onLine` false or a network error) with nothing cached →
+  "Place names need a connection. Your birds are still on the map and under
+  Birds."; with a cache → "Offline: showing the place names saved on this phone."
+  Sightings whose cell has never been looked up are counted ("N sightings are
+  waiting for place names") and never put in "Other spots".
+- **Privacy:** CSP `connect-src` gains `https://overpass-api.de` (`vercel.json`,
+  checked by `tests/headers.test.ts`). "What we store" › Only on this phone:
+  "Opening Places on the Map tab sends your sightings’ positions, rounded to
+  about 100 m, to OpenStreetMap’s Overpass service to find nearby parks and
+  trails; nothing else is sent and nothing is stored there." README Privacy and
+  Help have the same facts.
+- **Tests:** `tests/places.test.ts` (rounding, the query has only the allowed
+  keys and no shop/amenity/tourism, `classifyPlace`, `parseOverpass` with and
+  without markers, `groupByPlace` incl. the 500 m limit and the tie rule, cache
+  expiry, one POST per batch, 429 pause, 504, timeout, offline) and
+  `tests/map-summary.test.ts`; an e2e test with Overpass stubbed by `page.route`
+  (filter card gone, Birds cards order and lines, tap → `data-focus` and
+  `.map-marker-selected`, popup, Show all, second tap → species page, no Overpass
+  request until Places opens, Places grouping incl. "Other spots", the outline,
+  the cache on return, busy + Retry, offline, 320 px in both themes).
+- **Not verified:** real Overpass answers around Johnston, Iowa, and the layout
+  on a phone.

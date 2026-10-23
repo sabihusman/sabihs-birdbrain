@@ -7,6 +7,8 @@ export type LocationMode = 'auto' | 'manual' | 'off';
 export type OcclusionResolution = 'coarse' | 'medium' | 'fine';
 /** Listen screen arrangement (docs/DESIGN_GUIDE.md §6). */
 export type ListenLayout = 'consolidated' | 'dock' | 'focus';
+/** Map tab: cards under the map, one per bird or one per place (DECISIONS.md #72). */
+export type MapCardsView = 'birds' | 'places';
 
 export interface Settings {
   /** Stored-settings schema version; bumped when a saved default is migrated (see migrate()). */
@@ -31,6 +33,7 @@ export interface Settings {
   /** Species tab: list only species with at least one of your sightings ("Spotted by me"). */
   speciesSpottedOnly: boolean;
   listenLayout: ListenLayout;
+  mapCardsView: MapCardsView;
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
@@ -58,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   speciesSpottedOnly: false,
   // First run (and after the user deletes all data) opens in Focus; a chosen layout is remembered (DECISIONS.md #63).
   listenLayout: 'focus',
+  mapCardsView: 'birds',
 };
 
 /** localStorage key of the stored settings; its presence is one of the "returning visitor" signals (src/app/first-visit.ts). */
@@ -132,6 +136,7 @@ export function sanitize(s: Settings): Settings {
     overlapSeconds: clamp(s.overlapSeconds, 0, 2.5, DEFAULT_SETTINGS.overlapSeconds),
     geoThreshold: clamp(s.geoThreshold, 0, 1, DEFAULT_SETTINGS.geoThreshold),
     listenLayout: s.listenLayout === 'dock' || s.listenLayout === 'consolidated' || s.listenLayout === 'focus' ? s.listenLayout : DEFAULT_SETTINGS.listenLayout,
+    mapCardsView: s.mapCardsView === 'places' ? 'places' : 'birds',
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),

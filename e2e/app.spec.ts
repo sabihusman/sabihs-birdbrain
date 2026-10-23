@@ -247,6 +247,203 @@ test('tabs, settings and map render', async ({ page }) => {
   await expect(page.getByText('Import audio file')).toBeVisible();
 });
 
+/** Located sightings written straight into the app's IndexedDB (DECISIONS.md #72 tests). */
+const MAP_SIGHTINGS = (now: number) => [
+  { id: 'm1', scientific: 'Poecile atricapillus', common: 'Black-capped Chickadee', lat: 41.7001, lon: -93.7002, t: now - 3_600_000 },
+  { id: 'm2', scientific: 'Euphagus carolinus', common: 'Rusty Blackbird', lat: 41.7012, lon: -93.6991, t: now - 2 * 3_600_000 },
+  { id: 'm3', scientific: 'Poecile atricapillus', common: 'Black-capped Chickadee', lat: 41.7203, lon: -93.7198, t: now - 3 * 3_600_000 },
+  { id: 'm4', scientific: 'Dryobates villosus', common: 'Hairy Woodpecker', lat: 41.8, lon: -93.6, t: now - 4 * 86_400_000 },
+];
+
+async function seedSightings(page: import('@playwright/test').Page): Promise<void> {
+  // The app creates the database on start; wait for it, then add rows without changing its version.
+  await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).some((d) => d.name === 'sabihs-birdbrain'))).toBe(true);
+  const rows = MAP_SIGHTINGS(Date.now()).map((s) => ({ id: s.id, label: `${s.scientific}_${s.common}`, scientific: s.scientific, common: s.common, firstTime: s.t, lastTime: s.t, peakConfidence: 0.8, hits: 2, lat: s.lat, lon: s.lon, accuracy: 10, fixTime: s.t, recordingId: null, offsetSec: null, source: 'live', sessionId: 'e2e', peakDetectionId: `d-${s.id}` }));
+  await page.evaluate(
+    (rs) =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('sabihs-birdbrain');
+        req.onsuccess = () => {
+          const tx = req.result.transaction('sightings', 'readwrite');
+          for (const r of rs) tx.objectStore('sightings').put(r);
+          tx.oncomplete = () => {
+            req.result.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+        req.onerror = () => reject(req.error);
+      }),
+    rows,
+  );
+}
+
+/**
+ * Stub for the Overpass API: answers in the shape src/geo/places.ts asks for (a count marker and
+ * the ids per cell, one more marker, then every place). One park round 41.700,-93.700 and one
+ * trail node at 41.720,-93.720; nothing near 41.8,-93.6.
+ */
+function overpassFixture(body: string): unknown {
+  const query = decodeURIComponent(body.replace(/^data=/, '').replace(/\+/g, ' '));
+  const cells = Array.from(new Set(Array.from(query.matchAll(/around:500,(-?[\d.]+),(-?[\d.]+)\)/g)).map((m) => `${m[1]},${m[2]}`)));
+  const park = { type: 'way', id: 101, bounds: { minlat: 41.697, minlon: -93.703, maxlat: 41.703, maxlon: -93.697 }, tags: { leisure: 'park', name: 'Prairie Test Park' } };
+  const trail = { type: 'node', id: 202, lat: 41.72, lon: -93.72, tags: { highway: 'path', name: 'Creek Test Trail' } };
+  const near = (c: string, lat: number, lon: number) => {
+    const [a, b] = c.split(',').map(Number);
+    return Math.abs(a - lat) < 0.006 && Math.abs(b - lon) < 0.008;
+  };
+  const elements: unknown[] = [];
+  for (const c of cells) {
+    elements.push({ type: 'count', id: 0, tags: { total: '0' } });
+    if (near(c, 41.7, -93.7)) elements.push({ type: 'way', id: 101 });
+    if (near(c, 41.72, -93.72)) elements.push({ type: 'node', id: 202 });
+  }
+  elements.push({ type: 'count', id: 0, tags: { total: '2' } }, trail, park);
+  return { version: 0.6, elements };
+}
+
+test('Map tab: no filter card; Birds and Places cards under the map, tap zooms and fades, Show all, Overpass only for Places, 320 px in both themes', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  // No real network for photos or places in this test.
+  await page.route(/wikipedia\.org|wikimedia\.org/, (route) => route.abort());
+  const overpassBodies: string[] = [];
+  await page.route('https://overpass-api.de/api/interpreter', async (route) => {
+    const req = route.request();
+    overpassBodies.push(req.postData() ?? '');
+    expect(req.method()).toBe('POST');
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(overpassFixture(req.postData() ?? '')) });
+  });
+  await page.goto('./#/settings');
+  await seedSightings(page);
+  await page.goto('./#/map');
+  await expect(page.getByTestId('map')).toBeVisible();
+  // The old Species / From / To filter card is gone.
+  await expect(page.getByLabel('Filter by species')).toHaveCount(0);
+  await expect(page.getByLabel('From date')).toHaveCount(0);
+  await expect(page.getByText(/located sightings shown/)).toHaveCount(0);
+
+  // Birds view (the default): one card per species, newest first.
+  const tabs = page.getByRole('tablist', { name: 'Cards under the map' });
+  await expect(tabs.getByRole('tab', { name: 'Birds' })).toHaveAttribute('aria-selected', 'true');
+  const birdCards = page.getByTestId('map-bird-card');
+  await expect(birdCards).toHaveCount(3);
+  expect(await birdCards.evaluateAll((els) => els.map((e) => e.getAttribute('data-species')))).toEqual(['Poecile atricapillus', 'Euphagus carolinus', 'Dryobates villosus']);
+  await expect(birdCards.first()).toContainText('Black-capped Chickadee');
+  await expect(birdCards.first()).toContainText(/2 sightings · last /);
+  await expect(birdCards.nth(1)).toContainText(/1 sighting · /);
+  await expect(page.getByTestId('map-count')).toHaveText('3 species · 4 sightings with a location');
+  for (const box of await Promise.all((await birdCards.all()).map((c) => c.boundingBox()))) expect(box!.height).toBeGreaterThanOrEqual(44);
+  expect(overpassBodies, 'nothing goes to Overpass from the Birds view').toHaveLength(0);
+
+  // Tap a bird: map zooms to its sightings, the others fade, the newest one's popup opens.
+  await page.getByTestId('map-bird-card').filter({ hasText: 'Black-capped Chickadee' }).click();
+  await expect(page.getByTestId('map')).toHaveAttribute('data-focus', 'bird:Poecile atricapillus');
+  await expect(page.locator('.map-marker-selected')).toHaveCount(2);
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Black-capped Chickadee');
+  await expect(page.getByTestId('map-count')).toContainText('Showing Black-capped Chickadee · Show all');
+  await expect(page.getByTestId('map-bird-card').first()).toHaveAttribute('aria-pressed', 'true');
+  // Show all resets.
+  await page.getByTestId('map-show-all').click();
+  await expect(page.getByTestId('map')).not.toHaveAttribute('data-focus', /./);
+  await expect(page.locator('.map-marker-selected')).toHaveCount(0);
+  await expect(page.getByTestId('map-count')).toHaveText('3 species · 4 sightings with a location');
+  // Tap twice: the species page.
+  const rusty = page.getByTestId('map-bird-card').filter({ hasText: 'Rusty Blackbird' });
+  await rusty.click();
+  await expect(page.getByTestId('map')).toHaveAttribute('data-focus', 'bird:Euphagus carolinus');
+  await page.getByTestId('map-bird-card').filter({ hasText: 'Rusty Blackbird' }).click();
+  await expect(page).toHaveURL(/#\/species\/Euphagus%20carolinus$/);
+
+  // Places view: one Overpass request, sightings grouped by place, the rest under "Other spots".
+  await page.goto('./#/map');
+  await page.getByRole('tab', { name: 'Places' }).click();
+  const placeCards = page.getByTestId('map-place-card');
+  await expect(placeCards).toHaveCount(3);
+  expect(overpassBodies).toHaveLength(1);
+  const sent = decodeURIComponent(overpassBodies[0].replace(/^data=/, ''));
+  expect(sent).toContain('around:500,41.700,-93.700');
+  expect(sent).not.toMatch(/41\.7001|shop|amenity/);
+  await expect(placeCards.nth(0)).toContainText('Prairie Test Park');
+  await expect(placeCards.nth(0)).toContainText('Park · 2 sightings · 2 species');
+  await expect(placeCards.nth(1)).toContainText('Creek Test Trail');
+  await expect(placeCards.nth(1)).toContainText('Trail · 1 sighting · 1 species');
+  await expect(page.getByText('Not near a nature spot')).toBeVisible();
+  await expect(placeCards.nth(2)).toHaveAttribute('data-place', 'other');
+  await expect(placeCards.nth(2)).toContainText('Other spots');
+  await expect(placeCards.nth(2)).toContainText('1 sighting · 1 species');
+  await expect(page.getByTestId('map-count')).toContainText('2 places · nature spots only');
+  await expect(page.getByTestId('places-credit')).toContainText('OpenStreetMap');
+  await placeCards.nth(0).click();
+  await expect(page.getByTestId('map')).toHaveAttribute('data-focus', 'place:way/101');
+  await expect(page.locator('.map-marker-selected')).toHaveCount(2);
+  await expect(page.locator('path.place-outline')).toHaveCount(1);
+  await expect(page.getByTestId('map-count')).toContainText('Showing Prairie Test Park · Show all');
+  // The choice is remembered, and a second visit uses the cache (no new request).
+  await page.goto('./#/listen');
+  await page.goto('./#/map');
+  await expect(page.getByRole('tab', { name: 'Places' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('map-place-card')).toHaveCount(3);
+  expect(overpassBodies).toHaveLength(1);
+  await context.close();
+
+  // Busy server and offline: plain lines, a Retry, and the Birds view still works.
+  const busyCtx = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  const busy = await busyCtx.newPage();
+  await busy.addInitScript(returningVisitor);
+  await busy.route(/wikipedia\.org|wikimedia\.org/, (route) => route.abort());
+  await busy.route('https://overpass-api.de/api/interpreter', (route) => route.fulfill({ status: 429, headers: { 'Access-Control-Allow-Origin': '*' }, body: '' }));
+  await busy.goto('./#/settings');
+  await seedSightings(busy);
+  await busy.goto('./#/map');
+  await busy.getByRole('tab', { name: 'Places' }).click();
+  await expect(busy.getByTestId('map-places-status')).toContainText('Place names are busy, try again later.');
+  await expect(busy.getByTestId('map-places-retry')).toBeVisible();
+  await busyCtx.setOffline(true);
+  await busy.getByRole('tab', { name: 'Birds' }).click();
+  await expect(busy.getByTestId('map-bird-card')).toHaveCount(3);
+  await busyCtx.close();
+
+  const offCtx = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  const off = await offCtx.newPage();
+  await off.addInitScript(returningVisitor);
+  await off.route(/wikipedia\.org|wikimedia\.org|tile\.openstreetmap\.org/, (route) => route.abort());
+  await off.goto('./#/settings');
+  await seedSightings(off);
+  await offCtx.setOffline(true);
+  await off.goto('./#/map');
+  await off.getByRole('tab', { name: 'Places' }).click();
+  await expect(off.getByTestId('map-places-status')).toContainText('Place names need a connection.');
+  await offCtx.close();
+
+  // 320 px, both themes: nothing wider than the screen in either view.
+  const narrow = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const np = await narrow.newPage();
+  await np.addInitScript(returningVisitor);
+  await np.route(/wikipedia\.org|wikimedia\.org/, (route) => route.abort());
+  await np.route('https://overpass-api.de/api/interpreter', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(overpassFixture(route.request().postData() ?? '')) }));
+  await np.goto('./#/settings');
+  await seedSightings(np);
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await np.getByTestId('theme-toggle').click();
+    expect(await np.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
+    await np.goto('./#/map');
+    for (const v of ['Birds', 'Places']) {
+      await np.getByRole('tab', { name: v }).click();
+      await expect(np.getByTestId(v === 'Birds' ? 'map-bird-card' : 'map-place-card').first()).toBeVisible();
+      const widths = await np.evaluate(() => ({
+        view: document.querySelector('main.view')!.scrollWidth,
+        right: Math.max(...[...document.querySelectorAll('[data-testid="map-bird-card"], [data-testid="map-place-card"], [data-testid="map-cards-switch"]')].map((c) => c.getBoundingClientRect().right)),
+      }));
+      expect(widths.view, `${theme} ${v} view at 320px`).toBeLessThanOrEqual(320);
+      expect(widths.right, `${theme} ${v} cards at 320px`).toBeLessThanOrEqual(320);
+    }
+    await np.goto('./#/settings');
+  }
+  await narrow.close();
+});
+
 test('WebAssembly backend fallback loads the model and runs inference', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ backend: 'wasm', listenLayout: 'consolidated' }));

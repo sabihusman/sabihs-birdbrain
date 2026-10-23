@@ -60,6 +60,11 @@ Key modules:
   `about-bird.ts` (summary + sections, also used by the species page) and
   `ask-box.ts` for members. See DECISIONS.md #46.
 - `src/export/` — CSV / GeoJSON.
+- Map tab (`src/ui/views/map.ts`): map, then a Birds | Places switch
+  (`mapCardsView` setting) and cards. Places come from OpenStreetMap's Overpass
+  API (`src/geo/places.ts` pure query/grouping, `src/geo/place-lookup.ts` fetch +
+  `places:` entries in the `wiki` store, 30 days), only while Places is open. See
+  DECISIONS.md #72.
 - Member-only, on-device: `src/app/access.ts` (gating from the cached
   session), `src/species/clips.ts` (one raw clip per species, replace-if-higher,
   10 s cap), `src/ui/components/{member-gate,species-id-card,clip-player}.ts`,
