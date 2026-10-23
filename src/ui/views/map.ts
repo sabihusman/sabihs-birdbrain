@@ -249,7 +249,7 @@ export function mapView(ctx: ViewContext): View {
     }
     map.fitBounds(bounds.pad(0.3), { maxZoom: 16, animate: false });
     // The newest sighting's details open, as if its marker had been tapped.
-    const newest = chosen.reduce((a, b) => (b.lastTime > a.lastTime ? b : a));
+    const newest = chosen.reduce((a, b) => (b.lastTime > a.lastTime ? b : a), chosen[0]);
     markers[chosen.indexOf(newest)]?.openPopup();
   };
 
