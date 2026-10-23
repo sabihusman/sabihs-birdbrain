@@ -9,6 +9,7 @@ import { decodeWav, encodeWav, toMono } from '../audio/wav';
 import { resampleLinear } from '../audio/resample';
 import { LABELS_JSON, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
 import { MODEL_BASE_URL, MODEL_DOWNLOAD_ERROR } from '../model/model-source';
+import { BrowserUnsupportedError, checkBrowserSupport, describeModelFailure } from './browser-support';
 import { parseLabels, type Species } from '../model/labels';
 import { selectDetections, type Score } from '../model/postprocess';
 import { InferenceClient, type ModelStatus } from '../model/worker-client';
@@ -98,6 +99,13 @@ interface PendingLiveClip {
 /** How a saved detection window is named in Recordings (the auto-save setting, not the species ID clip). */
 export const AUTO_SAVE_RECORDING_PREFIX = 'Detection window';
 
+export interface ModelFailure {
+  /** The browser cannot run the model at all (no download was started; "Try again" cannot help). */
+  unsupported: boolean;
+  /** Plain words for the Listen panel and the toast (src/app/browser-support.ts). */
+  text: string;
+}
+
 export interface LocalSpeciesState {
   /** Species indices the geo model scores at or above the range threshold in any week; null when no position is known. */
   indices: Set<number> | null;
@@ -123,6 +131,7 @@ export class AppController extends Emitter<ControllerEvents> {
   private lastAutoClip = new Map<string, number>();
   private geoCount = 0;
   private modelReady = false;
+  private modelFailure: ModelFailure | null = null;
   private localCache = new LocalSpeciesCache();
   private micError: StartError | null = null;
   private localComputing: Promise<void> | null = null;
@@ -135,11 +144,11 @@ export class AppController extends Emitter<ControllerEvents> {
   /** Per species, the live windows (session seconds) that detected it, for the clip's identifying-window list. */
   private liveWindows = new Map<string, TimedWindow[]>();
   private clipsEnabled = false;
-  /** First visit: the Listen view shows the welcome layer and nothing downloads until "Start identifying" (DECISIONS.md #65). */
+  /** First visit: the Listen view shows the welcome layer and nothing downloads until "Start identifying" (DECISIONS.md #68). */
   private welcome = false;
   /** The in-flight model load, shared so a second caller never starts a second worker init. */
   private modelLoading: Promise<boolean> | null = null;
-  /** Load the model in init(): only when this phone asked for it before (DECISIONS.md #66). */
+  /** Load the model in init(): only when this phone asked for it before (DECISIONS.md #69). */
   private autoLoadModel = false;
 
   constructor(readonly baseUrl: string) {
@@ -215,7 +224,7 @@ export class AppController extends Emitter<ControllerEvents> {
   }
 
   /**
-   * The model, loaded on demand (DECISIONS.md #66): every identifying action (Listen's
+   * The model, loaded on demand (DECISIONS.md #69): every identifying action (Listen's
    * start, the sample clip, an import, "Start identifying") goes through here, so the
    * first one downloads and the flag makes the next visit load at startup. Resolves true
    * when inference is ready, false when the download failed (a notice was shown).
@@ -252,6 +261,11 @@ export class AppController extends Emitter<ControllerEvents> {
     if (this.modelLoading) return this.modelLoading;
     this.modelLoading = (async () => {
       try {
+        // Before any byte is requested: a browser without WebAssembly cannot run the model,
+        // so there is nothing to download (DECISIONS.md #65).
+        const support = checkBrowserSupport();
+        if (!support.ok) throw new BrowserUnsupportedError(support.reason);
+        this.modelFailure = null;
         await this.inference.init(MODEL_BASE_URL, this.settings.get().backend);
         await this.pushGeo();
         void this.refreshLocalSpecies();
@@ -259,13 +273,20 @@ export class AppController extends Emitter<ControllerEvents> {
       } catch (e) {
         // The technical reason stays in the console; the member reads what to do about it.
         console.warn('[model] load failed', e);
-        this.emit('notice', { kind: 'error', text: MODEL_DOWNLOAD_ERROR });
+        this.modelFailure = { unsupported: e instanceof BrowserUnsupportedError, text: describeModelFailure(e) };
+        if (this.modelFailure.unsupported) this.emit('model', this.inference.getStatus()); // no toast: the Listen panel says it, and "Try again" cannot help
+        else this.emit('notice', { kind: 'error', text: this.modelFailure.text });
         return false;
       } finally {
         this.modelLoading = null;
       }
     })();
     return this.modelLoading;
+  }
+
+  /** Why the last model load failed, in plain words; null when it has not failed. */
+  getModelFailure(): ModelFailure | null {
+    return this.modelFailure;
   }
 
   private onSettings(s: Settings): void {
@@ -352,7 +373,7 @@ export class AppController extends Emitter<ControllerEvents> {
   async startListening(): Promise<void> {
     if (this.engine.getState() !== 'stopped') return;
     // The first start on a phone downloads the model first; the Listen view shows the progress meanwhile.
-    if (!(await this.ensureModel())) throw new Error(MODEL_DOWNLOAD_ERROR);
+    if (!(await this.ensureModel())) throw new Error(this.modelFailure?.text ?? MODEL_DOWNLOAD_ERROR);
     if (this.settings.get().locationMode === 'auto' && !this.location.get().location) void this.location.refresh();
     // Follow the walk: each sighting is stamped with the newest fix, not with one from
     // page load. Off again in stopListening(), so the GPS is not left running.
@@ -657,7 +678,7 @@ export class AppController extends Emitter<ControllerEvents> {
 
   /** Run the bundled demo clip through the same path as a live window (not persisted). */
   async analyzeDemoClip(url: string): Promise<WindowResult> {
-    if (!(await this.ensureModel())) throw new Error(MODEL_DOWNLOAD_ERROR);
+    if (!(await this.ensureModel())) throw new Error(this.modelFailure?.text ?? MODEL_DOWNLOAD_ERROR);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Could not fetch sample (${res.status})`);
     const audio = await this.decodeAudioFile(await res.arrayBuffer());
