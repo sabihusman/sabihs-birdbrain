@@ -1,5 +1,5 @@
 /**
- * Can this browser run the bird model at all, and if a load failed, why (DECISIONS.md #69)?
+ * Can this browser run the bird model at all, and if a load failed, why (DECISIONS.md #65)?
  *
  * The check runs once, before any model byte is requested, so a browser that cannot run
  * BirdNET never starts a 78 MB download it cannot use. WebGL is not required: the worker

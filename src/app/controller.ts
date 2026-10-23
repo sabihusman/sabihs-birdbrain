@@ -214,7 +214,7 @@ export class AppController extends Emitter<ControllerEvents> {
   async loadModel(): Promise<boolean> {
     try {
       // Before any byte is requested: a browser without WebAssembly cannot run the model,
-      // so there is nothing to download (DECISIONS.md #69).
+      // so there is nothing to download (DECISIONS.md #65).
       const support = checkBrowserSupport();
       if (!support.ok) throw new BrowserUnsupportedError(support.reason);
       this.modelFailure = null;

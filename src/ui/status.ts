@@ -21,7 +21,7 @@ export function listenStatus(controller: AppController, online = typeof navigato
   const mic = controller.getMicError();
   const failure = controller.getModelFailure();
   // No WebAssembly (or no Worker, IndexedDB, AudioContext): nothing was downloaded and
-  // "Try again" cannot help, so this is its own state (DECISIONS.md #69).
+  // "Try again" cannot help, so this is its own state (DECISIONS.md #65).
   if (failure?.unsupported) return { status: 'unsupported', pill: 'Browser not supported', icon: '⊘', tone: 'error', hint: BROWSER_UNSUPPORTED_HINT };
   // The model is downloaded from the API host (src/model/model-source.ts), so this is
   // nearly always a connection problem; say the reason instead of "Something went wrong".

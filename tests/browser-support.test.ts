@@ -7,7 +7,7 @@ function browser(): Record<string, unknown> {
   return { WebAssembly: {}, Worker: class {}, indexedDB: {}, AudioContext: class {} };
 }
 
-describe('checkBrowserSupport (DECISIONS.md #69)', () => {
+describe('checkBrowserSupport (DECISIONS.md #65)', () => {
   it('passes a current browser, with or without WebGL', () => {
     expect(checkBrowserSupport(browser())).toEqual({ ok: true });
     // WebGL is optional: the worker falls back to the WebAssembly backend.
