@@ -1,18 +1,24 @@
-/** Serve dist/ with the headers from vercel.json and record CSP violations while using the app. */
+/**
+ * Serve dist/ with the headers from vercel.json and record CSP violations while using the app.
+ * A CI-style build (VITE_MODEL_BASE_URL=/models/birdnet-v2.4/) holds no weights (DECISIONS.md #56),
+ * so files missing from dist/ are served from the repository's models/ folder, as preview does.
+ */
 import { chromium, devices } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '../dist');
+const repo = path.resolve(import.meta.dirname, '..');
 const vercel = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../vercel.json'), 'utf8')) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
 const global = vercel.headers.find((h) => h.source === '/(.*)')!.headers;
 const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.bin': 'application/octet-stream', '.wasm': 'application/wasm', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.wav': 'audio/wav' };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent((req.url ?? '/').split('?')[0]);
   if (p.endsWith('/')) p += 'index.html';
-  const file = path.join(root, p);
-  if (!file.startsWith(root) || !fs.existsSync(file)) {
+  let file = path.join(root, p);
+  if (file.startsWith(root) && !fs.existsSync(file) && p.startsWith('/models/')) file = path.join(repo, p);
+  if (!(file.startsWith(root) || file.startsWith(path.join(repo, 'models'))) || !fs.existsSync(file)) {
     res.writeHead(404);
     res.end();
     return;
@@ -27,6 +33,8 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 const page = await (await browser.newContext({ ...devices['iPhone 13'] })).newPage();
 const violations: string[] = [];
 await page.addInitScript(() => {
+  // The demo button is hidden in the Focus layout, the first-run default (DECISIONS.md #63).
+  if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
   document.addEventListener('securitypolicyviolation', (e) => {
     (window as unknown as { __csp: string[] }).__csp ??= [];
     (window as unknown as { __csp: string[] }).__csp.push(`${e.violatedDirective} blocked ${e.blockedURI || 'inline'} at ${e.sourceFile}:${e.lineNumber}`);
