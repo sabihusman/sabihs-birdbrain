@@ -620,6 +620,52 @@ test('Map tab photo pins: a bird card shows round photo pins and no popup; a pin
   await narrow.close();
 });
 
+/** A plain SVG photo of the given size, served in place of a Wikipedia image. */
+function svgPhoto(width: number, height: number, fill: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${fill}"/></svg>`;
+}
+
+test('Map tab photo pins: a wide or tall Wikipedia photo fills the round pin exactly (DECISIONS.md #76)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/tile\.openstreetmap\.org|nominatim\.openstreetmap\.org|commons\.wikimedia\.org/, (route) => route.abort());
+  // Summaries point the chickadee at a wide photo and every other bird at a tall one.
+  await page.route(/en\.wikipedia\.org\/api\/rest_v1\/page\/summary\//, (route) => {
+    const wide = /Poecile|Chickadee/.test(decodeURIComponent(route.request().url()));
+    const source = `https://upload.wikimedia.org/e2e/${wide ? 'wide' : 'tall'}.svg`;
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ type: 'standard', title: 'Bird', extract: 'A bird.', thumbnail: { source, width: wide ? 300 : 100, height: wide ? 100 : 300 } }) });
+  });
+  await page.route(/upload\.wikimedia\.org\/e2e\//, (route) => {
+    const wide = route.request().url().includes('wide');
+    return route.fulfill({ contentType: 'image/svg+xml', body: wide ? svgPhoto(300, 100, '#c44') : svgPhoto(100, 300, '#44c') });
+  });
+  await page.goto('./#/settings');
+  await seedSightings(page);
+  await page.goto('./#/map');
+
+  for (const [bird, count] of [['Black-capped Chickadee', 2], ['Rusty Blackbird', 1]] as const) {
+    await page.getByTestId('map-bird-card').filter({ hasText: bird }).click();
+    const photos = page.locator('[data-testid="map-bird-pin"] img.bird-pin-photo');
+    await expect(photos).toHaveCount(count);
+    await expect.poll(() => photos.evaluateAll((els) => els.every((e) => (e as HTMLImageElement).complete && (e as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    const fits = await photos.evaluateAll((els) =>
+      els.map((e) => {
+        const ring = e.parentElement!;
+        const r = ring.getBoundingClientRect();
+        const b = parseFloat(getComputedStyle(ring).borderTopWidth);
+        const p = e.getBoundingClientRect();
+        return { dx: Math.abs(p.left - (r.left + b)), dy: Math.abs(p.top - (r.top + b)), dw: Math.abs(p.width - (r.width - 2 * b)), dh: Math.abs(p.height - (r.height - 2 * b)), fit: getComputedStyle(e).objectFit };
+      }),
+    );
+    for (const f of fits) {
+      expect(f, `${bird}: the photo covers the inside of the ring, no more and no less`).toEqual({ dx: expect.closeTo(0, 0), dy: expect.closeTo(0, 0), dw: expect.closeTo(0, 0), dh: expect.closeTo(0, 0), fit: 'cover' });
+    }
+    await page.getByTestId('map-count').getByText('Show all').click();
+  }
+  await context.close();
+});
+
 test('WebAssembly backend fallback loads the model and runs inference', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ backend: 'wasm', listenLayout: 'consolidated' }));
