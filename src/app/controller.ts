@@ -245,8 +245,15 @@ export class AppController extends Emitter<ControllerEvents> {
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Could not load the species list: ${(e as Error).message}` });
     }
+    // A browser that cannot run the model is told so at once, before any tap (DECISIONS.md #65): the
+    // check costs nothing and downloads nothing, and "Start identifying" would only fail later.
+    const support = checkBrowserSupport();
+    if (!support.ok) {
+      this.modelFailure = { unsupported: true, text: describeModelFailure(new BrowserUnsupportedError(support.reason)) };
+      this.emit('model', this.inference.getStatus());
+    }
     // Nothing downloads on its own: only a phone that asked for the model before loads it here.
-    if (this.autoLoadModel && !this.welcome) await this.loadModel();
+    else if (this.autoLoadModel && !this.welcome) await this.loadModel();
     if (this.settings.get().locationMode === 'auto') void this.location.refresh();
   }
 
