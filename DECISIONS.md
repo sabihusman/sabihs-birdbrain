@@ -2068,7 +2068,7 @@ other open branches, so this may be renumbered at merge.)
   e2e tests store the returning-visitor keys (`returningVisitor()`) before
   waiting for "Model ready", which is what a phone in use looks like.
 
-## 67. Download progress on the Listen panel, in MB and plain words; no Cancel
+## 70. Download progress on the Listen panel, in MB and plain words; no Cancel
 
 - **Audit finding (A3):** the header pill showed "Loading model 42%", but the
   big Listen panel showed only the worker's own messages ("Choosing compute

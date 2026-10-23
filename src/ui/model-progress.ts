@@ -16,7 +16,7 @@ export interface ModelProgress {
 }
 
 /**
- * What the Listen panel says under its progress bar (DECISIONS.md #67). The byte counts come
+ * What the Listen panel says under its progress bar (DECISIONS.md #70). The byte counts come
  * from the worker's progress messages (loaded so far, MODEL_TOTAL_BYTES); the two phases
  * that are not a download get the same plain sentence. Loaded never shows above total.
  */

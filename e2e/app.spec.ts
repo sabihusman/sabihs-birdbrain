@@ -78,7 +78,7 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
   expect(modelRequests).toBeGreaterThan(0);
   expect(await page.evaluate(() => localStorage.getItem('birdbrain.model.v1'))).toBe('wanted');
-  // The panel showed the download in MB and the plain-words preparing step, on a real progress bar (DECISIONS.md #67).
+  // The panel showed the download in MB and the plain-words preparing step, on a real progress bar (DECISIONS.md #70).
   const texts = await page.evaluate(() => (window as unknown as { __modelTexts: string[] }).__modelTexts);
   expect(texts.some((t) => /^Downloading \d+ MB of 78 MB$/.test(t)), texts.join(' | ')).toBe(true);
   expect(texts, texts.join(' | ')).toContain('Preparing the model on this phone…');

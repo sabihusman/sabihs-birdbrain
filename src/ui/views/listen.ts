@@ -68,7 +68,7 @@ export function listenView(ctx: ViewContext): View {
   const stateTitle = el('h2', { class: 'state-title' }, '');
   const stateHint = el('p', { class: 'muted state-hint' }, '');
   const status = el('div', { class: 'small muted', 'data-testid': 'listen-status', role: 'status', 'aria-live': 'polite' }, '');
-  // Download progress on the panel itself, not only in the header pill (DECISIONS.md #67).
+  // Download progress on the panel itself, not only in the header pill (DECISIONS.md #70).
   const modelBar = el('div', { class: 'progress', 'data-testid': 'model-progress', role: 'progressbar', 'aria-label': 'Model download', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, el('span', { style: 'width:0%' }));
   const modelText = el('div', { class: 'small muted', 'data-testid': 'model-text' }, '');
   const renderModelProgress = (s: ReturnType<typeof controller.inference.getStatus>) => {

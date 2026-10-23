@@ -4,7 +4,7 @@ import { describeModelProgress, mb, PREPARING_TEXT } from '../src/ui/model-progr
 
 const base = { state: 'loading' as const, progress: 0, loadedBytes: 0, totalBytes: MODEL_TOTAL_BYTES };
 
-describe('Listen panel download progress (DECISIONS.md #67)', () => {
+describe('Listen panel download progress (DECISIONS.md #70)', () => {
   it('counts whole MB of the download, never above the total', () => {
     expect(mb(MODEL_TOTAL_BYTES)).toBe(78);
     expect(describeModelProgress({ ...base, phase: 'acoustic', progress: 0.44, loadedBytes: 34 * 1048576 })).toEqual({ text: 'Downloading 34 MB of 78 MB', fraction: 0.44 });
