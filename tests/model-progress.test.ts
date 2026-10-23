@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MODEL_TOTAL_BYTES } from '../src/model/constants';
-import { describeModelProgress, mb, PREPARING_TEXT } from '../src/ui/model-progress';
+import { describeModelProgress, FROM_PHONE_TEXT, mb, PREPARING_TEXT } from '../src/ui/model-progress';
 
 const base = { state: 'loading' as const, progress: 0, loadedBytes: 0, totalBytes: MODEL_TOTAL_BYTES };
 
@@ -23,5 +23,17 @@ describe('Listen panel download progress (DECISIONS.md #70)', () => {
     expect(describeModelProgress({ state: 'ready', phase: null, progress: 1, loadedBytes: 1, totalBytes: 1 })).toEqual({ text: '', fraction: 1 });
     expect(describeModelProgress({ state: 'error', phase: 'acoustic', progress: 0.3, loadedBytes: 1, totalBytes: 2 }).text).toBe('');
     expect(describeModelProgress({ ...base, phase: 'acoustic', totalBytes: 0, progress: 0.5 }).text).toBe('Downloading the bird model…');
+  });
+});
+
+describe('progress when the model is already on the phone (DECISIONS.md #71)', () => {
+  it('says it is loading the saved model, not downloading', () => {
+    const p = describeModelProgress({ state: 'loading', phase: 'acoustic', progress: 0.4, loadedBytes: 30 * 1048576, totalBytes: 78 * 1048576 }, true);
+    expect(p.text).toBe(FROM_PHONE_TEXT);
+    expect(p.text).not.toMatch(/Downloading/);
+    expect(p.fraction).toBeCloseTo(0.4);
+  });
+  it('keeps the plain preparing text for the warm-up step either way', () => {
+    expect(describeModelProgress({ state: 'loading', phase: 'warmup', progress: 1, loadedBytes: 1, totalBytes: 1 }, true).text).toBe(PREPARING_TEXT);
   });
 });

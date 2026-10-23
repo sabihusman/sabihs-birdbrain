@@ -35,10 +35,14 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   // Every text the Listen panel shows under its progress bar, in order (the download is quick from localhost).
   await page.addInitScript(() => {
     const seen: string[] = [];
+    const values: number[] = [];
     (window as unknown as { __modelTexts: string[] }).__modelTexts = seen;
+    (window as unknown as { __modelValues: number[] }).__modelValues = values;
     const record = () => {
       const t = document.querySelector('[data-testid="model-text"]')?.textContent ?? '';
       if (t && seen[seen.length - 1] !== t) seen.push(t);
+      const v = Number(document.querySelector('[data-testid="model-progress"]')?.getAttribute('aria-valuenow') ?? 'NaN');
+      if (!Number.isNaN(v) && values[values.length - 1] !== v) values.push(v);
     };
     document.addEventListener('DOMContentLoaded', () => new MutationObserver(record).observe(document.body, { subtree: true, childList: true, characterData: true }));
   });
@@ -83,6 +87,9 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   expect(texts.some((t) => /^Downloading \d+ MB of 78 MB$/.test(t)), texts.join(' | ')).toBe(true);
   expect(texts, texts.join(' | ')).toContain('Preparing the model on this phone…');
   expect(texts.every((t) => !/BirdNET \(|backend|Warming up/.test(t)), 'no worker jargon on the panel').toBe(true);
+  // The bar only moves forward, also when the location model starts (DECISIONS.md #71).
+  const values = await page.evaluate(() => (window as unknown as { __modelValues: number[] }).__modelValues);
+  expect(values.every((v, i) => i === 0 || v >= values[i - 1]), values.join(',')).toBe(true);
   const bar = page.getByTestId('model-progress');
   await expect(bar).toHaveAttribute('role', 'progressbar');
   await expect(bar).toHaveAttribute('aria-valuenow', '100');
