@@ -2422,3 +2422,16 @@ other open branches, so this may be renumbered at merge.)
 - **Not verified:** a phone (touch on a 40 px pin under iOS Safari), real Wikipedia photos in
   the pins (the e2e blocks Wikipedia; a stubbed image was checked by eye), VoiceOver reading of
   the pin label.
+
+## 76. Pin photos fill the round pin (fixes #75 on real photos)
+
+- **Problem (Sabih, iPhone):** pin photos were off: a wide photo (Rusty Blackbird) spilled
+  out of the ring, and narrow ones (Great Horned Owl, Hairy Woodpecker) filled only part of it.
+- **Cause:** Leaflet's stylesheet sets `width: auto` on every `<img>` in the marker pane
+  (`.leaflet-container .leaflet-marker-pane img`), which is more specific than
+  `.bird-pin-photo`. Each photo kept its natural width, and only its height was 100 %.
+  The #75 e2e test blocked Wikipedia, so it only ever drew the placeholder and missed this.
+- **Fix:** `.leaflet-container .leaflet-marker-pane img.bird-pin-photo { display: block;
+  width: 100%; height: 100%; }`, so `object-fit: cover` crops the photo to the circle.
+- **Test:** e2e serves a 3:1 photo for one bird and a 1:3 photo for another and checks
+  that each pin photo exactly covers the inside of its ring. It fails without the fix.

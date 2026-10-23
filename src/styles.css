@@ -512,6 +512,10 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 /* The pointer: from the inner edge of the ring to 9 px below the circle (PIN_TIP_PX in map.ts). */
 .bird-pin::after { content: ''; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 7px solid transparent; border-top: 12px solid var(--ring, var(--accent)); border-bottom: 0; }
 .bird-pin-photo { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; overflow: hidden; }
+/* Leaflet's own CSS gives every <img> in the marker pane `width: auto` with a more specific
+   selector, so a photo kept its natural width: wide ones spilled past the ring, narrow ones
+   filled only part of it. Match that specificity so the photo fills the circle (DECISIONS.md #76). */
+.leaflet-container .leaflet-marker-pane img.bird-pin-photo { display: block; width: 100%; height: 100%; }
 .bird-pin-photo.placeholder svg, .compact-photo.placeholder svg { width: 60%; height: 60%; fill: none; stroke: var(--text); stroke-width: 1.5; opacity: 0.7; }
 .map-hint { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 800; width: max-content; max-width: calc(100% - 32px); margin: 0; padding: 4px 12px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: var(--text-sm); text-align: center; pointer-events: none; opacity: 0; transition: opacity 200ms ease-out; }
 .map-hint.shown { opacity: 1; }
