@@ -169,7 +169,8 @@ running (DECISIONS.md #59).
 
 | State | Status pill | Main area |
 |---|---|---|
-| Loading model | "Loading model 42%" | Progress bar + "One-time download, about 78 MB. Use Wi-Fi if you can." |
+| Model not loaded (nothing asked for it yet) | "Model not loaded" | The Ready controls, with "The bird model downloads once, the first time you start." A first visit shows the welcome layer instead (DECISIONS.md #65–66). |
+| Loading model | "Loading model 42%" | Progress bar + "Downloading 34 MB of 78 MB" (or "Preparing the model on this phone…" while the backend starts and warms up) + "One-time download, about 78 MB. Use Wi-Fi if you can." No Cancel; "Try again" covers a failed download. |
 | Ready | "Model ready" | Mic button, "Point the bottom of your phone toward the sound." |
 | Listening | "Listening" | Panel + results |
 | Paused (app in background) | "Paused" | "Listening paused while the app was in the background. Tap to resume." |

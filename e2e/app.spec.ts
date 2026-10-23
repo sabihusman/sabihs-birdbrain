@@ -32,6 +32,16 @@ test('first visit: the welcome layer shows before any download, the tabs work be
     modelRequests++;
     return route.continue();
   });
+  // Every text the Listen panel shows under its progress bar, in order (the download is quick from localhost).
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { __modelTexts: string[] }).__modelTexts = seen;
+    const record = () => {
+      const t = document.querySelector('[data-testid="model-text"]')?.textContent ?? '';
+      if (t && seen[seen.length - 1] !== t) seen.push(t);
+    };
+    document.addEventListener('DOMContentLoaded', () => new MutationObserver(record).observe(document.body, { subtree: true, childList: true, characterData: true }));
+  });
   await page.goto('./');
   const welcome = page.getByTestId('welcome');
   await expect(welcome).toBeVisible();
@@ -68,6 +78,15 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
   expect(modelRequests).toBeGreaterThan(0);
   expect(await page.evaluate(() => localStorage.getItem('birdbrain.model.v1'))).toBe('wanted');
+  // The panel showed the download in MB and the plain-words preparing step, on a real progress bar (DECISIONS.md #70).
+  const texts = await page.evaluate(() => (window as unknown as { __modelTexts: string[] }).__modelTexts);
+  expect(texts.some((t) => /^Downloading \d+ MB of 78 MB$/.test(t)), texts.join(' | ')).toBe(true);
+  expect(texts, texts.join(' | ')).toContain('Preparing the model on this phone…');
+  expect(texts.every((t) => !/BirdNET \(|backend|Warming up/.test(t)), 'no worker jargon on the panel').toBe(true);
+  const bar = page.getByTestId('model-progress');
+  await expect(bar).toHaveAttribute('role', 'progressbar');
+  await expect(bar).toHaveAttribute('aria-valuenow', '100');
+  await expect(bar).toBeHidden(); // nothing left to show once the model is ready
   // A returning visitor never sees the layer again.
   await page.reload();
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });

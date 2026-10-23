@@ -7,6 +7,9 @@ export interface ModelStatus {
   phase: LoadPhase | null;
   /** 0..1 */
   progress: number;
+  /** Bytes downloaded so far and the size of the whole download (MODEL_TOTAL_BYTES), for the Listen panel's "34 MB of 78 MB". */
+  loadedBytes: number;
+  totalBytes: number;
   message: string;
   backend: BackendName | null;
   loadMs: number;
@@ -48,7 +51,7 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
   private worker: Worker;
   private nextId = 1;
   private pending = new Map<number, Pending>();
-  private status: ModelStatus = { state: 'idle', phase: null, progress: 0, message: 'Model not loaded', backend: null, loadMs: 0, warmupMs: 0 };
+  private status: ModelStatus = { state: 'idle', phase: null, progress: 0, loadedBytes: 0, totalBytes: 0, message: 'Model not loaded', backend: null, loadMs: 0, warmupMs: 0 };
   private analyzing = false;
 
   constructor(worker?: Worker) {
@@ -89,11 +92,11 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
     switch (msg.type) {
       case 'progress': {
         const frac = msg.totalBytes > 0 ? Math.min(1, msg.loadedBytes / msg.totalBytes) : 0;
-        this.setStatus({ ...this.status, state: 'loading', phase: msg.phase, progress: frac, message: msg.message });
+        this.setStatus({ ...this.status, state: 'loading', phase: msg.phase, progress: frac, loadedBytes: Math.min(msg.loadedBytes, msg.totalBytes), totalBytes: msg.totalBytes, message: msg.message });
         return;
       }
       case 'ready': {
-        this.setStatus({ state: 'ready', phase: null, progress: 1, message: `Ready (${msg.backend})`, backend: msg.backend, loadMs: msg.loadMs, warmupMs: msg.warmupMs });
+        this.setStatus({ state: 'ready', phase: null, progress: 1, loadedBytes: this.status.totalBytes, totalBytes: this.status.totalBytes, message: `Ready (${msg.backend})`, backend: msg.backend, loadMs: msg.loadMs, warmupMs: msg.warmupMs });
         this.pending.get(msg.id)?.resolve(undefined);
         this.pending.delete(msg.id);
         return;

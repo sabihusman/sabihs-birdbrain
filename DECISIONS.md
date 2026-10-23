@@ -2067,3 +2067,28 @@ other open branches, so this may be renumbered at merge.)
   load the model and checks that a reload is "Model ready" at once. The other
   e2e tests store the returning-visitor keys (`returningVisitor()`) before
   waiting for "Model ready", which is what a phone in use looks like.
+
+## 70. Download progress on the Listen panel, in MB and plain words; no Cancel
+
+- **Audit finding (A3):** the header pill showed "Loading model 42%", but the
+  big Listen panel showed only the worker's own messages ("Choosing compute
+  backend…", "Downloading BirdNET (34 MB of 78 MB)", "Warming up on webgl…")
+  and the bar had no accessible role.
+- **Decision (A3-cancel (b), Sabih's):** progress only, no Cancel. The existing
+  "Try again" covers a failed download, and a cancel would need a way to stop
+  the worker mid-`loadLayersModel` for little gain on a one-time download.
+- **What the panel shows:** `describeModelProgress()` (`src/ui/model-progress.ts`,
+  pure and unit-tested) turns the worker's progress messages into one line:
+  "Downloading 34 MB of 78 MB" while the files come in (whole MiB, loaded never
+  above the total, the total from `MODEL_TOTAL_BYTES` carried on `ModelStatus`
+  as `loadedBytes`/`totalBytes`), and "Preparing the model on this phone…" for
+  the two phases that are not a download (choosing the backend, warming up).
+  The bar is a `role="progressbar"` with `aria-valuenow` and the same sentence
+  as `aria-valuetext` (`data-testid="model-progress"`). The worker's messages
+  are unchanged: they still go to the console log and stay the technical
+  record.
+- **Tests:** unit tests for the formatting and the phases; the first-visit e2e
+  test records every text the panel shows during a real download (a
+  `MutationObserver` from an init script, because the download from localhost
+  is too quick to catch by polling) and checks for the MB line, the preparing
+  line, no worker jargon, and the bar's role and final value.
