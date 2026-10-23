@@ -227,6 +227,10 @@ canvas.timeline { width: 100%; height: 120px; display: block; }
 .center { text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .leaflet-container { font: inherit; }
+/* Leaflet gives its panes and controls z-index 400–1000. Every map box gets its own stacking
+   context, so those values stay inside the map and the sticky header, tab bar, dock and sheets
+   (z-index 19–30) always sit on top while scrolling (DECISIONS.md #74). */
+.map, .map-preview, .leaflet-container { isolation: isolate; }
 .leaflet-popup-content .chip { margin-bottom: 6px; }
 details summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
 code { font-size: 0.85em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
