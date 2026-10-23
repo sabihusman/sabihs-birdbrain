@@ -175,12 +175,20 @@ async function handleInit(msg: Extract<WorkerRequest, { type: 'init' }>): Promis
 
   await dropStaleModelCache(msg.baseUrl);
 
-  const fetchFunc = progressFetch((loaded) => {
-    post({ type: 'progress', id: msg.id, phase: 'acoustic', loadedBytes: loaded, totalBytes: MODEL_TOTAL_BYTES, message: `Downloading BirdNET (${(loaded / 1048576).toFixed(0)} MB of ${(MODEL_TOTAL_BYTES / 1048576).toFixed(0)} MB)` });
+  // One running byte count across both models, so progress never goes backwards when the
+  // location model starts (its own fetch counter starts at 0). The acoustic model is about
+  // 64 % of the total; the location model counts on from there (DECISIONS.md #71).
+  const acousticShare = MODEL_TOTAL_BYTES * 0.64;
+  const acousticFetch = progressFetch((loaded) => {
+    const shown = Math.min(loaded, acousticShare);
+    post({ type: 'progress', id: msg.id, phase: 'acoustic', loadedBytes: shown, totalBytes: MODEL_TOTAL_BYTES, message: `Downloading BirdNET (${(shown / 1048576).toFixed(0)} MB of ${(MODEL_TOTAL_BYTES / 1048576).toFixed(0)} MB)` });
   });
-  acoustic = await tf.loadLayersModel(msg.baseUrl + ACOUSTIC_MODEL_FILE, { fetchFunc });
-  post({ type: 'progress', id: msg.id, phase: 'geo', loadedBytes: MODEL_TOTAL_BYTES * 0.64, totalBytes: MODEL_TOTAL_BYTES, message: 'Downloading location model…' });
-  geoModel = await tf.loadGraphModel(msg.baseUrl + GEO_MODEL_FILE, { fetchFunc });
+  acoustic = await tf.loadLayersModel(msg.baseUrl + ACOUSTIC_MODEL_FILE, { fetchFunc: acousticFetch });
+  post({ type: 'progress', id: msg.id, phase: 'geo', loadedBytes: acousticShare, totalBytes: MODEL_TOTAL_BYTES, message: 'Downloading location model…' });
+  const geoFetch = progressFetch((loaded) => {
+    post({ type: 'progress', id: msg.id, phase: 'geo', loadedBytes: Math.min(acousticShare + loaded, MODEL_TOTAL_BYTES), totalBytes: MODEL_TOTAL_BYTES, message: 'Downloading location model…' });
+  });
+  geoModel = await tf.loadGraphModel(msg.baseUrl + GEO_MODEL_FILE, { fetchFunc: geoFetch });
   const loadMs = performance.now() - t0;
 
   post({ type: 'progress', id: msg.id, phase: 'warmup', loadedBytes: MODEL_TOTAL_BYTES, totalBytes: MODEL_TOTAL_BYTES, message: `Warming up on ${backendName}…` });

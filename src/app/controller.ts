@@ -20,7 +20,7 @@ import { LocationManager, type LocationState } from './location';
 import { PositionWatch, positionStamp } from './position-watch';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
-import { markModelWanted, safeLocalStorage } from './first-visit';
+import { isModelCached, markModelWanted, safeLocalStorage } from './first-visit';
 
 export interface WindowResult {
   windowId: number;
@@ -132,6 +132,8 @@ export class AppController extends Emitter<ControllerEvents> {
   private geoCount = 0;
   private modelReady = false;
   private modelFailure: ModelFailure | null = null;
+  /** True while loading a model that is already saved on the phone: the Listen panel says so instead of "Downloading". */
+  modelFromCache = false;
   private localCache = new LocalSpeciesCache();
   private micError: StartError | null = null;
   private localComputing: Promise<void> | null = null;
@@ -273,6 +275,7 @@ export class AppController extends Emitter<ControllerEvents> {
         const support = checkBrowserSupport();
         if (!support.ok) throw new BrowserUnsupportedError(support.reason);
         this.modelFailure = null;
+        this.modelFromCache = await isModelCached(typeof caches === 'undefined' ? undefined : caches, MODEL_BASE_URL);
         await this.inference.init(MODEL_BASE_URL, this.settings.get().backend);
         await this.pushGeo();
         void this.refreshLocalSpecies();

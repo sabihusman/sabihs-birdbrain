@@ -72,7 +72,7 @@ export function listenView(ctx: ViewContext): View {
   const modelBar = el('div', { class: 'progress', 'data-testid': 'model-progress', role: 'progressbar', 'aria-label': 'Model download', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, el('span', { style: 'width:0%' }));
   const modelText = el('div', { class: 'small muted', 'data-testid': 'model-text' }, '');
   const renderModelProgress = (s: ReturnType<typeof controller.inference.getStatus>) => {
-    const p = describeModelProgress(s);
+    const p = describeModelProgress(s, controller.modelFromCache);
     modelText.textContent = p.text;
     const percent = Math.round(p.fraction * 100);
     (modelBar.firstElementChild as HTMLElement).style.width = `${percent}%`;

@@ -2092,3 +2092,25 @@ other open branches, so this may be renumbered at merge.)
   `MutationObserver` from an init script, because the download from localhost
   is too quick to catch by polling) and checks for the MB line, the preparing
   line, no worker jargon, and the bar's role and final value.
+
+## 71. Second audit: credits stay under answers; progress only moves forward; "saved on this phone"
+
+- **eBird and NatureServe on the credits page (decided: no).** The re-audit asked
+  for an eBird.org link and a NatureServe line on Help › Credits. Sabih chose to
+  keep the rule from #66: a source is credited where its data is shown. eBird's
+  terms ask for attribution "wherever it is used or displayed", with a link
+  "whenever possible"; an answer that used eBird already shows "Local sightings
+  in answers: eBird.org" with the link, and NatureServe its own linked line.
+  Help names both in the Ask paragraph. An outside review cannot see answers
+  (members only), which is why the credits looked missing.
+- **Progress never goes backwards.** The location model's download used its own
+  byte counter starting at 0, so the bar jumped to 64 %, fell back and then ended
+  at 100 %. Both models now share one running count: the acoustic model fills
+  the first 64 %, the location model counts on from there.
+- **A model already saved on the phone** (a second tab, a later visit) is loaded
+  from the browser's cache, not downloaded again. Each tab still has to load its
+  own copy into memory. The panel now says "Loading the bird model saved on this
+  phone…" instead of "Downloading 34 MB of 78 MB" (cache checked with the same
+  `isModelCached` the welcome uses).
+- **Not changed:** no Cancel button (Sabih's decision, #70); a returning visitor
+  goes straight to loading, without the welcome card (#68).
