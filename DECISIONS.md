@@ -1830,7 +1830,120 @@ other open branches, so this may be renumbered at merge.)
 - **Not done:** no retry loop beyond three attempts (the next tab open or
   sighting retries anyway), and nothing new is sent to the server.
 
-## 68. Link previews and a static shell: Open Graph tags, a generated 1200×630 image, text inside `#app`
+## 65. A browser that cannot run the model is told so before any download; failures name their reason
+
+- **Audit (A5):** the Listen screen started the 78 MB download on every browser,
+  and a failed load said only "Couldn't download the bird model. Check your
+  open branches.)
+- **Check, once, before the first byte:** `checkBrowserSupport()` in
+  `src/app/browser-support.ts` runs at the top of `AppController.loadModel()`,
+  before `inference.init`, and needs four things: `WebAssembly`, `Worker`,
+  `indexedDB` and `AudioContext` (or Safari's `webkitAudioContext`). **WebGL is
+  not required**: the worker's backend order is webgl → wasm → cpu, so a phone
+  without WebGL still runs the model on WebAssembly, only slower. WebAssembly
+  is therefore the one compute requirement; the other three are what the app
+  needs around the model (a thread to run it in, a place for sightings, the
+  microphone). It is a pure function of the globals, so the tests stub them.
+- **Unsupported is its own Listen state** (`ListenStatus` `'unsupported'`,
+  pill "Browser not supported"): title "This browser can't run the bird
+  model.", hint "It works in current Safari, Chrome, Firefox and Edge." No
+  download starts, no toast, and no "Try again", because trying again cannot
+  help; the mic and sample-clip buttons are hidden too. Species, Recordings,
+  Map and Settings keep working from the bundled label list. The four named
+  browsers are the ones whose current versions ship everything on the list.
+- **Other failures keep "Try again" and gain a reason line**
+  (`describeModelFailure(err)`): no connection (a `TypeError` from fetch, the
+  browsers' "Failed to fetch" / "NetworkError…" / "Load failed" messages, or
+  `navigator.onLine === false`) → "No connection. The bird model downloads
+  once, about 78 MB, so connect to Wi-Fi and try again."; not enough storage
+  (an error whose name or message contains "quota") → "Not enough storage.
+  The bird model needs about 78 MB free on this phone. Clear some space and
+  try again."; anything else keeps the generic text. Storage wins over
+  offline, because clearing space is what helps. The worker forwards errors as
+  a message string (`src/model/protocol.ts`), so the fetch `TypeError` arrives
+  on the main thread as a plain `Error`; the message is matched as well as the
+  name. The same sentence is the toast and the Listen hint
+  (`AppController.getModelFailure()` → `listenStatus`).
+- **Kept small on purpose:** `claude/lazy-model` moves `loadModel()` behind
+  "Start identifying"; this change touches only the inside of `loadModel()`,
+  so it holds wherever that call ends up.
+- **Not done:** no WebGL-vs-WASM speed warning (the pill already shows the
+  backend), and no per-reason `UnsupportedReason` wording in the UI (the fix is
+  the same for all four: use a current browser); the reason stays in the
+  console and the error class.
+
+## 66. Data credits: each source credited where its data is shown (eBird and NatureServe on answers, BirdNET on Listen)
+
+
+- **Audit finding (AUDIT_PROMPT.md A6/A7):** answers list their sources with
+  links (#47), but nothing credited eBird or NatureServe as the terms ask, and
+  nothing on the Listen screen said whose model identifies the birds.
+- **Terms checked on 2026-10-23.**
+  - eBird API Terms of Use, https://www.birds.cornell.edu/home/ebird-api-terms-of-use/
+    ("Last edited on October 19, 2021"), section 3 "Attribution": "You agree to
+    attribute eBird.org as the source of the data accessed via the API wherever
+    it is used or displayed." and "Whenever possible, please accompany this with
+    a link back to eBird.org." Section 5: "You agree to maintain all copyright
+    or other proprietary notices embedded in or attached to any API Content."
+    (The Postman documentation page https://documenter.getpostman.com/view/664302/S1ENwy59
+    renders only its title without JavaScript; the terms page above is the one
+    it links.)
+  - NatureServe: `https://explorer.natureserve.org/AboutTheData/DataTypes/`
+    returned 404 (the Explorer is a JavaScript app; its About pages are not
+    served as HTML), so the terms were read from the main site.
+    https://www.natureserve.org/terms (submitted 05/29/2021): "The copyright
+    citation provided at the beginning of this paragraph should be used in any
+    published materials which reference the website." and "Specific products
+    published by NatureServe may have separate terms of use and citation
+    requirements and in those cases, the product specific citation should be
+    used." https://www.natureserve.org/data-use-terms-citation (submitted
+    11/05/2025): NatureServe Explorer data is CC BY, reuse is allowed "so long
+    as attribution is given to the creator", and products built on it "should
+    include one of the following citations": "NatureServe. YYYY. NatureServe
+    Explorer [web application]. NatureServe, Arlington, Virginia. Available
+    https://explorer.natureserve.org/pro/. (Accessed: Month DD, YYYY)."
+  - BirdNET: `public/models/birdnet-v2.4/LICENSE.md` (CC BY-NC-SA 4.0, Stefan
+    Kahl, Cornell Lab of Ornithology, Chemnitz University of Technology) and
+    the existing Help › "Credits and licences" line.
+- **Rule (now in DESIGN_GUIDE.md §5 "Source credits"):** a data source is
+  credited on every page that displays its data, and on no other page, in the
+  small credit style. Listen shows no eBird data, so it carries no eBird text;
+  it credits BirdNET, which does the identifying there.
+- **Answers (`src/ui/credits.ts`, `src/ui/components/source-credit.ts`,
+  `ask-box.ts`):** `creditsFor(sources)` is pure and matches the names the
+  server sends (`SOURCE_NAMES` in `server/src/ask.ts`) or the link host. Under
+  the answer, after the existing "Sources:" line, one `<p class="answer-credit"
+  data-testid="answer-credits">`: "Local sightings in answers: eBird.org"
+  (→ https://ebird.org) and/or "Conservation status: NatureServe Explorer"
+  (→ https://explorer.natureserve.org), joined with " · ". Wikipedia keeps its
+  link in the source line and gets no second credit. An answer from Wikipedia
+  alone renders no credit element at all. `font-size: 0.75em` relative to the
+  answer paragraph, muted, links underlined and with vertical padding for the
+  tap area. The Ask box is the only place an answer renders (species page and
+  sighting card both use it), so one component covers both.
+- **Listen (`birdnetCredit()`):** "Bird ID: BirdNET, Cornell Lab of Ornithology
+  and Chemnitz University of Technology · CC BY-NC-SA 4.0", BirdNET →
+  https://birdnet.cornell.edu, the licence → the Creative Commons deed.
+  `<p class="source-credit" data-testid="birdnet-credit">`, 12 px, muted,
+  centred, the last node in flow in all three layouts; in Bottom dock it comes
+  before the fixed dock in the DOM and the layout's `padding-bottom` keeps it
+  above the dock, never under it. Wraps at 320 px (`overflow-wrap: anywhere`).
+- **Not the full NatureServe citation:** the formal "NatureServe. YYYY. …"
+  citation is for published materials; the in-app line names the product and
+  links to it, which satisfies CC BY attribution, and the server's source line
+  already links the species record. The formal citation can be added to Help
+  if NatureServe asks.
+- **CSP:** the three new links are navigations (`target="_blank"`), not
+  fetches, so `connect-src` is untouched; `vercel.json` has `form-action
+  'self'` and no `navigate-to`, neither of which restricts links.
+- **Tests:** `tests/credits.test.ts` (eBird only, NatureServe only, both,
+  neither, host matching); e2e: the BirdNET credit is inside the viewport and
+  clear of the dock and tab bar in all three layouts at 320 px with no "eBird"
+  text on Listen; a stubbed answer with eBird in `sources` shows the credit
+  with the right link, one with NatureServe only shows only that, one with
+  Wikipedia only shows none.
+
+## 67. Link previews and a static shell: Open Graph tags, a generated 1200×630 image, text inside `#app`
 
 - **Request:** audit item A4. A link to the app pasted into iMessage, WhatsApp,
   Slack or X showed only the URL, and a reader without JavaScript (or a crawler
@@ -1871,5 +1984,4 @@ other open branches, so this may be renumbered at merge.)
   and stores the Consolidated layout before loading, like `e2e/app.spec.ts`.
   Run after a CI-style build: "Model ready · webgl", no violations.
 - **Not verified:** how iMessage, WhatsApp and X actually render the card;
-  that needs the deployed URL. Numbers #65–#67 are taken by other open
   branches.

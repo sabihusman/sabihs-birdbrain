@@ -4,7 +4,7 @@
  * small HTML page and screenshots it. The art is public/icons/icon.svg, the colours are
  * the dark "Forest Night" theme (src/theme/tokens.ts), and the font is Inter, the first
  * choice in src/styles.css (it must be installed on the machine that runs this; the
- * fallback is the system sans-serif). DECISIONS.md #68.
+ * fallback is the system sans-serif). DECISIONS.md #67.
  *
  *   npx tsx scripts/make-og-image.ts
  */

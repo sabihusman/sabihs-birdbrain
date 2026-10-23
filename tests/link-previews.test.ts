@@ -12,7 +12,7 @@ function pngSize(buf: Buffer): { width: number; height: number } {
 
 const SITE = 'https://sabihs-birdbrain.vercel.app/';
 
-/** Link previews and the static shell text (DECISIONS.md #68). */
+/** Link previews and the static shell text (DECISIONS.md #67). */
 describe('index.html link previews', () => {
   const html = read('index.html');
   const meta = (attr: 'property' | 'name', key: string) => {
