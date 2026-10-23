@@ -34,7 +34,7 @@ export function recordingsView(ctx: ViewContext): View {
     const file = fileInput.files?.[0];
     if (!file) return;
     importBtn.textContent = 'Decoding…';
-    // An import is an identifying action: start the model load now so the sighting card can analyse at once (DECISIONS.md #66).
+    // An import is an identifying action: start the model load now so the sighting card can analyse at once (DECISIONS.md #69).
     void controller.ensureModel();
     try {
       const decoded = await controller.decodeAudioFile(await file.arrayBuffer());

@@ -97,7 +97,7 @@ p { margin: 0.4em 0; }
 .app-header .model-pill.tone-warn::before { background: var(--warn); }
 .app-header .model-pill.tone-error::before { background: var(--error); }
 .app-header .model-pill.ready, .app-header .model-pill.listening { color: var(--accent); }
-.app-header .model-pill.mic-blocked, .app-header .model-pill.error { color: var(--error); }
+.app-header .model-pill.mic-blocked, .app-header .model-pill.error, .app-header .model-pill.unsupported { color: var(--error); }
 .app-header .model-pill.ready { color: var(--accent); }
 .app-header .model-pill.error { color: var(--danger); }
 main.view { flex: 1; padding: var(--space-3) calc(var(--space-3) + var(--sar)) calc(var(--tab-h) + var(--sab) + var(--space-3)) calc(var(--space-3) + var(--sal)); max-width: 1120px; width: 100%; margin: 0 auto; }
@@ -243,9 +243,17 @@ code { font-size: 0.85em; background: var(--surface-2); padding: 1px 5px; border
 .leaflet-popup-content .location-block .btn { min-height: 32px; padding: 2px 8px; }
 textarea { color: inherit; }
 
+/* Data-source credits (DECISIONS.md #66, DESIGN_GUIDE.md §5 "Source credits"): small, muted, links underlined.
+   .answer-credit is 75% of the answer paragraph it follows (em, not a token); .source-credit is the same 12 px on Listen.
+   Vertical padding on the inline links widens their hit area without changing the line box. */
+.answer-credit { font-size: 0.75em; color: var(--muted); line-height: 1.8; margin: var(--space-1) 0 0; padding: 4px 0; overflow-wrap: anywhere; }
+.source-credit { font-size: var(--text-xs); color: var(--muted); line-height: 1.8; margin: var(--space-2) 0 0; padding: 4px 0; text-align: center; overflow-wrap: anywhere; }
+.answer-credit a, .source-credit a { color: var(--muted); text-decoration: underline; padding: 12px 0; }
+.answer-credit a:hover, .source-credit a:hover, .answer-credit a:focus-visible, .source-credit a:focus-visible { color: var(--accent); }
+
 /* Listen screen (DESIGN_GUIDE.md §5–6) */
 .listen { max-width: 560px; margin: 0 auto; }
-/* First-visit welcome layer, shown in place of the loading state (DECISIONS.md #65). */
+/* First-visit welcome layer, shown in place of the loading state (DECISIONS.md #68). */
 .welcome { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-4) var(--space-3); margin-bottom: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
 .welcome p { margin: 0; }
 .welcome-actions { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
@@ -253,7 +261,7 @@ textarea { color: inherit; }
 .ready-block { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-3); margin-bottom: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
 .state-row { display: flex; align-items: center; gap: var(--space-2); }
 .state-icon { font-size: var(--text-lg); color: var(--accent); min-width: 1.4em; text-align: center; }
-[data-status="mic-blocked"] .state-icon, [data-status="error"] .state-icon { color: var(--error); }
+[data-status="mic-blocked"] .state-icon, [data-status="error"] .state-icon, [data-status="unsupported"] .state-icon { color: var(--error); }
 [data-status="paused"] .state-icon, [data-status="offline"] .state-icon { color: var(--warn); }
 .state-title { margin: 0; font-size: var(--text-xl); }
 .state-hint { margin: 0; }

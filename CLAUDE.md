@@ -34,7 +34,7 @@ Key modules:
 - `src/app/controller.ts` — session state, persistence, wake lock, visibility,
   auto-save clips, demo clip. Views subscribe to its events.
   `prepareForAnalysis()` applies the low-cut to clips before inference.
-  The model loads on demand (`ensureModel()`, DECISIONS.md #66): `init()` loads
+  The model loads on demand (`ensureModel()`, DECISIONS.md #69): `init()` loads
   only the species list, plus the model when `src/app/first-visit.ts` says the
   phone asked for it before (cached, or the `birdbrain.model.v1` flag). A first
   visit shows the welcome layer (`src/ui/components/welcome.ts`, #65) and nothing

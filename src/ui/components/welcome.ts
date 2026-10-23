@@ -5,7 +5,7 @@ import { el } from '../dom';
 export const MODEL_SIZE_MB = Math.round(MODEL_TOTAL_BYTES / 1048576);
 
 /**
- * The welcome layer's text, in Sabih's voice (AUDIT_PROMPT "Writing style"; DECISIONS.md #65).
+ * The welcome layer's text, in Sabih's voice (AUDIT_PROMPT "Writing style"; DECISIONS.md #68).
  * Exported so the unit test and the e2e test read the same sentences.
  */
 export const WELCOME_TEXT = {

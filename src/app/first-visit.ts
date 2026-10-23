@@ -1,5 +1,5 @@
 /**
- * First visit or returning visitor? (DECISIONS.md #65)
+ * First visit or returning visitor? (DECISIONS.md #68)
  *
  * The welcome layer is shown once, before anything is downloaded. Three signals say
  * that a phone has used Birdbrain before, and any one of them hides the welcome:
@@ -32,7 +32,7 @@ export interface VisitSignals {
  * Load the model at startup only when this phone asked for it before: it is cached (a
  * download finished here) or the flag is set (the user started identifying, so the next
  * visit should be "Model ready" without a tap). Everyone else gets it on their first
- * identifying action (DECISIONS.md #66).
+ * identifying action (DECISIONS.md #69).
  */
 export function shouldAutoLoadModel(s: Pick<VisitSignals, 'modelWanted' | 'modelCached'>): boolean {
   return s.modelCached || s.modelWanted;

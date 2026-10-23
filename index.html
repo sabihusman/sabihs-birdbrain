@@ -6,6 +6,19 @@
     <title>Sabih’s Birdbrain</title>
     <meta name="description" content="On-device bird sound identification with BirdNET and TensorFlow.js. Audio never leaves your phone." />
     <meta name="theme-color" content="#121A17" />
+    <!-- Link previews (iMessage, WhatsApp, Slack, X): DECISIONS.md #67. The image is made by scripts/make-og-image.ts. -->
+    <meta property="og:title" content="Sabih’s Birdbrain" />
+    <meta property="og:description" content="Birdbrain listens and tells you which birds are singing, on your phone, so your audio never leaves it; an account is optional." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://sabihs-birdbrain.vercel.app/" />
+    <meta property="og:image" content="https://sabihs-birdbrain.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Birdbrain icon, a bird head with sound waves, next to the name Sabih’s Birdbrain" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sabih’s Birdbrain" />
+    <meta name="twitter:description" content="Birdbrain listens and tells you which birds are singing, on your phone, so your audio never leaves it; an account is optional." />
+    <meta name="twitter:image" content="https://sabihs-birdbrain.vercel.app/og-image.png" />
     <!-- Theme before first paint (dark by default, stored choice if any). Its SHA-256 is allow-listed in vercel.json's CSP; tests/headers.test.ts checks they match. -->
     <script>(function(){var t='dark';try{var s=localStorage.getItem('birdbrain.theme.v1');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})()</script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +29,11 @@
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   </head>
   <body>
-    <div id="app"></div>
+    <!-- Static text for link previews, search engines and readers without JavaScript; mountApp() in src/ui/app.ts replaces it on start (root.replaceChildren). -->
+    <div id="app">
+      <p>Birdbrain listens and tells you which birds are singing. It runs on your phone, so your audio never leaves it. An account is optional: it adds Ask about this bird and sharing with friends, and I approve each new one.</p>
+      <noscript><p>Birdbrain needs JavaScript to run. Turn it on and reload the page.</p></noscript>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
