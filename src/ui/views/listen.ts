@@ -9,6 +9,7 @@ import { plusCode } from '../../geo/pluscode';
 import type { View, ViewContext } from '../app';
 import { recentGroupCard } from '../components/recent-group-card';
 import { resultCard } from '../components/result-card';
+import { birdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
 import { el, fmtDuration, pct } from '../dom';
 import { listenStatus, type ListenStatus } from '../status';
@@ -147,6 +148,8 @@ export function listenView(ctx: ViewContext): View {
   // In Focus mode the result list lives in the sheet; elsewhere it stays in the results block (a node has one parent).
   const moreSheet = el('div', { class: 'more-sheet', 'data-testid': 'more-sheet', role: 'dialog', 'aria-label': 'Earlier birds', hidden: true }, el('div', { class: 'row between' }, el('h2', null, 'Earlier birds'), el('button', { class: 'btn small', type: 'button', 'data-testid': 'more-close' }, 'Close')));
   const focusBlock = el('div', { class: 'focus-block' }, focusLatest, moreBtn, moreSheet);
+  /** BirdNET is credited where it identifies (DECISIONS.md #70): the last line in flow in every layout. */
+  const credit = birdnetCredit();
   const root = el('div', { class: 'listen' });
 
   /**
@@ -168,15 +171,16 @@ export function listenView(ctx: ViewContext): View {
       focusBlock.prepend(panel);
       moreSheet.appendChild(resultsList);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, focusBlock);
+      root.replaceChildren(readyBlock, focusBlock, credit);
     } else if (next === 'dock') {
       resultsBlock.prepend(resultsList);
       recentInline.appendChild(recentBody);
-      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, dock);
+      // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
+      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, credit, dock);
     } else {
       resultsBlock.prepend(resultsList);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails);
+      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails, credit);
     }
   };
   applyLayout(layout);

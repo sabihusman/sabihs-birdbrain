@@ -2,7 +2,9 @@ import { describeApiError, type ApiClient } from '../../api/client';
 import { describeRegion, isNearbyQuestion, regionFor, shapeAskRequest } from '../../geo/region';
 import type { GeoLocation } from '../../model/geo';
 import type { Species } from '../../model/labels';
+import { creditsFor } from '../credits';
 import { el } from '../dom';
+import { answerCredits } from './source-credit';
 
 const MAX_QUESTION = 500;
 
@@ -68,7 +70,9 @@ export function askBox(api: ApiClient, species: Species, location: () => GeoLoca
           : null;
         const sources = res.sources?.length ? res.sources : [{ name: res.source.title || 'Wikipedia', url: res.source.url }];
         const sourceLine = el('p', { class: 'small', 'data-testid': 'ask-sources' }, 'Sources: ', ...sources.flatMap((s, i) => [i ? ' · ' : '', el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.name)]), res.context === 'summary' ? ' (Wikipedia summary only; the full article was unavailable)' : '');
-        answer.replaceChildren(p, ...(citeLine ? [citeLine] : []), sourceLine);
+        // Credit eBird and NatureServe only when this answer used them (DECISIONS.md #70); Wikipedia keeps its link above.
+        const credit = answerCredits(creditsFor(res.sources));
+        answer.replaceChildren(p, ...(citeLine ? [citeLine] : []), sourceLine, ...(credit ? [credit] : []));
       } catch (err) {
         answer.replaceChildren(el('p', { class: 'notice error' }, describeApiError(err)));
       } finally {
