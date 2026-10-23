@@ -1,5 +1,5 @@
 /**
- * Data-source credits (DECISIONS.md #70). A source is credited, in the small
+ * Data-source credits (DECISIONS.md #66). A source is credited, in the small
  * credit style, on every page that displays its data and nowhere else:
  * eBird and NatureServe Explorer under an "Ask about this bird" answer that
  * used them, BirdNET on the Listen screen that identifies with it.

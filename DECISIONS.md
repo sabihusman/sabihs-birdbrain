@@ -1830,9 +1830,50 @@ other open branches, so this may be renumbered at merge.)
 - **Not done:** no retry loop beyond three attempts (the next tab open or
   sighting retries anyway), and nothing new is sent to the server.
 
-## 70. Data credits: each source credited where its data is shown (eBird and NatureServe on answers, BirdNET on Listen)
+## 65. A browser that cannot run the model is told so before any download; failures name their reason
 
-(#65–#69 are taken by other open branches.)
+- **Audit (A5):** the Listen screen started the 78 MB download on every browser,
+  and a failed load said only "Couldn't download the bird model. Check your
+  open branches.)
+- **Check, once, before the first byte:** `checkBrowserSupport()` in
+  `src/app/browser-support.ts` runs at the top of `AppController.loadModel()`,
+  before `inference.init`, and needs four things: `WebAssembly`, `Worker`,
+  `indexedDB` and `AudioContext` (or Safari's `webkitAudioContext`). **WebGL is
+  not required**: the worker's backend order is webgl → wasm → cpu, so a phone
+  without WebGL still runs the model on WebAssembly, only slower. WebAssembly
+  is therefore the one compute requirement; the other three are what the app
+  needs around the model (a thread to run it in, a place for sightings, the
+  microphone). It is a pure function of the globals, so the tests stub them.
+- **Unsupported is its own Listen state** (`ListenStatus` `'unsupported'`,
+  pill "Browser not supported"): title "This browser can't run the bird
+  model.", hint "It works in current Safari, Chrome, Firefox and Edge." No
+  download starts, no toast, and no "Try again", because trying again cannot
+  help; the mic and sample-clip buttons are hidden too. Species, Recordings,
+  Map and Settings keep working from the bundled label list. The four named
+  browsers are the ones whose current versions ship everything on the list.
+- **Other failures keep "Try again" and gain a reason line**
+  (`describeModelFailure(err)`): no connection (a `TypeError` from fetch, the
+  browsers' "Failed to fetch" / "NetworkError…" / "Load failed" messages, or
+  `navigator.onLine === false`) → "No connection. The bird model downloads
+  once, about 78 MB, so connect to Wi-Fi and try again."; not enough storage
+  (an error whose name or message contains "quota") → "Not enough storage.
+  The bird model needs about 78 MB free on this phone. Clear some space and
+  try again."; anything else keeps the generic text. Storage wins over
+  offline, because clearing space is what helps. The worker forwards errors as
+  a message string (`src/model/protocol.ts`), so the fetch `TypeError` arrives
+  on the main thread as a plain `Error`; the message is matched as well as the
+  name. The same sentence is the toast and the Listen hint
+  (`AppController.getModelFailure()` → `listenStatus`).
+- **Kept small on purpose:** `claude/lazy-model` moves `loadModel()` behind
+  "Start identifying"; this change touches only the inside of `loadModel()`,
+  so it holds wherever that call ends up.
+- **Not done:** no WebGL-vs-WASM speed warning (the pill already shows the
+  backend), and no per-reason `UnsupportedReason` wording in the UI (the fix is
+  the same for all four: use a current browser); the reason stays in the
+  console and the error class.
+
+## 66. Data credits: each source credited where its data is shown (eBird and NatureServe on answers, BirdNET on Listen)
+
 
 - **Audit finding (AUDIT_PROMPT.md A6/A7):** answers list their sources with
   links (#47), but nothing credited eBird or NatureServe as the terms ask, and

@@ -936,3 +936,48 @@ test('an answer credits eBird and NatureServe only when its sources include them
   await expect(box.getByTestId('ask-sources')).toContainText('Wikipedia');
   await expect(box.getByTestId('answer-credits')).toHaveCount(0);
 });
+
+test('a browser without WebAssembly is told which browsers work, and no model byte is requested', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'] });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+    Object.defineProperty(window, 'WebAssembly', { value: undefined, configurable: true, writable: true });
+  });
+  // Every request for a model file (labels.json is the offline species list and stays allowed).
+  const modelRequests: string[] = [];
+  await page.route(/\/models\/birdnet-v2\.4\//, (route) => {
+    if (!/labels\.json$/.test(route.request().url())) modelRequests.push(route.request().url());
+    void route.continue();
+  });
+  await page.goto('./#/listen');
+  const listen = page.locator('.listen');
+  await expect(listen).toHaveAttribute('data-status', 'unsupported', { timeout: 60_000 });
+  const block = page.getByTestId('ready-block');
+  await expect(block).toContainText("This browser can't run the bird model.");
+  await expect(block).toContainText('It works in current Safari, Chrome, Firefox and Edge.');
+  await expect(page.getByTestId('model-status')).toContainText('Browser not supported');
+  await expect(page.getByTestId('try-again')).toBeHidden();
+  await expect(page.getByTestId('start-stop')).toBeHidden();
+  await expect(page.getByTestId('demo')).toBeHidden();
+  // Give a stray download a moment to show up, then check that none did.
+  await page.waitForTimeout(2000);
+  expect(modelRequests).toEqual([]);
+  // The rest of the app still works, and the text fits at 320 px in both themes.
+  await page.getByRole('link', { name: 'Species' }).click();
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
+  await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('./#/listen');
+  await expect(listen).toHaveAttribute('data-status', 'unsupported');
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const box = await block.boundingBox();
+    expect(box, theme).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+    await expect(block).toContainText('It works in current Safari, Chrome, Firefox and Edge.');
+  }
+  await context.close();
+});

@@ -5,7 +5,7 @@ const link = (text: string, href: string) => el('a', { href, target: '_blank', r
 
 /**
  * The credit line under an "Ask about this bird" answer, for the sources that
- * answer used (DECISIONS.md #70). Returns null when there is nothing to credit,
+ * answer used (DECISIONS.md #66). Returns null when there is nothing to credit,
  * so the caller renders nothing. 75% of the answer's text size (.answer-credit).
  */
 export function answerCredits(credits: ReadonlyArray<Credit>): HTMLElement | null {

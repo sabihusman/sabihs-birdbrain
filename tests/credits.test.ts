@@ -6,7 +6,7 @@ const wiki = { name: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Lesser_red
 const ebird = { name: 'eBird', url: 'https://ebird.org/region/US-IA' };
 const ns = { name: 'NatureServe Explorer', url: 'https://explorer.natureserve.org/Taxon/ELEMENT_GLOBAL.2.100000' };
 
-describe('creditsFor (DECISIONS.md #70)', () => {
+describe('creditsFor (DECISIONS.md #66)', () => {
   it('credits eBird only when eBird was used', () => {
     expect(creditsFor([wiki, ebird])).toEqual([EBIRD_CREDIT]);
     expect(creditText(creditsFor([wiki, ebird]))).toBe('Local sightings in answers: eBird.org');

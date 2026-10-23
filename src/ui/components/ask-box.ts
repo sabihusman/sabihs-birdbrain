@@ -70,7 +70,7 @@ export function askBox(api: ApiClient, species: Species, location: () => GeoLoca
           : null;
         const sources = res.sources?.length ? res.sources : [{ name: res.source.title || 'Wikipedia', url: res.source.url }];
         const sourceLine = el('p', { class: 'small', 'data-testid': 'ask-sources' }, 'Sources: ', ...sources.flatMap((s, i) => [i ? ' · ' : '', el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.name)]), res.context === 'summary' ? ' (Wikipedia summary only; the full article was unavailable)' : '');
-        // Credit eBird and NatureServe only when this answer used them (DECISIONS.md #70); Wikipedia keeps its link above.
+        // Credit eBird and NatureServe only when this answer used them (DECISIONS.md #66); Wikipedia keeps its link above.
         const credit = answerCredits(creditsFor(res.sources));
         answer.replaceChildren(p, ...(citeLine ? [citeLine] : []), sourceLine, ...(credit ? [credit] : []));
       } catch (err) {

@@ -123,7 +123,7 @@ There are two themes. **Dark is the default**, whatever the phone's own light/da
 
 **Toasts.** Short confirmations ("Copied 86H8M7PV+GW"), 1.6 s, announced to screen readers.
 
-**Source credits.** A data source is credited on every page that displays its data, and on no other page, in the small credit style: 12 px (75% of body text), the muted colour, the source name as an underlined link, one line that wraps at 320 px. Today: BirdNET at the bottom of Listen (`.source-credit`), and eBird / NatureServe Explorer under an "Ask about this bird" answer that used them (`.answer-credit`, shown only for the sources that answer lists). A new list, map or chart built on eBird or NatureServe data carries the same line (DECISIONS.md #70).
+**Source credits.** A data source is credited on every page that displays its data, and on no other page, in the small credit style: 12 px (75% of body text), the muted colour, the source name as an underlined link, one line that wraps at 320 px. Today: BirdNET at the bottom of Listen (`.source-credit`), and eBird / NatureServe Explorer under an "Ask about this bird" answer that used them (`.answer-credit`, shown only for the sources that answer lists). A new list, map or chart built on eBird or NatureServe data carries the same line (DECISIONS.md #66).
 
 **Bottom navigation.** Listen, Recordings, Species, Map, Settings. Icon plus label, at least 44 px tall, and the active tab in the accent colour and bold.
 
