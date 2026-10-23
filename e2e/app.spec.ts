@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 /**
  * A phone that has used Birdbrain before: stored settings and the "model wanted" flag. Without
  * them a fresh context is a first visit and Listen shows the welcome layer instead of the model
- * (DECISIONS.md #65). Tests that open their own context and need the usual Listen screen add this.
+ * (DECISIONS.md #68). Tests that open their own context and need the usual Listen screen add this.
  */
 function returningVisitor(): void {
   if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
@@ -919,4 +919,143 @@ test('User management: admin-only button in Settings, confirmations, plain resul
   await mp.goto('./#/admin/users');
   await expect(mp.getByTestId('admin-only')).toContainText('Only the admin can open this page.');
   await member.close();
+});
+
+test('Listen credits BirdNET, inside the viewport and clear of the dock and tab bar, in all three layouts at 320 px, with no eBird text', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+    await page.addInitScript((l) => {
+      const raw = localStorage.getItem('birdbrain.settings.v1');
+      const s = raw ? JSON.parse(raw) : {};
+      s.listenLayout = l;
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify(s));
+    }, layout);
+    await page.goto('./#/listen');
+    await page.reload();
+    await expect(page.locator('.listen')).toHaveAttribute('data-layout', layout);
+    const credit = page.getByTestId('birdnet-credit');
+    await expect(credit, layout).toHaveText('Bird ID: BirdNET, Cornell Lab of Ornithology and Chemnitz University of Technology · CC BY-NC-SA 4.0');
+    await expect(credit.getByRole('link', { name: 'BirdNET' })).toHaveAttribute('href', 'https://birdnet.cornell.edu');
+    await expect(credit.getByRole('link', { name: 'CC BY-NC-SA 4.0' })).toHaveAttribute('href', 'https://creativecommons.org/licenses/by-nc-sa/4.0/');
+    await expect(credit).toHaveClass(/source-credit/);
+    // Small and muted, never larger than body text.
+    const size = await credit.evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
+    expect(size, `${layout} credit size`).toBeLessThanOrEqual(12);
+    // Inside the viewport, above the dock (when there is one) and the tab bar, no horizontal overflow.
+    await credit.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+    await expect(credit).toBeVisible();
+    const box = (await credit.boundingBox())!;
+    const bars = await page.evaluate(() => {
+      const top = (sel: string) => {
+        const n = document.querySelector<HTMLElement>(sel);
+        return n && n.offsetParent !== null && getComputedStyle(n).display !== 'none' ? n.getBoundingClientRect().top : Number.POSITIVE_INFINITY;
+      };
+      return { tabs: top('.tabs'), dock: top('[data-testid="dock"]'), innerHeight: window.innerHeight, scrollWidth: document.documentElement.scrollWidth };
+    });
+    expect(box.x, `${layout} left edge`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${layout} right edge`).toBeLessThanOrEqual(320);
+    expect(box.y, `${layout} top edge`).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height, `${layout} above the tab bar`).toBeLessThanOrEqual(Math.min(bars.tabs, bars.innerHeight) + 1);
+    if (layout === 'dock') expect(box.y + box.height, 'above the dock').toBeLessThanOrEqual(bars.dock + 1);
+    expect(bars.scrollWidth, `${layout} no horizontal scroll`).toBeLessThanOrEqual(320);
+    // Listen shows no eBird data, so it carries no eBird credit or mention.
+    expect(await page.locator('.listen').innerText()).not.toMatch(/ebird/i);
+  }
+  await context.close();
+});
+
+test('an answer credits eBird and NatureServe only when its sources include them', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'member', status: 'approved', role: 'member' } }));
+  });
+  await page.route(/\/v1\//, (route) => route.abort());
+  const wiki = { name: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Lesser_redpoll' };
+  const ebird = { name: 'eBird', url: 'https://ebird.org/region/US-IA' };
+  const ns = { name: 'NatureServe Explorer', url: 'https://explorer.natureserve.org/Taxon/ELEMENT_GLOBAL.2.1' };
+  const answers = [
+    { answer: 'Reported twice in Iowa this month [eBird – Recent sightings].', sources: [wiki, ebird, ns] },
+    { answer: 'Globally secure [NatureServe Explorer – Status].', sources: [wiki, ns] },
+    { answer: 'It eats seeds [Wikipedia – Diet].', sources: [wiki] },
+  ];
+  let n = 0;
+  await page.route(/\/v1\/ask$/, (route) => {
+    const a = answers[Math.min(n++, answers.length - 1)];
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...a, source: { title: 'Lesser redpoll', url: wiki.url }, citations: [], context: 'article', region: 'US-IA' }) });
+  });
+  await page.goto('./#/species/Acanthis%20cabaret');
+  const box = page.getByTestId('ask-box');
+  const question = box.getByLabel('Your question');
+  await expect(question).toBeVisible({ timeout: 60_000 });
+  const askOnce = async (q: string) => {
+    await question.fill(q);
+    await box.getByRole('button', { name: 'Ask' }).click();
+    await expect(box.getByTestId('ask-sources')).toBeVisible();
+  };
+
+  // 1. eBird and NatureServe used: both credited, in that order, with the right links.
+  await askOnce('Seen in my state recently?');
+  const credits = box.getByTestId('answer-credits');
+  await expect(credits).toHaveText('Local sightings in answers: eBird.org · Conservation status: NatureServe Explorer');
+  await expect(credits.getByRole('link', { name: 'eBird.org' })).toHaveAttribute('href', 'https://ebird.org');
+  await expect(credits.getByRole('link', { name: 'NatureServe Explorer' })).toHaveAttribute('href', 'https://explorer.natureserve.org');
+  await expect(credits).toHaveClass(/answer-credit/);
+  // 75% of the answer paragraph's text size, muted.
+  const sizes = await box.getByTestId('ask-answer').evaluate((e) => ({ answer: parseFloat(getComputedStyle(e.querySelector('p')!).fontSize), credit: parseFloat(getComputedStyle(e.querySelector('.answer-credit')!).fontSize) }));
+  expect(sizes.credit).toBeCloseTo(sizes.answer * 0.75, 1);
+
+  // 2. NatureServe only: no eBird text anywhere in the answer.
+  await askOnce('Is it threatened?');
+  await expect(credits).toHaveText('Conservation status: NatureServe Explorer');
+  expect(await box.getByTestId('ask-answer').innerText()).not.toMatch(/ebird/i);
+
+  // 3. Wikipedia only: no credit element at all.
+  await askOnce('What does it eat?');
+  await expect(box.getByTestId('ask-sources')).toContainText('Wikipedia');
+  await expect(box.getByTestId('answer-credits')).toHaveCount(0);
+});
+
+test('a browser without WebAssembly is told which browsers work, and no model byte is requested', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'] });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+    Object.defineProperty(window, 'WebAssembly', { value: undefined, configurable: true, writable: true });
+  });
+  // Every request for a model file (labels.json is the offline species list and stays allowed).
+  const modelRequests: string[] = [];
+  await page.route(/\/models\/birdnet-v2\.4\//, (route) => {
+    if (!/labels\.json$/.test(route.request().url())) modelRequests.push(route.request().url());
+    void route.continue();
+  });
+  await page.goto('./#/listen');
+  const listen = page.locator('.listen');
+  await expect(listen).toHaveAttribute('data-status', 'unsupported', { timeout: 60_000 });
+  const block = page.getByTestId('ready-block');
+  await expect(block).toContainText("This browser can't run the bird model.");
+  await expect(block).toContainText('It works in current Safari, Chrome, Firefox and Edge.');
+  await expect(page.getByTestId('model-status')).toContainText('Browser not supported');
+  await expect(page.getByTestId('try-again')).toBeHidden();
+  await expect(page.getByTestId('start-stop')).toBeHidden();
+  await expect(page.getByTestId('demo')).toBeHidden();
+  // Give a stray download a moment to show up, then check that none did.
+  await page.waitForTimeout(2000);
+  expect(modelRequests).toEqual([]);
+  // The rest of the app still works, and the text fits at 320 px in both themes.
+  await page.getByRole('link', { name: 'Species' }).click();
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
+  await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('./#/listen');
+  await expect(listen).toHaveAttribute('data-status', 'unsupported');
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const box = await block.boundingBox();
+    expect(box, theme).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+    await expect(block).toContainText('It works in current Safari, Chrome, Firefox and Edge.');
+  }
+  await context.close();
 });

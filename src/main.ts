@@ -20,7 +20,7 @@ async function boot(): Promise<void> {
   const controller = new AppController(baseUrl);
   const api = new ApiClient(API_BASE_URL);
   // First visit (no settings, no flag, no cached model): the Listen view shows the welcome layer
-  // and nothing downloads until the visitor taps "Start identifying" (DECISIONS.md #65). Decided
+  // and nothing downloads until the visitor taps "Start identifying" (DECISIONS.md #68). Decided
   // before the first paint so the loading state never flashes first.
   const signals = await readVisitSignals(safeLocalStorage(), typeof caches === 'undefined' ? undefined : caches, MODEL_BASE_URL);
   controller.setWelcomePending(shouldShowWelcome(signals));

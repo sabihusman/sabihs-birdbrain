@@ -1,3 +1,4 @@
+import { BROWSER_UNSUPPORTED_HINT, BROWSER_UNSUPPORTED_TITLE } from '../../app/browser-support';
 import type { WindowResult } from '../../app/controller';
 import type { ListenLayout } from '../../app/settings';
 import { WINDOW_SECONDS } from '../../model/constants';
@@ -9,6 +10,7 @@ import { plusCode } from '../../geo/pluscode';
 import type { View, ViewContext } from '../app';
 import { recentGroupCard } from '../components/recent-group-card';
 import { resultCard } from '../components/result-card';
+import { birdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
 import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
 import { el, fmtDuration, pct } from '../dom';
@@ -34,6 +36,7 @@ export const STATE_TEXT: Record<ListenStatus, { title: string; hint: string }> =
   'mic-blocked': { title: 'Mic blocked', hint: 'The browser is not allowing the microphone.' },
   error: { title: 'Something went wrong', hint: 'Try again.' },
   offline: { title: 'Offline', hint: 'Listening works; AI questions and the map are unavailable.' },
+  unsupported: { title: BROWSER_UNSUPPORTED_TITLE, hint: BROWSER_UNSUPPORTED_HINT },
 };
 
 /** Hits kept for the Listen screen (this view's session). Grouping and lumping happen at render time (src/species/recent.ts). */
@@ -150,9 +153,11 @@ export function listenView(ctx: ViewContext): View {
   // In Focus mode the result list lives in the sheet; elsewhere it stays in the results block (a node has one parent).
   const moreSheet = el('div', { class: 'more-sheet', 'data-testid': 'more-sheet', role: 'dialog', 'aria-label': 'Earlier birds', hidden: true }, el('div', { class: 'row between' }, el('h2', null, 'Earlier birds'), el('button', { class: 'btn small', type: 'button', 'data-testid': 'more-close' }, 'Close')));
   const focusBlock = el('div', { class: 'focus-block' }, focusLatest, moreBtn, moreSheet);
+  /** BirdNET is credited where it identifies (DECISIONS.md #66): the last line in flow in every layout. */
+  const credit = birdnetCredit();
   const root = el('div', { class: 'listen' });
   // First visit: the welcome layer stands in for the whole Listen screen until the visitor chooses
-  // (DECISIONS.md #65). The tabs behind it keep working; nothing downloads on its own.
+  // (DECISIONS.md #68). The tabs behind it keep working; nothing downloads on its own.
   const welcome = welcomeCard({
     onStart: () => controller.startIdentifying(),
     onSignIn: () => {
@@ -183,15 +188,16 @@ export function listenView(ctx: ViewContext): View {
       focusBlock.prepend(panel);
       moreSheet.appendChild(resultsList);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, focusBlock);
+      root.replaceChildren(readyBlock, focusBlock, credit);
     } else if (next === 'dock') {
       resultsBlock.prepend(resultsList);
       recentInline.appendChild(recentBody);
-      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, dock);
+      // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
+      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, credit, dock);
     } else {
       resultsBlock.prepend(resultsList);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails);
+      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails, credit);
     }
   };
   applyLayout(layout);
@@ -229,10 +235,11 @@ export function listenView(ctx: ViewContext): View {
     // Ready differs per layout: Consolidated keeps the round mic button, Bottom dock has no
     // mic button at all and fills the screen with cards, Focus shows one giant button.
     const plainReady = st.status === 'ready' || st.status === 'offline';
-    setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || layout === 'dock');
+    const noModel = st.status === 'unsupported';
+    setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || noModel || layout === 'dock');
     setHidden(chips, listening || layout === 'focus' || (layout === 'dock' && plainReady));
     setHidden(noLocationNote, listening || !!controller.location.get().location || layout === 'focus' || (layout === 'dock' && plainReady));
-    setHidden(demoBtn, listening || st.status === 'loading' || layout === 'focus');
+    setHidden(demoBtn, listening || st.status === 'loading' || noModel || layout === 'focus');
     setHidden(readyBlock, listening);
     if (layout === 'dock') {
       // Cards fill the screen, so the state row only appears when there is something to say

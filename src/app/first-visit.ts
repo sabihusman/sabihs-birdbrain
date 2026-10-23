@@ -1,5 +1,5 @@
 /**
- * First visit or returning visitor? (DECISIONS.md #65)
+ * First visit or returning visitor? (DECISIONS.md #68)
  *
  * The welcome layer is shown once, before anything is downloaded. Three signals say
  * that a phone has used Birdbrain before, and any one of them hides the welcome:

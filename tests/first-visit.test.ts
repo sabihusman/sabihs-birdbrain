@@ -14,7 +14,7 @@ function fakeCaches(bucket: string | null, urls: string[]): ModelCacheStorage {
   };
 }
 
-describe('welcome layer: first visit or returning visitor (DECISIONS.md #65)', () => {
+describe('welcome layer: first visit or returning visitor (DECISIONS.md #68)', () => {
   it('shows the welcome only when nothing says the phone has used Birdbrain before', () => {
     expect(shouldShowWelcome({ settingsStored: false, modelWanted: false, modelCached: false })).toBe(true);
     expect(shouldShowWelcome({ settingsStored: true, modelWanted: false, modelCached: false })).toBe(false);
