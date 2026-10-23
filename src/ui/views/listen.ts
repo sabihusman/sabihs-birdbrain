@@ -12,7 +12,9 @@ import { recentGroupCard } from '../components/recent-group-card';
 import { resultCard } from '../components/result-card';
 import { birdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
+import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
 import { el, fmtDuration, pct } from '../dom';
+import { hrefFor } from '../router';
 import { listenStatus, type ListenStatus } from '../status';
 import { micHelp } from '../mic-help';
 import { PipelineView } from '../viz/pipeline';
@@ -26,7 +28,8 @@ let howItWorksOpen = false;
 const LOW_FLOOR = 0.1;
 
 export const STATE_TEXT: Record<ListenStatus, { title: string; hint: string }> = {
-  loading: { title: 'Loading the model', hint: 'One-time download, about 78 MB. Use Wi-Fi if you can.' },
+  idle: { title: 'Model not loaded', hint: `The bird model downloads once, the first time you start. About ${MODEL_SIZE_MB} MB; use Wi-Fi if you can.` },
+  loading: { title: 'Loading the model', hint: `One-time download, about ${MODEL_SIZE_MB} MB. Use Wi-Fi if you can.` },
   ready: { title: 'Ready', hint: 'Point the bottom of your phone toward the sound.' },
   listening: { title: 'Listening', hint: 'Results appear below as birds are heard.' },
   paused: { title: 'Paused', hint: 'Listening paused while the app was in the background. Tap to resume.' },
@@ -153,6 +156,14 @@ export function listenView(ctx: ViewContext): View {
   /** BirdNET is credited where it identifies (DECISIONS.md #66): the last line in flow in every layout. */
   const credit = birdnetCredit();
   const root = el('div', { class: 'listen' });
+  // First visit: the welcome layer stands in for the whole Listen screen until the visitor chooses
+  // (DECISIONS.md #68). The tabs behind it keep working; nothing downloads on its own.
+  const welcome = welcomeCard({
+    onStart: () => controller.startIdentifying(),
+    onSignIn: () => {
+      location.hash = hrefFor({ name: 'settings', section: 'account' });
+    },
+  });
 
   /**
    * Put the blocks where this layout wants them (DECISIONS.md #59). Only the arrangement
@@ -164,6 +175,10 @@ export function listenView(ctx: ViewContext): View {
     layout = next;
     root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : ''}`;
     root.dataset.layout = next;
+    if (controller.welcomePending) {
+      root.replaceChildren(welcome);
+      return;
+    }
     // These three nodes live in a different parent per layout; a node has one parent, so
     // detach them first and let each branch place them.
     panel.remove();
@@ -485,6 +500,13 @@ export function listenView(ctx: ViewContext): View {
     }),
     controller.on('recording', renderState),
     controller.on('engine', renderState),
+    controller.on('welcome', () => {
+      // "Start identifying" took the layer down: put the layout back and show the loading state.
+      applyLayout(layout);
+      renderRecent();
+      renderResults();
+      renderState();
+    }),
     controller.on('wakelock', (w) => {
       wakeLine.textContent = w === 'active' ? 'Screen stays on' : w === 'unsupported' ? 'Keep the screen on yourself: this browser cannot' : w === 'failed' ? 'Could not keep the screen on' : '';
     }),

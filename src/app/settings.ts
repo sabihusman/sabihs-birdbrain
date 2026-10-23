@@ -60,7 +60,9 @@ export const DEFAULT_SETTINGS: Settings = {
   listenLayout: 'focus',
 };
 
-const KEY = 'birdbrain.settings.v1';
+/** localStorage key of the stored settings; its presence is one of the "returning visitor" signals (src/app/first-visit.ts). */
+export const SETTINGS_KEY = 'birdbrain.settings.v1';
+const KEY = SETTINGS_KEY;
 
 export class SettingsStore extends Emitter<{ change: Settings }> {
   private current: Settings;

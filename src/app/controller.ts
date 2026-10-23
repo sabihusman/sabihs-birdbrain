@@ -20,6 +20,7 @@ import { LocationManager, type LocationState } from './location';
 import { PositionWatch, positionStamp } from './position-watch';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
+import { markModelWanted, safeLocalStorage } from './first-visit';
 
 export interface WindowResult {
   windowId: number;
@@ -82,6 +83,8 @@ interface ControllerEvents extends Record<string, unknown> {
   mic: VoiceProcessingReport;
   /** A species clip was saved or replaced. */
   'clip-saved': ClipRecord;
+  /** The first-visit welcome layer is shown (true) or was dismissed (false). */
+  welcome: boolean;
 }
 
 /** Seconds of raw live audio kept so a species clip can be centred on its detection window. */
@@ -141,6 +144,10 @@ export class AppController extends Emitter<ControllerEvents> {
   /** Per species, the live windows (session seconds) that detected it, for the clip's identifying-window list. */
   private liveWindows = new Map<string, TimedWindow[]>();
   private clipsEnabled = false;
+  /** First visit: the Listen view shows the welcome layer and nothing downloads until "Start identifying" (DECISIONS.md #68). */
+  private welcome = false;
+  /** The in-flight model load, shared so a second caller never starts a second worker init. */
+  private modelLoading: Promise<boolean> | null = null;
 
   constructor(readonly baseUrl: string) {
     super();
@@ -191,6 +198,25 @@ export class AppController extends Emitter<ControllerEvents> {
     return this.speciesByName.get(name);
   }
 
+  /** Whether the welcome layer is up (first visit, nothing chosen yet). */
+  get welcomePending(): boolean {
+    return this.welcome;
+  }
+
+  /** Decided by main.ts before the first paint, from the stored and cached signals (src/app/first-visit.ts). */
+  setWelcomePending(on: boolean): void {
+    if (this.welcome === on) return;
+    this.welcome = on;
+    this.emit('welcome', on);
+  }
+
+  /** "Start identifying" on the welcome layer: remember the choice, take the layer down and start the download. */
+  startIdentifying(): void {
+    markModelWanted(safeLocalStorage());
+    this.setWelcomePending(false);
+    void this.loadModel();
+  }
+
   /** Load labels and the models. Safe to call once at startup. */
   async init(): Promise<void> {
     try {
@@ -202,7 +228,8 @@ export class AppController extends Emitter<ControllerEvents> {
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Could not load the species list: ${(e as Error).message}` });
     }
-    await this.loadModel();
+    // A first-time visitor decides on the welcome layer whether to download anything.
+    if (!this.welcome) await this.loadModel();
     if (this.settings.get().locationMode === 'auto') void this.location.refresh();
   }
 
@@ -212,24 +239,31 @@ export class AppController extends Emitter<ControllerEvents> {
    * download, which is the common case on a flaky phone connection.
    */
   async loadModel(): Promise<boolean> {
-    try {
-      // Before any byte is requested: a browser without WebAssembly cannot run the model,
-      // so there is nothing to download (DECISIONS.md #65).
-      const support = checkBrowserSupport();
-      if (!support.ok) throw new BrowserUnsupportedError(support.reason);
-      this.modelFailure = null;
-      await this.inference.init(MODEL_BASE_URL, this.settings.get().backend);
-      await this.pushGeo();
-      void this.refreshLocalSpecies();
-      return true;
-    } catch (e) {
-      // The technical reason stays in the console; the member reads what to do about it.
-      console.warn('[model] load failed', e);
-      this.modelFailure = { unsupported: e instanceof BrowserUnsupportedError, text: describeModelFailure(e) };
-      if (this.modelFailure.unsupported) this.emit('model', this.inference.getStatus()); // no toast: the Listen panel says it, and "Try again" cannot help
-      else this.emit('notice', { kind: 'error', text: this.modelFailure.text });
-      return false;
-    }
+    if (this.modelReady) return true;
+    if (this.modelLoading) return this.modelLoading;
+    this.modelLoading = (async () => {
+      try {
+        // Before any byte is requested: a browser without WebAssembly cannot run the model,
+        // so there is nothing to download (DECISIONS.md #65).
+        const support = checkBrowserSupport();
+        if (!support.ok) throw new BrowserUnsupportedError(support.reason);
+        this.modelFailure = null;
+        await this.inference.init(MODEL_BASE_URL, this.settings.get().backend);
+        await this.pushGeo();
+        void this.refreshLocalSpecies();
+        return true;
+      } catch (e) {
+        // The technical reason stays in the console; the member reads what to do about it.
+        console.warn('[model] load failed', e);
+        this.modelFailure = { unsupported: e instanceof BrowserUnsupportedError, text: describeModelFailure(e) };
+        if (this.modelFailure.unsupported) this.emit('model', this.inference.getStatus()); // no toast: the Listen panel says it, and "Try again" cannot help
+        else this.emit('notice', { kind: 'error', text: this.modelFailure.text });
+        return false;
+      } finally {
+        this.modelLoading = null;
+      }
+    })();
+    return this.modelLoading;
   }
 
   /** Why the last model load failed, in plain words; null when it has not failed. */

@@ -193,6 +193,15 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     }
     main.appendChild(current.el);
     window.scrollTo(0, 0);
+    if (route.name === 'settings' && route.section === 'account') {
+      // From the welcome layer's "Sign in / Create account": land on the Account card, for the eye and for the focus.
+      const account = main.querySelector<HTMLElement>('[data-testid="account"]');
+      if (account) {
+        account.tabIndex = -1;
+        account.scrollIntoView({ block: 'start' });
+        account.focus({ preventScroll: true });
+      }
+    }
   };
   window.addEventListener('hashchange', render);
   render();

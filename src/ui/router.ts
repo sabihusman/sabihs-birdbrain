@@ -6,7 +6,8 @@ export type Route =
   | { name: 'species-detail'; scientific: string }
   | { name: 'species-history'; scientific: string }
   | { name: 'map' }
-  | { name: 'settings' }
+  /** `section: 'account'` (#/settings/account) scrolls to and focuses the Account card. */
+  | { name: 'settings'; section?: 'account' }
   | { name: 'admin' }
   | { name: 'admin-users' }
   | { name: 'help' };
@@ -26,7 +27,7 @@ export function parseHash(hash: string): Route {
     case 'map':
       return { name: 'map' };
     case 'settings':
-      return { name: 'settings' };
+      return rest[0] === 'account' ? { name: 'settings', section: 'account' } : { name: 'settings' };
     case 'admin':
       return rest[0] === 'users' ? { name: 'admin-users' } : { name: 'admin' };
     case 'help':
@@ -53,7 +54,7 @@ export function hrefFor(route: Route): string {
     case 'map':
       return '#/map';
     case 'settings':
-      return '#/settings';
+      return route.section === 'account' ? '#/settings/account' : '#/settings';
     case 'admin':
       return '#/admin';
     case 'admin-users':
