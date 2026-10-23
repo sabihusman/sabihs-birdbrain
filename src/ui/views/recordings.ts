@@ -1,4 +1,5 @@
 import { WINDOW_SAMPLES, WINDOW_SECONDS, SAMPLE_RATE } from '../../model/constants';
+import { MODEL_DOWNLOAD_ERROR } from '../../model/model-source';
 import type { Species } from '../../model/labels';
 import { OCCLUSION_GRIDS } from '../../model/occlusion';
 import { selectDetections, type Score } from '../../model/postprocess';
@@ -33,6 +34,8 @@ export function recordingsView(ctx: ViewContext): View {
     const file = fileInput.files?.[0];
     if (!file) return;
     importBtn.textContent = 'Decoding…';
+    // An import is an identifying action: start the model load now so the sighting card can analyse at once (DECISIONS.md #69).
+    void controller.ensureModel();
     try {
       const decoded = await controller.decodeAudioFile(await file.arrayBuffer());
       const capped = capImportedAudio(decoded);
@@ -260,11 +263,16 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     }
 
     const analyze = async () => {
-      if (controller.inference.getStatus().state !== 'ready') {
-        ctx.notify({ kind: 'warn', text: 'The model is still loading.' });
-        return;
-      }
       analyzeBtn.disabled = true;
+      if (controller.inference.getStatus().state !== 'ready') {
+        // First identifying action on this phone, or an import that started the load: wait for it here.
+        progressText.textContent = 'Loading the bird model…';
+        if (!(await controller.ensureModel())) {
+          progressText.textContent = MODEL_DOWNLOAD_ERROR;
+          analyzeBtn.disabled = false;
+          return;
+        }
+      }
       cancelBtn.style.display = '';
       progress.style.display = '';
       windows = [];
@@ -382,7 +390,9 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       location.hash = hrefFor({ name: 'recordings' });
     });
     disposers.push(controller.settings.on('change', () => renderDetections()));
-    if (rec.analyzedAt == null && rec.source !== 'autoclip' && controller.inference.getStatus().state === 'ready') void analyze();
+    // Analyse on open when the model is there or on its way (an import starts the load); never start a download just by opening a recording.
+    const modelState = controller.inference.getStatus().state;
+    if (rec.analyzedAt == null && rec.source !== 'autoclip' && (modelState === 'ready' || modelState === 'loading')) void analyze();
   })();
 
   return {

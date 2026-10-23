@@ -235,6 +235,8 @@ export function listenView(ctx: ViewContext): View {
     // Ready differs per layout: Consolidated keeps the round mic button, Bottom dock has no
     // mic button at all and fills the screen with cards, Focus shows one giant button.
     const plainReady = st.status === 'ready' || st.status === 'offline';
+    // Idle (model not loaded yet, DECISIONS.md #69) shows the same controls as Ready: the first tap loads the model.
+    const canStart = st.status === 'ready' || st.status === 'offline' || st.status === 'idle';
     const noModel = st.status === 'unsupported';
     setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || noModel || layout === 'dock');
     setHidden(chips, listening || layout === 'focus' || (layout === 'dock' && plainReady));
@@ -263,14 +265,14 @@ export function listenView(ctx: ViewContext): View {
       setHidden(resultsBlock, !listening);
     }
     if (layout === 'dock') {
-      setHidden(dockStartBtn, listening || st.status !== 'ready');
+      setHidden(dockStartBtn, listening || !canStart);
       setHidden(dockStopBtn, !listening);
       (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.pill;
       setHidden(dockTimer, !listening);
       dock.dataset.status = st.status;
     }
-    startBtn.disabled = st.status !== 'ready' && st.status !== 'offline';
-    demoBtn.disabled = st.status !== 'ready' && st.status !== 'offline';
+    startBtn.disabled = !canStart;
+    demoBtn.disabled = !canStart;
     const rec = controller.getRecordingState();
     recordBtn.textContent = rec.recording ? `■ Stop (${fmtDuration(rec.seconds)})` : '● Record';
     recordBtn.classList.toggle('recording', rec.recording);
@@ -391,7 +393,7 @@ export function listenView(ctx: ViewContext): View {
       waveform.reset();
       spectrogram.reset();
       timeline.reset();
-      status.textContent = 'Starting microphone…';
+      status.textContent = controller.inference.getStatus().state === 'ready' ? 'Starting microphone…' : 'Loading the bird model, then starting the microphone…';
       await controller.startListening();
       renderConditions(null);
       status.textContent = `Listening at ${controller.engine.contextSampleRate ?? '?'} Hz${controller.engine.contextSampleRate !== 48000 ? ' (resampling to 48 kHz)' : ''}`;
@@ -434,7 +436,7 @@ export function listenView(ctx: ViewContext): View {
   });
   demoBtn.addEventListener('click', async () => {
     demoBtn.disabled = true;
-    status.textContent = 'Analysing the bundled BirdNET sample clip…';
+    status.textContent = controller.inference.getStatus().state === 'ready' ? 'Analysing the bundled BirdNET sample clip…' : 'Loading the bird model, then analysing the sample clip…';
     waveform.reset();
     spectrogram.reset();
     try {

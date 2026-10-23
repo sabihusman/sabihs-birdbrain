@@ -2032,3 +2032,38 @@ other open branches, so this may be renumbered at merge.)
   `claude/welcome-layer` from `main`, `claude/lazy-model` from it,
   `claude/download-progress` from that. Review and merge them in that order;
   each PR's diff against its parent is only its own change.
+
+## 69. The model loads only when needed
+
+- **Audit finding (A2):** `controller.init()` downloaded the 78 MB model on
+  every start, so a new phone paid for it just to sign in or to read the
+  species list.
+- **Decision:** `init()` loads only the species list (`labels.json`, bundled
+  and precached). The model loads from `controller.ensureModel()`, which every
+  identifying action calls: Listen's Start (the mic opens after the model is
+  ready), the sample clip, a recording import (the load starts while the file
+  decodes, and the sighting card analyses once it is ready), "Analyse" on a
+  recording, and "Start identifying" on the welcome layer. Opening a recording
+  never starts a download on its own; it analyses on open only when the model
+  is ready or already loading.
+- **Returning phones stay "Model ready" without a tap:** `init()` still loads
+  the model when `shouldAutoLoadModel()` says the phone asked for it before:
+  the model files are in the cache, or the `birdbrain.model.v1` flag is set
+  (`ensureModel()` sets it on the first identifying action). The flag covers a
+  phone whose cache was evicted (iOS does that) and the moments before the
+  first download finishes; stored settings alone (a changed theme or layout)
+  are not a request for 78 MB. The service-worker runtime cache for the model
+  files is unchanged.
+- **What the user sees before the first load:** the status pill reads "Model
+  not loaded" (muted, the `idle` status from #65); Listen shows the same Start
+  and sample-clip controls as Ready with a one-line hint that the first start
+  downloads the model once; the Species tab's local-list note says the list
+  needs the model, which loads the first time a bird is identified. Species,
+  Map, Recordings, Settings and Account work with no model at all.
+- **Tests:** a unit test for `shouldAutoLoadModel()`; an e2e test with the
+  service worker blocked that aborts and counts every model-file request while
+  signing in on Settings › Account (login stubbed), browsing Species, Map and
+  Recordings and opening Listen (zero requests), then lets the sample clip
+  load the model and checks that a reload is "Model ready" at once. The other
+  e2e tests store the returning-visitor keys (`returningVisitor()`) before
+  waiting for "Model ready", which is what a phone in use looks like.

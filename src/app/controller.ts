@@ -8,7 +8,7 @@ import { CLIP_MAX_SECONDS, clipRange, saveClipIfBetter, shouldReplaceClip, windo
 import { decodeWav, encodeWav, toMono } from '../audio/wav';
 import { resampleLinear } from '../audio/resample';
 import { LABELS_JSON, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
-import { MODEL_BASE_URL } from '../model/model-source';
+import { MODEL_BASE_URL, MODEL_DOWNLOAD_ERROR } from '../model/model-source';
 import { BrowserUnsupportedError, checkBrowserSupport, describeModelFailure } from './browser-support';
 import { parseLabels, type Species } from '../model/labels';
 import { selectDetections, type Score } from '../model/postprocess';
@@ -148,6 +148,8 @@ export class AppController extends Emitter<ControllerEvents> {
   private welcome = false;
   /** The in-flight model load, shared so a second caller never starts a second worker init. */
   private modelLoading: Promise<boolean> | null = null;
+  /** Load the model in init(): only when this phone asked for it before (DECISIONS.md #69). */
+  private autoLoadModel = false;
 
   constructor(readonly baseUrl: string) {
     super();
@@ -210,14 +212,29 @@ export class AppController extends Emitter<ControllerEvents> {
     this.emit('welcome', on);
   }
 
-  /** "Start identifying" on the welcome layer: remember the choice, take the layer down and start the download. */
-  startIdentifying(): void {
-    markModelWanted(safeLocalStorage());
-    this.setWelcomePending(false);
-    void this.loadModel();
+  /** Decided by main.ts from the same signals: cached or flagged phones get the model at startup. */
+  setAutoLoadModel(on: boolean): void {
+    this.autoLoadModel = on;
   }
 
-  /** Load labels and the models. Safe to call once at startup. */
+  /** "Start identifying" on the welcome layer: remember the choice, take the layer down and start the download. */
+  startIdentifying(): void {
+    this.setWelcomePending(false);
+    void this.ensureModel();
+  }
+
+  /**
+   * The model, loaded on demand (DECISIONS.md #69): every identifying action (Listen's
+   * start, the sample clip, an import, "Start identifying") goes through here, so the
+   * first one downloads and the flag makes the next visit load at startup. Resolves true
+   * when inference is ready, false when the download failed (a notice was shown).
+   */
+  async ensureModel(): Promise<boolean> {
+    markModelWanted(safeLocalStorage());
+    return this.modelReady ? true : this.loadModel();
+  }
+
+  /** Load the species list, and the model when this phone asked for it before. Safe to call once at startup. */
   async init(): Promise<void> {
     try {
       const res = await fetch(`${this.baseUrl}${LABELS_JSON}`);
@@ -228,15 +245,23 @@ export class AppController extends Emitter<ControllerEvents> {
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Could not load the species list: ${(e as Error).message}` });
     }
-    // A first-time visitor decides on the welcome layer whether to download anything.
-    if (!this.welcome) await this.loadModel();
+    // A browser that cannot run the model is told so at once, before any tap (DECISIONS.md #65): the
+    // check costs nothing and downloads nothing, and "Start identifying" would only fail later.
+    const support = checkBrowserSupport();
+    if (!support.ok) {
+      this.modelFailure = { unsupported: true, text: describeModelFailure(new BrowserUnsupportedError(support.reason)) };
+      this.emit('model', this.inference.getStatus());
+    }
+    // Nothing downloads on its own: only a phone that asked for the model before loads it here.
+    else if (this.autoLoadModel && !this.welcome) await this.loadModel();
     if (this.settings.get().locationMode === 'auto') void this.location.refresh();
   }
 
   /**
    * Download and warm up the models from MODEL_BASE_URL (the API host in production).
-   * Called by init() and again by the Listen screen's "Try again" after a failed
-   * download, which is the common case on a flaky phone connection.
+   * Called by init() for returning phones, by ensureModel() on the first identifying
+   * action, and again by the Listen screen's "Try again" after a failed download,
+   * which is the common case on a flaky phone connection.
    */
   async loadModel(): Promise<boolean> {
     if (this.modelReady) return true;
@@ -286,7 +311,9 @@ export class AppController extends Emitter<ControllerEvents> {
     if (!loc.location) return { indices: null, note: loc.mode === 'off' ? 'Showing all species: the location filter is off (Settings › Location).' : `Showing all species: no location is available (${loc.message || loc.status}).` };
     const entry = this.localCache.current;
     if (!entry || this.localCache.needsRecompute(loc.location.lat, loc.location.lon)) {
-      return { indices: null, note: this.modelReady ? 'Showing all species while the local list is being computed…' : 'Showing all species until the model has loaded.' };
+      const model = this.inference.getStatus().state;
+      const note = model === 'ready' ? 'Showing all species while the local list is being computed…' : model === 'idle' ? 'Showing all species: the local list needs the bird model, which loads the first time you identify a bird.' : 'Showing all species until the model has loaded.';
+      return { indices: null, note };
     }
     return { indices: localIndices(entry.maxProbs, this.settings.get().geoThreshold), note: null };
   }
@@ -352,6 +379,8 @@ export class AppController extends Emitter<ControllerEvents> {
 
   async startListening(): Promise<void> {
     if (this.engine.getState() !== 'stopped') return;
+    // The first start on a phone downloads the model first; the Listen view shows the progress meanwhile.
+    if (!(await this.ensureModel())) throw new Error(this.modelFailure?.text ?? MODEL_DOWNLOAD_ERROR);
     if (this.settings.get().locationMode === 'auto' && !this.location.get().location) void this.location.refresh();
     // Follow the walk: each sighting is stamped with the newest fix, not with one from
     // page load. Off again in stopListening(), so the GPS is not left running.
@@ -656,6 +685,7 @@ export class AppController extends Emitter<ControllerEvents> {
 
   /** Run the bundled demo clip through the same path as a live window (not persisted). */
   async analyzeDemoClip(url: string): Promise<WindowResult> {
+    if (!(await this.ensureModel())) throw new Error(this.modelFailure?.text ?? MODEL_DOWNLOAD_ERROR);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Could not fetch sample (${res.status})`);
     const audio = await this.decodeAudioFile(await res.arrayBuffer());
