@@ -2366,3 +2366,17 @@ other open branches, so this may be renumbered at merge.)
   so perhaps not inside them) all came back as the nearest road or subdivision, so at zoom 17 most areas will probably be named after a road, not the park
   around them; zoom 16 or a `layer=natural,poi` hint were not tried. Also unverified: the names
   around Johnston on a phone, and how Nominatim treats the app's traffic over time.
+
+## 74. Maps stay under the header and the tab bar
+
+- **Bug (Sabih's phone):** while scrolling, a map slid over the sticky header on the
+  Map tab and over the bottom tab bar under a species ID card. Leaflet sets its
+  panes and controls to z-index 400–1000 (the preview's "Tap to explore" cover is
+  800), and nothing confined them, so they outranked the header and tab bar (20),
+  the Listen dock (19) and the sheet (30).
+- **Fix:** `isolation: isolate` on every map box (`.map`, `.map-preview`,
+  `.leaflet-container`). Each map becomes its own stacking context; Leaflet's
+  layering inside the map is unchanged, and the page chrome stays on top.
+- **Test:** e2e scrolls the Map tab and a species page until the map sits under
+  the header and the tab bar, and checks that the topmost element at those points
+  belongs to the header or tab bar, not the map.
