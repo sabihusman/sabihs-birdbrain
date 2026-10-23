@@ -13,6 +13,7 @@ import { speciesChip } from '../components/species-chip';
 import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
 import { el, fmtDuration, pct } from '../dom';
 import { hrefFor } from '../router';
+import { describeModelProgress } from '../model-progress';
 import { listenStatus, type ListenStatus } from '../status';
 import { micHelp } from '../mic-help';
 import { PipelineView } from '../viz/pipeline';
@@ -64,8 +65,17 @@ export function listenView(ctx: ViewContext): View {
   const stateTitle = el('h2', { class: 'state-title' }, '');
   const stateHint = el('p', { class: 'muted state-hint' }, '');
   const status = el('div', { class: 'small muted', 'data-testid': 'listen-status', role: 'status', 'aria-live': 'polite' }, '');
-  const modelBar = el('div', { class: 'progress' }, el('span', { style: 'width:0%' }));
+  // Download progress on the panel itself, not only in the header pill (DECISIONS.md #67).
+  const modelBar = el('div', { class: 'progress', 'data-testid': 'model-progress', role: 'progressbar', 'aria-label': 'Model download', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, el('span', { style: 'width:0%' }));
   const modelText = el('div', { class: 'small muted', 'data-testid': 'model-text' }, '');
+  const renderModelProgress = (s: ReturnType<typeof controller.inference.getStatus>) => {
+    const p = describeModelProgress(s);
+    modelText.textContent = p.text;
+    const percent = Math.round(p.fraction * 100);
+    (modelBar.firstElementChild as HTMLElement).style.width = `${percent}%`;
+    modelBar.setAttribute('aria-valuenow', String(percent));
+    modelBar.setAttribute('aria-valuetext', p.text || `${percent}%`);
+  };
   // Steps for the browser in use (Chrome, Firefox and Edge on iPhone keep the switch under Settings › Apps).
   const help = micHelp(typeof navigator === 'undefined' ? '' : navigator.userAgent);
   const micSteps = el(
@@ -484,8 +494,7 @@ export function listenView(ctx: ViewContext): View {
     }),
     controller.on('stage', (s) => pipeline.pulse(s)),
     controller.on('model', (s) => {
-      modelText.textContent = s.state === 'ready' ? '' : s.message;
-      (modelBar.firstElementChild as HTMLElement).style.width = `${Math.round(s.progress * 100)}%`;
+      renderModelProgress(s);
       renderState();
     }),
     controller.on('stats', (st) => {
@@ -532,8 +541,7 @@ export function listenView(ctx: ViewContext): View {
 
   // Initial state
   {
-    const s = controller.inference.getStatus();
-    modelText.textContent = s.state === 'ready' ? '' : s.message;
+    renderModelProgress(controller.inference.getStatus());
     renderChips();
     renderConditions(controller.getConditions());
     if (controller.listening) status.textContent = 'Listening…';
