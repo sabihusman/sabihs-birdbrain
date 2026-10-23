@@ -11,6 +11,7 @@ export function helpView(_ctx: ViewContext): View {
       el('h2', null, 'How it works'),
       el('p', null, 'Your phone records sound, resamples it to 48 kHz mono and cuts it into overlapping 3-second windows. Each window goes through BirdNET V2.4, a neural network from the Cornell Lab of Ornithology and Chemnitz University of Technology, running entirely in your browser with TensorFlow.js. A second, tiny model uses your location and the week of the year to drop species that are not expected there.'),
       el('p', null, 'Nothing is uploaded. Audio, recordings and detections stay in this browser’s storage.'),
+      el('p', null, 'On the Map tab, the Places view groups your sightings by the nearest park, nature reserve, botanical garden, wood or trail within 500 m. To find them, it sends your sightings’ positions, rounded to about 100 m, to OpenStreetMap’s Overpass service; nothing else is sent. The answers are kept on this phone for 30 days. Shops, restaurants and the like are never looked up.'),
       el('p', null, 'On the Species tab a tick marks every species you have a sighting of, and the “Spotted by me” chip lists only those. Tapping a tick opens the species ID card for members; everyone else sees “Sign in to unlock”. The ticks are worked out from the sightings on this device and never leave it.'),
     ),
     el(
@@ -44,7 +45,7 @@ export function helpView(_ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Credits and licences'),
-      el('p', null, 'BirdNET models © Stefan Kahl, Cornell Lab of Ornithology and Chemnitz University of Technology, licensed ', el('a', { href: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-NC-SA 4.0'), ' (non-commercial). App code is MIT licensed. Map data © OpenStreetMap contributors. Species text and images from Wikipedia and Wikimedia Commons, each under its own licence.'),
+      el('p', null, 'BirdNET models © Stefan Kahl, Cornell Lab of Ornithology and Chemnitz University of Technology, licensed ', el('a', { href: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-NC-SA 4.0'), ' (non-commercial). App code is MIT licensed. Map tiles and place names © OpenStreetMap contributors, ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener' }, 'ODbL'), '. Species text and images from Wikipedia and Wikimedia Commons, each under its own licence.'),
       el('p', null, el('a', { href: 'https://github.com/sabihusman/sabihs-birdbrain', target: '_blank', rel: 'noopener' }, 'Source code on GitHub')),
     ),
   );

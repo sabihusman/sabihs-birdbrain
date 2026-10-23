@@ -472,3 +472,29 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .user-item { display: flex; flex-direction: column; gap: 4px; }
 .user-email, .user-name { overflow-wrap: anywhere; min-width: 0; }
 .confirm-panel { padding: 10px; border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid var(--border); }
+
+/* Map tab: map, Birds | Places switch, count line and cards (DECISIONS.md #72). */
+.map.map-tab { height: 45vh; min-height: 260px; max-height: 420px; }
+.map[data-focus] .marker-cluster { opacity: 0.4; }
+.segmented { display: flex; gap: 4px; margin: var(--space-3) 0 var(--space-2); padding: 4px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); }
+.segmented [role="tab"] { flex: 1; min-height: 44px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--muted); font-weight: var(--weight-semibold); font-size: var(--text-md); }
+.segmented [role="tab"][aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+.map-count { margin: 0 2px var(--space-2); overflow-wrap: anywhere; }
+.link-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: var(--weight-semibold); text-decoration: underline; vertical-align: middle; }
+.map-places-status { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-2); padding: 8px 12px; border-radius: var(--radius-control); background: var(--surface-2); border-left: 4px solid var(--warn); font-size: var(--text-sm); }
+.map-places-status[hidden] { display: none; }
+.map-cards { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.map-card { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; text-align: left; border-radius: var(--radius-control); border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; }
+.map-card.selected { border: 2px solid var(--accent); padding: 9px 11px; }
+.map-card-thumb { width: 48px; height: 48px; border-radius: var(--radius-control); object-fit: cover; flex: none; background: var(--sage); display: flex; align-items: center; justify-content: center; }
+.map-card-thumb.placeholder svg { width: 24px; height: 24px; fill: none; stroke: var(--text); stroke-width: 1.5; opacity: 0.7; }
+.map-card-names { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.map-card-title { font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.map-card-sub { font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
+.map-card-chev { flex: none; color: var(--muted); font-size: var(--text-lg); }
+.map-card-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.map-pill { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--surface-2); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.map-pill .swatch { width: 10px; height: 10px; border-radius: 3px; }
+.place-icon { width: 48px; height: 48px; flex: none; border-radius: var(--radius-control); background: var(--sage); display: flex; align-items: center; justify-content: center; }
+.place-icon svg { width: 26px; height: 26px; fill: none; stroke: var(--text); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.map-group-heading { margin: var(--space-2) 2px 0; font-size: var(--text-xs); font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }

@@ -55,4 +55,9 @@ describe('front-end response headers (vercel.json)', () => {
   it('keeps the CSP allowing OSM tiles', () => {
     expect(header('Content-Security-Policy')).toMatch(/img-src[^;]*https:\/\/tile\.openstreetmap\.org/);
   });
+
+  it('lets the Places view reach the main Overpass instance and nothing else new (DECISIONS.md #72)', () => {
+    const connect = /connect-src ([^;]*)/.exec(header('Content-Security-Policy')!)![1].split(/\s+/);
+    expect(connect).toEqual(["'self'", 'https://bird-brain.duckdns.org', 'https://en.wikipedia.org', 'https://overpass-api.de']);
+  });
 });

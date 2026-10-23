@@ -53,6 +53,8 @@ const violations: string[] = [];
 await page.addInitScript(() => {
   // The demo button is hidden in the Focus layout, the first-run default (DECISIONS.md #63).
   if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+  // A returning visitor who asked for the model before: it loads at start (DECISIONS.md #69).
+  localStorage.setItem('birdbrain.model.v1', 'wanted');
   document.addEventListener('securitypolicyviolation', (e) => {
     (window as unknown as { __csp: string[] }).__csp ??= [];
     (window as unknown as { __csp: string[] }).__csp.push(`${e.violatedDirective} blocked ${e.blockedURI || 'inline'} at ${e.sourceFile}:${e.lineNumber}`);
@@ -75,6 +77,33 @@ await page.getByTestId('results').filter({ hasText: 'Redpoll' }).waitFor({ timeo
 await collect();
 await page.goto('http://localhost:4180/#/map');
 await page.waitForTimeout(3000);
+await collect();
+// Places view (DECISIONS.md #72): one located sighting and a stubbed Overpass answer. The CSP is
+// checked before a request reaches page.route, so a blocked connect-src would still be reported.
+await page.route('https://overpass-api.de/api/interpreter', (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify({ elements: [{ type: 'count', id: 0 }, { type: 'way', id: 1 }, { type: 'count', id: 0 }, { type: 'way', id: 1, bounds: { minlat: 41.69, minlon: -93.71, maxlat: 41.71, maxlon: -93.69 }, tags: { leisure: 'park', name: 'CSP Check Park' } }] }),
+  }),
+);
+await page.evaluate(
+  () =>
+    new Promise<void>((resolve) => {
+      const req = indexedDB.open('sabihs-birdbrain');
+      req.onsuccess = () => {
+        const tx = req.result.transaction('sightings', 'readwrite');
+        const t = Date.now();
+        tx.objectStore('sightings').put({ id: 'csp-1', label: 'Poecile atricapillus_Black-capped Chickadee', scientific: 'Poecile atricapillus', common: 'Black-capped Chickadee', firstTime: t, lastTime: t, peakConfidence: 0.8, hits: 1, lat: 41.7, lon: -93.7, accuracy: 10, recordingId: null, offsetSec: null, source: 'live', sessionId: 'csp', peakDetectionId: 'csp-d1' });
+        tx.oncomplete = () => resolve();
+      };
+    }),
+);
+await page.goto('http://localhost:4180/#/settings');
+await page.goto('http://localhost:4180/#/map');
+await page.getByRole('tab', { name: 'Places' }).click();
+await page.getByTestId('map-place-card').filter({ hasText: 'CSP Check Park' }).waitFor({ timeout: 20_000 });
 await collect();
 await page.goto('http://localhost:4180/#/species/Acanthis%20cabaret');
 await page.waitForTimeout(3000);
