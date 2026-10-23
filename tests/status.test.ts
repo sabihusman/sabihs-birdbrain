@@ -20,6 +20,8 @@ describe('Listen status (DESIGN_GUIDE.md §7)', () => {
     expect(listenStatus(fakeController({ mic: { kind: 'denied', message: 'x' } }), true)).toMatchObject({ status: 'mic-blocked', pill: 'Mic blocked', tone: 'error' });
     expect(listenStatus(fakeController({ mic: { kind: 'busy', message: 'x' } }), true)).toMatchObject({ status: 'error', pill: 'Something went wrong' });
     expect(listenStatus(fakeController({ model: 'error' }), true)).toMatchObject({ status: 'error' });
+    // Nothing asked for the model yet (welcome layer up, DECISIONS.md #65): muted, not a download, not an error.
+    expect(listenStatus(fakeController({ model: 'idle', progress: 0 }), true)).toMatchObject({ status: 'idle', pill: 'Model not loaded', tone: 'muted' });
     expect(listenStatus(fakeController({}), false)).toMatchObject({ status: 'offline', pill: 'Offline' });
     // every state carries text and an icon: colour is never the only signal
     for (const c of [fakeController({}), fakeController({ listening: true }), fakeController({ mic: { kind: 'denied', message: '' } })]) {

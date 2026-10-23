@@ -2,7 +2,7 @@ import type { AppController } from '../app/controller';
 import { MODEL_DOWNLOAD_ERROR } from '../model/model-source';
 
 /** The states of docs/DESIGN_GUIDE.md §7, derived from the controller. */
-export type ListenStatus = 'loading' | 'ready' | 'listening' | 'paused' | 'mic-blocked' | 'error' | 'offline';
+export type ListenStatus = 'idle' | 'loading' | 'ready' | 'listening' | 'paused' | 'mic-blocked' | 'error' | 'offline';
 
 export interface StatusView {
   status: ListenStatus;
@@ -21,6 +21,8 @@ export function listenStatus(controller: AppController, online = typeof navigato
   // The model is downloaded from the API host (src/model/model-source.ts), so this is
   // nearly always a connection problem; say that instead of "Something went wrong".
   if (model.state === 'error') return { status: 'error', pill: 'Model not loaded', icon: '⚠', tone: 'error', hint: MODEL_DOWNLOAD_ERROR };
+  // Nothing asked for the model yet (first visit, welcome layer up): not an error, not a download.
+  if (model.state === 'idle') return { status: 'idle', pill: 'Model not loaded', icon: '◌', tone: 'muted' };
   if (model.state !== 'ready') return { status: 'loading', pill: `Loading model ${Math.round((model.progress ?? 0) * 100)}%`, icon: '◌', tone: 'muted' };
   if (controller.listening) {
     return controller.engine.getState() === 'suspended' ? { status: 'paused', pill: 'Paused', icon: '❚❚', tone: 'warn' } : { status: 'listening', pill: 'Listening', icon: '●', tone: 'ok' };

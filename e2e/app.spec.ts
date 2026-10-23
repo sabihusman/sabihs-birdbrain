@@ -7,9 +7,72 @@ import { devices, expect, test } from '@playwright/test';
  * uses a fresh context to check the real default.
  */
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+  await page.addInitScript(returningVisitor);
+});
+
+/**
+ * A phone that has used Birdbrain before: stored settings and the "model wanted" flag. Without
+ * them a fresh context is a first visit and Listen shows the welcome layer instead of the model
+ * (DECISIONS.md #65). Tests that open their own context and need the usual Listen screen add this.
+ */
+function returningVisitor(): void {
+  if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+  localStorage.setItem('birdbrain.model.v1', 'wanted');
+}
+
+/** Requests for model files (any host): the welcome layer must not cause any. `labels.json` is the species list, bundled with the app and loaded at startup by design. */
+const MODEL_FILE = /\/models\/birdnet-v2\.4\/(?!labels\.json).*\.(bin|json)(\?|$)/;
+
+test('first visit: the welcome layer shows before any download, the tabs work behind it, and a choice is remembered', async ({ browser }) => {
+  // No service worker here: requests it handles never reach page.route(), and the model is fetched inside the Web Worker.
+  const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  const page = await context.newPage();
+  let modelRequests = 0;
+  await page.route(MODEL_FILE, (route) => {
+    modelRequests++;
+    return route.continue();
   });
+  await page.goto('./');
+  const welcome = page.getByTestId('welcome');
+  await expect(welcome).toBeVisible();
+  await expect(welcome).toContainText('Birdbrain listens and tells you which birds are singing.');
+  await expect(welcome).toContainText('it downloads a 78 MB bird model. Use Wi-Fi if you can.');
+  await expect(welcome).toContainText('An account is optional.');
+  await expect(page.getByTestId('welcome-start')).toHaveText('Start identifying');
+  await expect(page.getByTestId('welcome-signin')).toHaveText('Sign in / Create account');
+  await expect(page.getByTestId('start-stop')).toHaveCount(0); // the layer stands in for the whole screen
+  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  // The one filled button is Start identifying; the welcome fits the phone width.
+  const box = await page.getByTestId('welcome-start').boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  const scroll = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+  expect(scroll.sw).toBeLessThanOrEqual(scroll.iw);
+  // The tabs keep working behind the layer, and the species list loads without the model.
+  await page.getByRole('link', { name: 'Species' }).click();
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
+  await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
+  await page.getByRole('link', { name: 'Listen' }).click();
+  await expect(welcome).toBeVisible();
+  // Sign in / Create account: Settings opens on the Account card, still with no download.
+  await page.getByTestId('welcome-signin').click();
+  await expect(page).toHaveURL(/#\/settings\/account$/);
+  await expect(page.getByTestId('account')).toBeVisible();
+  await expect(page.getByTestId('account').getByRole('button', { name: 'Sign in' })).toBeVisible();
+  expect(modelRequests, 'nothing downloaded before Start identifying').toBe(0);
+  // Back on Listen the layer is still up (no settings were changed), and Start identifying takes it down.
+  await page.goto('./#/listen');
+  await expect(welcome).toBeVisible();
+  await page.getByTestId('welcome-start').click();
+  await expect(welcome).toHaveCount(0);
+  await expect(page.locator('.listen')).toHaveAttribute('data-status', /loading|ready/);
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  expect(modelRequests).toBeGreaterThan(0);
+  expect(await page.evaluate(() => localStorage.getItem('birdbrain.model.v1'))).toBe('wanted');
+  // A returning visitor never sees the layer again.
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.getByTestId('welcome')).toHaveCount(0);
+  await context.close();
 });
 
 test('first run opens Listen in Focus, and a chosen layout is kept after a reload', async ({ browser }) => {
@@ -359,6 +422,19 @@ test('no horizontal scrolling and the primary control visible at 320, 375, 390 a
   for (const width of [320, 375, 390, 430]) {
     const context = await browser.newContext({ viewport: { width, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     const page = await context.newPage();
+    // First the welcome layer (a first visit), then the usual Listen screen: neither may overflow.
+    await page.goto('./#/listen');
+    await expect(page.getByTestId('welcome')).toBeVisible();
+    const w = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    expect(w.sw, `welcome at ${width}px`).toBeLessThanOrEqual(w.iw);
+    for (const id of ['welcome-start', 'welcome-signin']) {
+      const b = await page.getByTestId(id).boundingBox();
+      expect(b!.x + b!.width, `${id} inside ${width}px`).toBeLessThanOrEqual(width);
+      expect(b!.height, `${id} is a 44 px target`).toBeGreaterThanOrEqual(44);
+    }
+    // Then as a returning visitor (the later gotos only change the hash, so write the keys and reload).
+    await page.evaluate(returningVisitor);
+    await page.reload();
     for (const route of ['#/listen', '#/species', '#/settings']) {
       await page.goto(`./${route}`);
       await page.waitForTimeout(300);
@@ -595,6 +671,7 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
 test('Listen layouts: the picker switches at once, each Ready state differs, and the mic keeps running', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 13'], permissions: ['microphone'] });
   const page = await context.newPage();
+  await page.addInitScript(returningVisitor); // the usual Listen screen, not the first-visit welcome
   // Count getUserMedia calls, so switching layout while listening can be shown not to restart the mic.
   await page.addInitScript(() => {
     const w = window as unknown as { __mic: number };
@@ -677,6 +754,7 @@ test('mic blocked state explains the iPhone steps and offers Try again and impor
   await page.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = () => Promise.reject(Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' }));
   });
+  await page.addInitScript(returningVisitor);
   await page.goto('./#/listen');
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
   await page.getByTestId('start-stop').click();

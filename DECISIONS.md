@@ -1829,3 +1829,50 @@ other open branches, so this may be renumbered at merge.)
   written *before* a friendship in place for hours.
 - **Not done:** no retry loop beyond three attempts (the next tab open or
   sighting retries anyway), and nothing new is sent to the server.
+
+## 65. A welcome layer before the download, and three stacked PRs for the startup changes
+
+- **Audit finding (A1, 2026-10-22):** the app opened on Listen's "Loading the
+  model" state and downloaded 78 MB on every first visit, whatever the visitor
+  came to do. Nothing said that the other tabs work without it, or that an
+  account is optional.
+- **Decision (A1-trigger (a), A1-copy (a), both Sabih's):** a first visit shows
+  a welcome layer in place of Listen's loading state, and nothing downloads
+  until the visitor taps **Start identifying**. **Sign in / Create account**
+  opens Settings on the Account card (`#/settings/account`, a new route
+  variant that scrolls to and focuses the card) with no download. The text is
+  Claude's draft in Sabih's voice (`src/ui/components/welcome.ts`,
+  `WELCOME_TEXT`), to be edited in the PR; the download size is computed from
+  `MODEL_TOTAL_BYTES`, not typed.
+- **"First visit" is the absence of three signals** (`src/app/first-visit.ts`,
+  pure and unit-tested): no stored settings (`birdbrain.settings.v1`), no
+  "model wanted" flag (`birdbrain.model.v1 = wanted`, set by Start identifying)
+  and no `model.json` in the `birdnet-models-v2.4` cache (checked with
+  `caches.has` and `cache.match`, guarded for browsers without Cache Storage,
+  which read as "not cached"). Any one of them hides the layer, so a returning
+  visitor never sees it, and a visitor who tapped Start identifying but whose
+  download failed does not see it again either (Listen's "Try again" covers
+  that). The signals are read in `main.ts` before the first paint, so the
+  loading state never flashes before the welcome.
+- **Where it lives:** the Listen view renders the layer as its only child while
+  `controller.welcomePending` is true; the header, the status pill ("Model not
+  loaded", muted, a new `idle` status) and the tabs stay as they are, so
+  Species, Map, Recordings and Settings work behind it. `controller.init()`
+  skips the model load while the layer is up; `startIdentifying()` sets the
+  flag, takes the layer down and starts the load. `loadModel()` now shares one
+  in-flight promise, so a tap during startup cannot start a second worker init.
+- **Tests:** unit tests for the three-signal rule, the storage guards and the
+  cache check; an e2e test that counts model-file requests on a first visit
+  (zero until Start identifying), checks the tabs and the sign-in route behind
+  the layer, and that a reload after the choice shows no welcome. Tests that
+  open their own browser context and need the usual Listen screen now store
+  the returning-visitor signals first (`returningVisitor()` in the spec).
+- **Three stacked PRs, not three from `main`:** the audit prompt asks for A1,
+  A2 (lazy model load) and A3 (download progress on the Listen panel) as
+  separate PRs from `main`. All three change the same startup code
+  (`controller.init`/`loadModel`, `main.ts`, the Listen state block, the
+  status pill and the e2e "Model ready" waits), so three independent branches
+  would conflict three ways at merge time. They are stacked instead:
+  `claude/welcome-layer` from `main`, `claude/lazy-model` from it,
+  `claude/download-progress` from that. Review and merge them in that order;
+  each PR's diff against its parent is only its own change.
