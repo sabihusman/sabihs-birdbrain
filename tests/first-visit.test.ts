@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isModelCached, markModelWanted, MODEL_WANTED_KEY, readStoredSignals, readVisitSignals, shouldShowWelcome, type ModelCacheStorage } from '../src/app/first-visit';
+import { isModelCached, markModelWanted, MODEL_WANTED_KEY, readStoredSignals, readVisitSignals, shouldAutoLoadModel, shouldShowWelcome, type ModelCacheStorage } from '../src/app/first-visit';
 import { SETTINGS_KEY } from '../src/app/settings';
 import { MODEL_CACHE_NAME } from '../src/model/constants';
 import { MemoryStorage } from './helpers/memory-storage';
@@ -20,6 +20,15 @@ describe('welcome layer: first visit or returning visitor (DECISIONS.md #65)', (
     expect(shouldShowWelcome({ settingsStored: true, modelWanted: false, modelCached: false })).toBe(false);
     expect(shouldShowWelcome({ settingsStored: false, modelWanted: true, modelCached: false })).toBe(false);
     expect(shouldShowWelcome({ settingsStored: false, modelWanted: false, modelCached: true })).toBe(false);
+  });
+
+  it('loads the model at startup only for a phone that asked for it before (DECISIONS.md #66)', () => {
+    expect(shouldAutoLoadModel({ modelWanted: false, modelCached: false })).toBe(false);
+    expect(shouldAutoLoadModel({ modelWanted: true, modelCached: false })).toBe(true);
+    expect(shouldAutoLoadModel({ modelWanted: false, modelCached: true })).toBe(true);
+    // Stored settings alone (a changed theme or layout) are not a request for 78 MB.
+    expect(shouldShowWelcome({ settingsStored: true, modelWanted: false, modelCached: false })).toBe(false);
+    expect(shouldAutoLoadModel({ modelWanted: false, modelCached: false })).toBe(false);
   });
 
   it('reads the two localStorage signals and treats a broken storage as empty', () => {

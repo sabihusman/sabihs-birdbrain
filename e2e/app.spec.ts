@@ -75,6 +75,60 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   await context.close();
 });
 
+test('the model loads only when needed: every tab and Account work with model requests aborted, and the sample clip starts the load', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  const page = await context.newPage();
+  // Settings stored, no flag, no cache: a returning visitor who never identified a bird (DECISIONS.md #66).
+  // A manual position, so the Species tab's note is about the model and not about the missing GPS.
+  await page.addInitScript(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'manual', manualLat: 47.36559, manualLon: 8.524997 })));
+  let modelRequests = 0;
+  let allowModel = false;
+  await page.route(MODEL_FILE, (route) => {
+    modelRequests++;
+    return allowModel ? route.continue() : route.abort();
+  });
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/auth\/login$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ challenge: 'c1', expiresInSeconds: 600 }) }));
+
+  // Settings › Account: the sign-in form is reachable and usable.
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  const account = page.getByTestId('account');
+  await account.getByLabel('Email').fill('new@example.com');
+  await account.getByLabel('Password').fill('correct horse battery staple');
+  await account.getByRole('button', { name: 'Sign in' }).click();
+  await expect(account).toContainText('We emailed a code to new@example.com');
+  // Species (bundled list), Map and Recordings all render without the model.
+  await page.goto('./#/species');
+  await expect(page.getByTestId('local-note')).toContainText('needs the bird model');
+  await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
+  await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
+  await page.goto('./#/map');
+  await expect(page.getByTestId('map')).toBeVisible();
+  await page.goto('./#/recordings');
+  await expect(page.getByText('Import audio file')).toBeVisible();
+  // Listen: no welcome (settings are stored), the controls are there, and still nothing was requested.
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('welcome')).toHaveCount(0);
+  await expect(page.locator('.listen')).toHaveAttribute('data-status', 'idle');
+  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  await expect(page.getByTestId('start-stop')).toBeEnabled();
+  await expect(page.getByTestId('demo')).toBeEnabled();
+  expect(modelRequests, 'no model request before an identifying action').toBe(0);
+
+  // The sample clip is an identifying action: it loads the model, then analyses.
+  allowModel = true;
+  await page.getByTestId('demo').click();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  expect(modelRequests).toBeGreaterThan(0);
+  await expect(page.getByTestId('results')).toContainText('Redpoll', { timeout: 120_000 });
+  expect(await page.evaluate(() => localStorage.getItem('birdbrain.model.v1'))).toBe('wanted');
+  // Next visit: the flag makes the model load at startup, so the phone is "Model ready" without a tap.
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await context.close();
+});
+
 test('first run opens Listen in Focus, and a chosen layout is kept after a reload', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 13'] });
   const page = await context.newPage();

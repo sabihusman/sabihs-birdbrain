@@ -28,6 +28,16 @@ export interface VisitSignals {
   modelCached: boolean;
 }
 
+/**
+ * Load the model at startup only when this phone asked for it before: it is cached (a
+ * download finished here) or the flag is set (the user started identifying, so the next
+ * visit should be "Model ready" without a tap). Everyone else gets it on their first
+ * identifying action (DECISIONS.md #66).
+ */
+export function shouldAutoLoadModel(s: Pick<VisitSignals, 'modelWanted' | 'modelCached'>): boolean {
+  return s.modelCached || s.modelWanted;
+}
+
 /** The welcome layer shows only when nothing says this phone has used Birdbrain before. */
 export function shouldShowWelcome(s: VisitSignals): boolean {
   return !s.settingsStored && !s.modelWanted && !s.modelCached;
