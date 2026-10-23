@@ -1512,3 +1512,33 @@ test('a browser without WebAssembly is told which browsers work, and no model by
   }
   await context.close();
 });
+
+test('maps stay under the sticky header and the tab bar while scrolling (DECISIONS.md #74)', async ({ browser }) => {
+  // A short screen so the map reaches under the tab bar at first, and under the header after a scroll.
+  const context = await browser.newContext({ viewport: { width: 390, height: 360 }, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+  });
+  await page.goto('./#/map');
+  const map = page.getByTestId('map');
+  await expect(map.locator('.leaflet-pane').first()).toBeAttached();
+  const topmost = (x: number, y: number) =>
+    page.evaluate(([px, py]) => {
+      const el = document.elementFromPoint(px, py);
+      return el?.closest('.app-header') ? 'header' : el?.closest('.tabs') ? 'tabs' : el?.closest('.leaflet-container, .map') ? 'map' : (el?.tagName ?? 'none');
+    }, [x, y] as const);
+  const tabBox = (await page.locator('.tabs').boundingBox())!;
+  const mapBox = (await map.boundingBox())!;
+  expect(mapBox.y + mapBox.height, 'the map reaches under the tab bar on this short screen').toBeGreaterThan(tabBox.y);
+  expect(await topmost(195, tabBox.y + tabBox.height / 2)).toBe('tabs');
+  // Scroll so the map passes under the sticky header.
+  const headerBox = (await page.locator('.app-header').boundingBox())!;
+  await page.evaluate((dy) => window.scrollBy(0, dy), mapBox.y - headerBox.y);
+  await page.waitForTimeout(200);
+  const mapAfter = (await map.boundingBox())!;
+  expect(mapAfter.y, 'the map now starts under the header').toBeLessThan(headerBox.y + headerBox.height);
+  expect(await topmost(195, headerBox.y + headerBox.height / 2)).toBe('header');
+  await context.close();
+});

@@ -2367,9 +2367,21 @@ other open branches, so this may be renumbered at merge.)
   around them; zoom 16 or a `layer=natural,poi` hint were not tried. Also unverified: the names
   around Johnston on a phone, and how Nominatim treats the app's traffic over time.
 
-## 75. Map tab: a chosen bird shows as round photo pins; a pin opens a compact card
+## 74. Maps stay under the header and the tab bar
 
-(#74 is on the open map-stacking branch, so this may be renumbered at merge.)
+- **Bug (Sabih's phone):** while scrolling, a map slid over the sticky header on the
+  Map tab and over the bottom tab bar under a species ID card. Leaflet sets its
+  panes and controls to z-index 400–1000 (the preview's "Tap to explore" cover is
+  800), and nothing confined them, so they outranked the header and tab bar (20),
+  the Listen dock (19) and the sheet (30).
+- **Fix:** `isolation: isolate` on every map box (`.map`, `.map-preview`,
+  `.leaflet-container`). Each map becomes its own stacking context; Leaflet's
+  layering inside the map is unchanged, and the page chrome stays on top.
+- **Test:** e2e scrolls the Map tab and a species page until the map sits under
+  the header and the tab bar, and checks that the topmost element at those points
+  belongs to the header or tab bar, not the map.
+
+## 75. Map tab: a chosen bird shows as round photo pins; a pin opens a compact card
 
 - **Problem (Sabih):** tapping a bird card opened the newest sighting's full popup, which
   covered most of the map (303 px tall at 375 px, already capped by its max height).
