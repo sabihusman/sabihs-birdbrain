@@ -138,7 +138,7 @@ function compactCard(s: SightingRecord, controller: AppController): HTMLElement 
     'div',
     { class: 'compact-card', 'data-testid': 'compact-card', 'data-sighting': s.id },
     el('div', { class: 'compact-head' }, photo, el('div', { class: 'compact-names' }, el('strong', { class: 'compact-name' }, s.common), el('span', { class: 'compact-meta' }, compactWhen(s)))),
-    el('div', { class: 'compact-where' }, compactWhere(s)),
+    el('div', { class: 'compact-where', title: compactWhere(s) }, compactWhere(s)),
     el(
       'div',
       { class: 'compact-actions' },

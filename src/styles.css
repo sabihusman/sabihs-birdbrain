@@ -520,8 +520,9 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .compact-photo-ring { display: flex; flex: none; box-sizing: border-box; width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--ring, var(--accent)); background: var(--sage); overflow: hidden; }
 .compact-photo { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; object-fit: cover; }
 .compact-names { display: flex; flex-direction: column; min-width: 0; }
-.compact-name { font-size: var(--text-md); font-weight: var(--weight-bold); line-height: 1.2; overflow-wrap: anywhere; }
-.compact-meta, .compact-where { color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.compact-name { font-size: var(--text-md); font-weight: var(--weight-bold); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* One line each, whatever the font: the card stays about half the old popup's height on every phone (DECISIONS.md #75). */
+.compact-meta, .compact-where { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .compact-where { margin-top: 6px; }
-.compact-actions { display: flex; flex-wrap: wrap; column-gap: 14px; }
+.compact-actions { display: flex; flex-wrap: nowrap; justify-content: space-between; column-gap: 8px; white-space: nowrap; }
 .leaflet-container .compact-action { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; }
