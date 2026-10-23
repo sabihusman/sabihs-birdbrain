@@ -2,7 +2,8 @@ import { describeAccuracy, isApproximate, isLegacyPosition, looksImprecise } fro
 import { formatLatLon, googleMapsUrl, plusCode } from '../../geo/pluscode';
 import { el } from '../dom';
 
-async function copyText(text: string, button: HTMLButtonElement): Promise<void> {
+/** Copies `text` and says so on the button for 1.5 s ("Copied" or "Copy failed"). */
+export async function copyText(text: string, button: HTMLButtonElement): Promise<void> {
   const original = button.textContent;
   try {
     await navigator.clipboard.writeText(text);

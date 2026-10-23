@@ -2380,3 +2380,45 @@ other open branches, so this may be renumbered at merge.)
 - **Test:** e2e scrolls the Map tab and a species page until the map sits under
   the header and the tab bar, and checks that the topmost element at those points
   belongs to the header or tab bar, not the map.
+
+## 75. Map tab: a chosen bird shows as round photo pins; a pin opens a compact card
+
+- **Problem (Sabih):** tapping a bird card opened the newest sighting's full popup, which
+  covered most of the map (303 px tall at 375 px, already capped by its max height).
+- **Card tap (1b, 3a):** fits the map to that bird's sightings, fades the others and swaps the
+  bird's own markers for round photo pins: the Wikipedia thumbnail (the bird outline until or
+  unless there is one) in a 3 px ring of the species colour, with a pointer. The newest sighting
+  is 52 px, the rest 40 px. Nothing opens. "Tap the bird for details" shows at the bottom of the
+  map for 4 s (`role="status"`, polite), once per selection. "Show all" (and the plain view
+  before any choice) keeps plain coloured dots and clusters, and closes any card.
+- **Pin tap → compact card:** a Leaflet popup (`compact-popup`, at most 240 px wide, narrower on
+  a narrow map, `autoPanPadding` 12/16) with a 36 px round photo, the name, "Oct 21 · 6:42 PM ·
+  83%", one line "41.74013, −93.71845 · ±5 m" (the accuracy words come from `describeAccuracy`,
+  as on the sighting card), and three 44 px text actions: Copy (the same coordinates and copy
+  routine as the location block), Google Maps (same URL), Details ›. × or a map tap closes it;
+  the pin stays. Measured 140 px at 375 px, 46 % of the old popup (e2e asserts ≤ 55 %).
+- **Details › (2b):** the sighting card in Recordings (`#/recordings/<recordingId>`) when the
+  sighting has a saved recording; otherwise the species page (`detailsHref`).
+- **Plain dot tap (4a):** in the Birds view a dot chooses its bird, exactly like its card, and
+  opens the compact card on the tapped sighting's pin. In the Places view a dot opens the compact
+  card without changing the chosen area, and an area tap no longer opens a popup either (same
+  reason); its sightings stay highlighted dots. The species page and sighting-history maps keep
+  the full popup.
+- **CSP:** the pin is `L.divIcon({ html: element })` (the types accept an `Element`), so the
+  ring colour is set on that element with `style.setProperty('--ring', colour)` through the
+  CSSOM; sizes, ring width and pointer are CSS classes. No style attribute is written as markup.
+- **Accessibility:** pins are Leaflet markers with `keyboard: true` (focusable `role="button"`,
+  Enter opens the card), `aria-label` "<Bird>, <date>. Show details" set on `add`, the image
+  `alt=""`. Focus ring on the circle.
+- **Code:** `src/ui/map-pins.ts` (pure: `compactWhen`, `compactWhere`, `pinLabel`,
+  `newestSighting`, `pinSize`, `detailsHref`), `photoPin` / `compactCard` in
+  `src/ui/views/map.ts`, `copyText` now exported from `location-block.ts`, CSS after the map
+  card rules.
+- **Tests:** `tests/map-pins.test.ts`; e2e "Map tab photo pins" (pins = the bird's located
+  sightings, no popup, hint, 52/40 px, pin tap → card with the three actions ≥ 44 px and height
+  ≤ 55 % of 303 px, × keeps the pin, Enter on a focused pin, Details → `#/recordings/rec-m1`
+  and the species page without a recording, Show all → no pins, dot tap → bird chosen + card,
+  320 px in both themes inside the map).
+- **Not verified:** a phone (touch on a 40 px pin under iOS Safari), real Wikipedia photos in
+  the pins (the e2e blocks Wikipedia; a stubbed image was checked by eye), VoiceOver reading of
+  the pin label.
