@@ -56,8 +56,8 @@ describe('front-end response headers (vercel.json)', () => {
     expect(header('Content-Security-Policy')).toMatch(/img-src[^;]*https:\/\/tile\.openstreetmap\.org/);
   });
 
-  it('lets the Places view reach the main Overpass instance and nothing else new (DECISIONS.md #72)', () => {
+  it('lets the Places view reach Nominatim and nothing else new (DECISIONS.md #73)', () => {
     const connect = /connect-src ([^;]*)/.exec(header('Content-Security-Policy')!)![1].split(/\s+/);
-    expect(connect).toEqual(["'self'", 'https://bird-brain.duckdns.org', 'https://en.wikipedia.org', 'https://overpass-api.de']);
+    expect(connect).toEqual(["'self'", 'https://bird-brain.duckdns.org', 'https://en.wikipedia.org', 'https://nominatim.openstreetmap.org']);
   });
 });

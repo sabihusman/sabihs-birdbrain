@@ -2117,6 +2117,10 @@ other open branches, so this may be renumbered at merge.)
 
 ## 72. Map tab: Birds | Places cards under the map; nature places from OpenStreetMap's Overpass API
 
+> **Superseded by #73** (2026-10-23): Places are now 1 km areas named by Nominatim; Overpass, the
+> nature tag lists, the kind icons and "Other spots" are gone. The Birds view and the layout below
+> still hold.
+
 - **Sabih's request:** remove the Species / From / To filter card; put cards for the
   birds under the map, a toggle between bird cards and location cards, and group
   sightings by the nearest natural place (parks, wildlife reserves, botanical
@@ -2262,3 +2266,103 @@ other open branches, so this may be renumbered at merge.)
   the cache on return, busy + Retry, offline, 320 px in both themes).
 - **Not verified:** real Overpass answers around Johnston, Iowa, and the layout
   on a phone.
+
+## 73. Places are 1 km areas named by Nominatim; Overpass removed (supersedes #72's places)
+
+- **Sabih's change:** "Forget my earlier requirement for it to be nature-related places. Keep it to
+  whatever location the recording was made. This will allow greater pinpoint accuracy and pull the
+  exact name of the location from the map location, so that places don't overlap. Keep a 1 km
+  radius between the locations so there is no overlap. It'll be a 1 km diameter area for each
+  location." Also: the public Overpass servers were down (503 / timeouts) and the app said "Place
+  names need a connection" while online, which was wrong.
+- **Areas (`groupIntoAreas`, `src/geo/areas.ts`, pure):** leader clustering in time order, oldest
+  sighting first (`firstTime`, stable sort). For each sighting, the nearest existing centre:
+  - under 500 m: it joins that area;
+  - 500 m to under 1 km (**the edge rule**): it also joins that nearest area, because a new centre
+    there would be less than 1 km from an existing one and the two 1 km-diameter circles would
+    overlap. So such a sighting lies outside its area's drawn circle (by up to 500 m); the map
+    still fits all of the area's sightings when the card is tapped;
+  - 1 km or more from every centre: it starts a new area centred on its own position.
+  Centres never move, so every two centres are at least 1 km apart (unit-tested on 300 random
+  points) and a newer sighting never changes the existing areas. An *older* sighting added later
+  (an imported recording from before) can, since the order is by time. Every located sighting is in
+  an area, so there is no "Other spots" card. Cards are ordered by sightings, then the newest.
+  An area's key is its centre rounded to 3 decimals (`41.701,-93.699`); two centres 1 km apart
+  never share a key.
+- **Names (`src/geo/geocode.ts`):** OpenStreetMap Nominatim reverse geocoding,
+  `GET https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=<centre, 3 decimals>&lon=<…>&zoom=17&addressdetails=1`.
+  Checked live on 2026-10-23 from the build sandbox: 41.672,-93.698 → `name` "Merle Hay Road",
+  `category` highway, `address{road, town: Johnston, county, state: Iowa, …}`; the open Pacific →
+  HTTP 200 `{"error":"Unable to geocode"}`; the answer carries `Access-Control-Allow-Origin: *`.
+  **Label rule (`placeLabel`):** title = `name` if present (a park, building or road), else
+  `address.road`, else `residential` (a subdivision: seen live at 41.766,-93.777, which had an empty
+  `name`, no road and only `residential: "Jester Glen Estates"`), neighbourhood, suburb, quarter,
+  village, hamlet, town, city, municipality (township), county; second line =
+  town (or city, village, hamlet, municipality, county) and state (or country), without repeating
+  the title. No name at all (the "Unable to geocode" answer) → the card keeps "Near 41.800,
+  −93.600". Until a name arrives the card shows "Near <lat>, <lon>" (a real minus sign) and a muted
+  "Looking up the name…".
+- **Nominatim usage policy** (https://operations.osmfoundation.org/policies/nominatim/, read
+  2026-10-23) and what the code does:
+  - "No heavy uses (an absolute maximum of 1 request per second)." → one shared serial queue for
+    the page, at least 1.1 s (`MIN_INTERVAL_MS`) between two requests, and the queue stops at the
+    first failure. The limit is "per website/application: the sum of traffic by all your users",
+    which a client cannot enforce; with the cache and a handful of users it stays far below.
+  - "Results must be cached on your side. Clients sending repeatedly the same query may be
+    classified as faulty and blocked." → every answer, including "no name", is cached in the
+    existing IndexedDB `wiki` store under `geocode:<lat>,<lon>`; only areas without a fresh cached
+    name are requested. **Cache: 180 days**, not forever: names rarely change, but roads are renamed
+    and parks get mapped, and one request per area every six months is negligible. An older entry
+    is still shown while it is asked again, and kept when that fails. Failures are never cached.
+    Delete all data clears it with the wiki store. Old `places:` entries from #72 stay until then
+    (harmless, never read).
+  - "Provide a valid HTTP Referer or User-Agent identifying the application (stock User-Agents as
+    set by http libraries will not do)." → the browser sends the site's Referer
+    (`https://sabihs-birdbrain.vercel.app/`, origin only under our `strict-origin-when-cross-origin`);
+    no forbidden header is set, `credentials: 'omit'`, no custom header (so no CORS preflight).
+  - "Apps must make sure that they can switch the service at our request at any time (in
+    particular, switching should be possible without requiring a software update)." → the base URL
+    is one constant, `GEOCODER_URL`, from `VITE_GEOCODER_URL` (`.env.example`), plus the CSP
+    `connect-src`. A switch needs a Vercel rebuild, which the PWA picks up on its next load; no app
+    store update. A runtime switch from the API server would be the stricter reading; not built.
+  - "Clearly display attribution as suitable for your medium." → "Place names: © OpenStreetMap
+    contributors" under the Places cards, linked to the copyright page.
+  - "periodic requests from apps are considered bulk geocoding and as such are strongly
+    discouraged" / "Systematic queries … reverse queries in a grid" are forbidden → requests happen
+    only when a person opens Places, only for areas of their own sightings, never on a timer.
+  - "Please do not submit personal data" → only the centre rounded to about 100 m.
+- **When it asks:** only while the Places view is showing (opening it, the tab opening on a
+  remembered Places, or new sightings while it shows). The view's check runs just before each
+  request is sent, so switching to Birds or leaving the tab stops the queue. Never on app start.
+- **Errors:** a request fails on a network `TypeError`, HTTP 429, any 5xx or other non-OK answer, a
+  broken body, or the 10 s `AbortController` timeout. While `navigator.onLine` is not false that is
+  "Place names are busy, try again later." with Retry; only `navigator.onLine === false` gives
+  "Place names need a connection. Your birds are still on the map and under Birds." (or "Offline:
+  showing the place names saved on this phone." when some are cached). The areas are worked out on
+  the phone, so Places always lists every area, with coordinates when there is no name.
+- **Card:** one pin icon (the kind icons are gone), the name, the town and state, "N sightings · M
+  species", two species pills and "+K". A tap fits the map to the area's sightings and its circle,
+  draws the dashed 500 m-radius circle (1 km across, `path.place-outline`) round the centre and
+  fades every other marker. Count line: "3 areas · each about 1 km across".
+- **Removed:** `src/geo/places.ts`, `src/geo/place-lookup.ts` (Overpass query, nature tag lists,
+  `classifyPlace`, the 30 s pause), `tests/places.test.ts`, the kind icons, the Overpass CSP entry
+  and its text.
+- **Privacy:** CSP `connect-src` swaps `https://overpass-api.de` for
+  `https://nominatim.openstreetmap.org` (`vercel.json`, `tests/headers.test.ts`,
+  `scripts/csp-check.mts`). "What we store" › Only on this phone: "Opening Places on the Map tab
+  sends the centre of each 1 km area, rounded to about 100 m, to OpenStreetMap’s Nominatim service
+  to get its name; nothing else is sent." README Privacy and Help say the same.
+- **Tests:** `tests/areas.test.ts` (300 m → one area, 1.2 km → two, the 700 m edge rule, nearest of
+  two, centres ≥ 1 km on random points, stable with newer sightings, ordering), `tests/geocode.test.ts`
+  (label from a park, a road, a house without a name, a suburb, "Unable to geocode"; the URL; 1.1 s
+  spacing with fake timers; cache hit sends nothing; 180-day expiry; 429 / 503 / TypeError / timeout
+  are busy online; offline sends nothing; nothing sent once Places closed). e2e with `page.route`
+  stubbing Nominatim: no request before Places opens, three areas with names (and one with only its
+  coordinates), requests ≥ 1 s apart with 3-decimal centres, tap → circle and `data-focus`, cache on
+  return, 503 while online → busy + Retry with the areas still listed, offline → the connection
+  line and no request, 320 px in both themes.
+- **Not verified:** a real park answer (the park fixture follows the live road answer's shape with
+  `category: leisure`). Five live points I aimed at Des Moines-area parks (coordinates from memory,
+  so perhaps not inside them) all came back as the nearest road or subdivision, so at zoom 17 most areas will probably be named after a road, not the park
+  around them; zoom 16 or a `layer=natural,poi` hint were not tried. Also unverified: the names
+  around Johnston on a phone, and how Nominatim treats the app's traffic over time.

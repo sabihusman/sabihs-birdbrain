@@ -5,7 +5,7 @@ import { el } from '../dom';
  * What the server keeps and where data goes. Written from the code, not from memory:
  * server/src/db.ts and auth.ts (tables), app.ts (what each route accepts), ask.ts /
  * natureserve.ts / ebird.ts (what leaves the server), src/storage/db.ts (what stays on
- * the device), src/geo/place-lookup.ts (what the Map tab's Places view sends to Overpass). Keep it in step with them.
+ * the device), src/geo/geocode.ts (what the Map tab's Places view sends to Nominatim). Keep it in step with them.
  *
  * The facts are grouped so they fit a phone behind one collapsed section; nothing was
  * dropped or softened when they moved out of the single paragraph. WHAT_WE_STORE_TEXT
@@ -31,8 +31,8 @@ export const WHAT_WE_STORE_GROUPS: WhatWeStoreGroup[] = [
     title: 'Only on this phone',
     items: [
       'Your sightings, recordings, clips and ticks stay on this phone only and are never uploaded.',
-      // src/geo/place-lookup.ts (DECISIONS.md #72): rounded cells only, and only from the Map tab's Places view.
-      'Opening Places on the Map tab sends your sightings’ positions, rounded to about 100 m, to OpenStreetMap’s Overpass service to find nearby parks and trails; nothing else is sent and nothing is stored there.',
+      // src/geo/geocode.ts (DECISIONS.md #73): rounded area centres only, and only from the Map tab's Places view.
+      'Opening Places on the Map tab sends the centre of each 1 km area, rounded to about 100 m, to OpenStreetMap’s Nominatim service to get its name; nothing else is sent.',
     ],
   },
   {
