@@ -57,7 +57,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,wasm}', `models/${MODEL_VERSION}/labels.json`],
         // The weights are not in dist/ any more (they come from the API host); samples and
         // any stray model file are cached at runtime instead of being precached.
-        globIgnores: ['**/node_modules/**', 'models/**/*.bin', 'models/**/model.json', 'samples/**'],
+        // og-image.png is only fetched by link-preview crawlers, never by the app, so it stays out of the precache.
+        globIgnores: ['**/node_modules/**', 'models/**/*.bin', 'models/**/model.json', 'samples/**', 'og-image.png'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallback: `${BASE}index.html`,
         cleanupOutdatedCaches: true,
