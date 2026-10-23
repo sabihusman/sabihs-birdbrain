@@ -5,8 +5,8 @@ import type { AppController } from '../../app/controller';
 import { speciesColor } from '../../species/colors';
 import { listSightings } from '../../storage/db';
 import type { SightingRecord } from '../../storage/types';
-import { KIND_LABEL, groupByPlace, type NaturePlace, type PlaceGrouping } from '../../geo/places';
-import { lookupPlaces, placesForPoint, type LookupStatus } from '../../geo/place-lookup';
+import { AREA_RADIUS_M, groupIntoAreas, type Area } from '../../geo/areas';
+import { formatNear, geocoder, type PlaceLabel } from '../../geo/geocode';
 import type { MapCardsView } from '../../app/settings';
 import { birdCardLine, birdsCountLine, placeCardLine, summarizeBirds, type BirdSummary } from '../map-summary';
 import { birdPlaceholder, birdThumb } from '../components/bird-thumb';
@@ -141,15 +141,14 @@ export function createHistoryMap(container: HTMLElement, sightings: SightingReco
 }
 
 type Selection = { kind: 'bird'; scientific: string } | { kind: 'place'; key: string } | null;
-type PlacesState = { status: 'idle' | 'loading' } | { status: LookupStatus; grouping: PlaceGrouping<SightingRecord> };
-
-/** Key of the "Other spots" card (sightings not near a nature place). */
-const OTHER_KEY = 'other';
+/** Where the area names stand: idle (nothing asked yet), loading, all asked, or stopped by a failure. */
+type NamesStatus = 'idle' | 'loading' | 'ok' | 'busy' | 'offline';
 
 /**
  * The Map tab: every located sighting on the map, and under it a Birds | Places switch with one
- * card per species or per nature place (DECISIONS.md #72). Tapping a card zooms to its sightings
- * and fades the rest. Places are looked up on OpenStreetMap only when the Places view is open.
+ * card per species or per 1 km area (DECISIONS.md #72, #73). Tapping a card zooms to its sightings
+ * and fades the rest. Area names come from OpenStreetMap's Nominatim, asked only while the Places
+ * view is open.
  */
 export function mapView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -161,7 +160,7 @@ export function mapView(ctx: ViewContext): View {
   const countLine = el('p', { class: 'map-count small muted', 'aria-live': 'polite', 'data-testid': 'map-count' });
   const statusLine = el('div', { class: 'map-places-status', 'data-testid': 'map-places-status', hidden: true });
   const list = el('div', { class: 'map-cards', id: 'map-cards', role: 'tabpanel', 'data-testid': 'map-cards' });
-  const credit = el('p', { class: 'source-credit', hidden: true, 'data-testid': 'places-credit' }, 'Place names: ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener' }, 'OpenStreetMap'), ' contributors');
+  const credit = el('p', { class: 'source-credit', hidden: true, 'data-testid': 'places-credit' }, 'Place names: © ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener' }, 'OpenStreetMap'), ' contributors');
   const root = el(
     'div',
     null,
@@ -182,16 +181,15 @@ export function mapView(ctx: ViewContext): View {
   let birds: BirdSummary<SightingRecord>[] = [];
   let view: MapCardsView = settings.get().mapCardsView;
   let selection: Selection = null;
-  let places: PlacesState = { status: 'idle' };
+  let areas: Area<SightingRecord>[] = [];
+  /** Area key → its name (null: the geocoder knows no name there). Missing: not known yet. */
+  const names = new Map<string, PlaceLabel | null>();
+  let namesStatus: NamesStatus = 'idle';
   let placesToken = 0;
   let disposed = false;
 
-  const placeGroupFor = (key: string): { name: string; sightings: SightingRecord[]; place?: NaturePlace } | null => {
-    if (!('grouping' in places)) return null;
-    if (key === OTHER_KEY) return { name: 'Other spots', sightings: places.grouping.other };
-    const g = places.grouping.groups.find((x) => x.place.id === key);
-    return g ? { name: g.place.name, sightings: g.sightings, place: g.place } : null;
-  };
+  const areaFor = (key: string) => areas.find((a) => a.key === key) ?? null;
+  const areaTitle = (a: Area<SightingRecord>) => names.get(a.key)?.name ?? formatNear(a.cell);
 
   const selectedSightings = (): SightingRecord[] => {
     if (!selection) return [];
@@ -199,7 +197,7 @@ export function mapView(ctx: ViewContext): View {
       const sci = selection.scientific;
       return birds.find((b) => b.scientific === sci)?.sightings ?? [];
     }
-    return placeGroupFor(selection.key)?.sightings ?? [];
+    return areaFor(selection.key)?.sightings ?? [];
   };
 
   const fitAll = () => {
@@ -235,16 +233,12 @@ export function mapView(ctx: ViewContext): View {
     const bounds = L.latLngBounds(chosen.map((s) => [s.lat!, s.lon!] as L.LatLngTuple));
     const accent = cssToken('accent', '#5FCB97');
     if (selection.kind === 'place') {
-      const p = placeGroupFor(selection.key)?.place;
-      if (p) {
-        // The real outline is not downloaded (DECISIONS.md #72): a 500 m dashed circle round a small
-        // place's centre, or its dashed bounding box when the place is bigger than that.
-        const big = p.bbox && (p.bbox[2] - p.bbox[0] > 0.009 || p.bbox[3] - p.bbox[1] > 0.009 / Math.cos((p.lat * Math.PI) / 180));
-        outline = big
-          ? L.rectangle([[p.bbox![0], p.bbox![1]], [p.bbox![2], p.bbox![3]]], { color: accent, weight: 2, dashArray: '6 5', fill: false, interactive: false, className: 'place-outline' })
-          : L.circle([p.lat, p.lon], { radius: 500, color: accent, weight: 2, dashArray: '6 5', fill: false, interactive: false, className: 'place-outline' });
-        outline.addTo(map);
-        bounds.extend(big ? L.latLngBounds([p.bbox![0], p.bbox![1]], [p.bbox![2], p.bbox![3]]) : L.latLng(p.lat, p.lon));
+      const a = areaFor(selection.key);
+      if (a) {
+        // The area: a dashed 1 km-diameter circle round its centre (DECISIONS.md #73).
+        const circle = L.circle([a.lat, a.lon], { radius: AREA_RADIUS_M, color: accent, weight: 2, dashArray: '6 5', fill: false, interactive: false, className: 'place-outline' }).addTo(map);
+        outline = circle;
+        bounds.extend(circle.getBounds());
       }
     }
     map.fitBounds(bounds.pad(0.3), { maxZoom: 16, animate: false });
@@ -304,13 +298,18 @@ export function mapView(ctx: ViewContext): View {
     );
   };
 
-  const placeCard = (key: string, title: string, sub: string, kind: Parameters<typeof placeIcon>[0], sciNames: string[]): HTMLElement => {
+  /** Pin, name (or "Near 41.672, −93.698"), town and state, counts, two species pills and "+K". */
+  const placeCard = (a: Area<SightingRecord>): HTMLElement => {
+    const key = a.key;
     const selected = selection?.kind === 'place' && selection.key === key;
+    const label = names.get(key);
+    const pending = label === undefined;
+    const second = label?.line2 ? el('span', { class: 'map-card-sub', 'data-testid': 'map-place-where' }, label.line2) : pending && namesStatus === 'loading' ? el('span', { class: 'map-card-sub muted', 'data-testid': 'map-place-looking' }, 'Looking up the name…') : null;
     const card = el(
       'button',
-      { type: 'button', class: `map-card place${selected ? ' selected' : ''}`, 'aria-pressed': String(selected), 'data-testid': 'map-place-card', 'data-place': key },
-      placeIcon(kind),
-      el('span', { class: 'map-card-names' }, el('span', { class: 'map-card-title' }, title), el('span', { class: 'map-card-sub' }, sub), speciesPills(sciNames)),
+      { type: 'button', class: `map-card place${selected ? ' selected' : ''}`, 'aria-pressed': String(selected), 'data-testid': 'map-place-card', 'data-place': key, 'data-named': String(!!label) },
+      placeIcon(),
+      el('span', { class: 'map-card-names' }, el('span', { class: 'map-card-title' }, areaTitle(a)), second, el('span', { class: 'map-card-sub' }, placeCardLine(a.sightings.length, a.species.length)), speciesPills(a.species)),
       el('span', { class: 'map-card-chev', 'aria-hidden': 'true' }, '›'),
     );
     card.addEventListener('click', () => select({ kind: 'place', key }));
@@ -324,7 +323,7 @@ export function mapView(ctx: ViewContext): View {
     statusLine.append(el('span', null, text));
     if (retry) {
       const b = el('button', { type: 'button', class: 'btn small', 'data-testid': 'map-places-retry' }, 'Retry');
-      b.addEventListener('click', () => void loadPlaces());
+      b.addEventListener('click', () => void loadNames());
       statusLine.append(b);
     }
   };
@@ -357,28 +356,19 @@ export function mapView(ctx: ViewContext): View {
       list.replaceChildren();
       return;
     }
-    if (!('grouping' in places)) {
-      setStatus(null);
-      countLine.textContent = 'Looking up nearby parks and trails…';
-      list.replaceChildren();
-      return;
-    }
-    const { grouping, status } = places;
-    const known = grouping.groups.length + grouping.other.length > 0;
-    if (status === 'offline' && !known) setStatus('Place names need a connection. Your birds are still on the map and under Birds.');
-    else if (status === 'offline') setStatus('Offline: showing the place names saved on this phone.');
-    else if (status === 'busy') setStatus('Place names are busy, try again later.', true);
+    // Only navigator.onLine === false is "offline"; a failed request while online is "busy".
+    const anyNamed = areas.some((a) => names.get(a.key));
+    if (namesStatus === 'offline' && !anyNamed) setStatus('Place names need a connection. Your birds are still on the map and under Birds.');
+    else if (namesStatus === 'offline') setStatus('Offline: showing the place names saved on this phone.');
+    else if (namesStatus === 'busy') setStatus('Place names are busy, try again later.', true);
     else setStatus(null);
-    const sel = selection?.kind === 'place' ? placeGroupFor(selection.key) : null;
-    if (sel) showingLine(sel.name);
-    else countLine.textContent = `${grouping.groups.length} place${grouping.groups.length === 1 ? '' : 's'} · nature spots only (parks, reserves, gardens, trails)`;
-    const cards: HTMLElement[] = grouping.groups.map((g) => placeCard(g.place.id, g.place.name, `${KIND_LABEL[g.place.kind]} · ${placeCardLine(g.sightings.length, g.species.length)}`, g.place.kind, g.species));
-    if (grouping.other.length) {
-      const species = Array.from(new Set(grouping.other.map((s) => s.scientific)));
-      cards.push(el('p', { class: 'map-group-heading' }, 'Not near a nature spot'), placeCard(OTHER_KEY, 'Other spots', placeCardLine(grouping.other.length, species.length), 'other', species));
-    }
-    if (grouping.unknown.length) cards.push(el('p', { class: 'small muted', 'data-testid': 'map-places-unknown' }, `${grouping.unknown.length} sighting${grouping.unknown.length === 1 ? ' is' : 's are'} waiting for place names.`));
-    list.replaceChildren(...cards);
+    const sel = selection?.kind === 'place' ? areaFor(selection.key) : null;
+    if (sel) showingLine(areaTitle(sel));
+    else countLine.textContent = `${areas.length} area${areas.length === 1 ? '' : 's'} · each about 1 km across`;
+    // Rebuilding the list must not lose the keyboard focus on a card.
+    const focused = (document.activeElement as HTMLElement | null)?.dataset?.place;
+    list.replaceChildren(...areas.map(placeCard));
+    if (focused) list.querySelector<HTMLElement>(`[data-place="${CSS.escape(focused)}"]`)?.focus();
   };
 
   const render = () => {
@@ -391,23 +381,36 @@ export function mapView(ctx: ViewContext): View {
     else renderPlaces();
   };
 
-  const regroup = (byCell: Map<string, NaturePlace[]>, status: LookupStatus) => {
-    places = { status, grouping: groupByPlace(located, (s) => placesForPoint(byCell, s.lat!, s.lon!)) };
-  };
-
-  /** Look places up (cache first). Only ever called while the Places view is showing. */
-  const loadPlaces = async () => {
+  /**
+   * Names for the areas: cached ones at once, then one request at a time (the geocoder spaces them
+   * 1.1 s apart) for the rest, each card updating as its name arrives. Only ever runs while the
+   * Places view is showing, and stops as soon as it closes or a request fails.
+   */
+  const loadNames = async () => {
     const token = ++placesToken;
-    if (!('grouping' in places)) places = { status: 'loading' };
+    const wanted = () => !disposed && token === placesToken && view === 'places';
+    const todo: Area<SightingRecord>[] = [];
+    for (const a of areas) {
+      const hit = await geocoder.cached(a.cell);
+      if (!wanted()) return;
+      if (hit) names.set(a.key, hit.label);
+      if (!hit?.fresh) todo.push(a);
+    }
+    namesStatus = todo.length ? 'loading' : 'ok';
     render();
-    const result = await lookupPlaces(located);
-    if (disposed || token !== placesToken) return;
-    regroup(result.byCell, result.status);
-    if (selection?.kind === 'place' && !placeGroupFor(selection.key)) selection = null;
-    if (view === 'places') {
-      drawMarkers();
+    for (const a of todo) {
+      const r = await geocoder.lookup(a.cell, wanted);
+      if (!wanted() || r.status === 'cancelled') return;
+      if (r.status !== 'ok') {
+        namesStatus = r.status;
+        render();
+        return;
+      }
+      names.set(a.key, r.label);
       render();
     }
+    namesStatus = 'ok';
+    render();
   };
 
   const setView = (next: MapCardsView, focus = false) => {
@@ -419,7 +422,7 @@ export function mapView(ctx: ViewContext): View {
     }
     render();
     if (focus) (next === 'birds' ? birdsTab : placesTab).focus();
-    if (next === 'places' && map) void loadPlaces();
+    if (next === 'places' && map) void loadNames();
   };
   birdsTab.addEventListener('click', () => setView('birds'));
   placesTab.addEventListener('click', () => setView('places'));
@@ -437,14 +440,16 @@ export function mapView(ctx: ViewContext): View {
     if (disposed) return;
     located = all.filter((s) => s.lat != null && s.lon != null && Number.isFinite(s.lat) && Number.isFinite(s.lon));
     birds = summarizeBirds(located);
+    areas = groupIntoAreas(located);
     if (selection?.kind === 'bird' && !birds.some((b) => b.scientific === (selection as { scientific: string }).scientific)) selection = null;
+    if (selection?.kind === 'place' && !areaFor(selection.key)) selection = null;
     drawMarkers();
     if (firstFit && located.length) {
       fitAll();
       firstFit = false;
     }
-    if (view === 'places') void loadPlaces();
-    else render();
+    render();
+    if (view === 'places') void loadNames();
   };
 
   const unsub = controller.on('detections-changed', () => void load());

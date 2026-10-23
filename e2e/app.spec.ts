@@ -247,7 +247,7 @@ test('tabs, settings and map render', async ({ page }) => {
   await expect(page.getByText('Import audio file')).toBeVisible();
 });
 
-/** Located sightings written straight into the app's IndexedDB (DECISIONS.md #72 tests). */
+/** Located sightings written straight into the app's IndexedDB (DECISIONS.md #72, #73 tests). */
 const MAP_SIGHTINGS = (now: number) => [
   { id: 'm1', scientific: 'Poecile atricapillus', common: 'Black-capped Chickadee', lat: 41.7001, lon: -93.7002, t: now - 3_600_000 },
   { id: 'm2', scientific: 'Euphagus carolinus', common: 'Rusty Blackbird', lat: 41.7012, lon: -93.6991, t: now - 2 * 3_600_000 },
@@ -278,42 +278,33 @@ async function seedSightings(page: import('@playwright/test').Page): Promise<voi
   );
 }
 
+const NOMINATIM = /^https:\/\/nominatim\.openstreetmap\.org\/reverse\?/;
+
 /**
- * Stub for the Overpass API: answers in the shape src/geo/places.ts asks for (a count marker and
- * the ids per cell, one more marker, then every place). One park round 41.700,-93.700 and one
- * trail node at 41.720,-93.720; nothing near 41.8,-93.6.
+ * Stub for Nominatim reverse (DECISIONS.md #73), in the jsonv2 shape seen live. The seeded sightings
+ * make three areas, centred (oldest sighting first) on 41.800,-93.600, 41.720,-93.720 and
+ * 41.701,-93.699 (m1 is 150 m from m2, so they share one): a park, a road, and nothing.
  */
-function overpassFixture(body: string): unknown {
-  const query = decodeURIComponent(body.replace(/^data=/, '').replace(/\+/g, ' '));
-  const cells = Array.from(new Set(Array.from(query.matchAll(/around:500,(-?[\d.]+),(-?[\d.]+)\)/g)).map((m) => `${m[1]},${m[2]}`)));
-  const park = { type: 'way', id: 101, bounds: { minlat: 41.697, minlon: -93.703, maxlat: 41.703, maxlon: -93.697 }, tags: { leisure: 'park', name: 'Prairie Test Park' } };
-  const trail = { type: 'node', id: 202, lat: 41.72, lon: -93.72, tags: { highway: 'path', name: 'Creek Test Trail' } };
-  const near = (c: string, lat: number, lon: number) => {
-    const [a, b] = c.split(',').map(Number);
-    return Math.abs(a - lat) < 0.006 && Math.abs(b - lon) < 0.008;
-  };
-  const elements: unknown[] = [];
-  for (const c of cells) {
-    elements.push({ type: 'count', id: 0, tags: { total: '0' } });
-    if (near(c, 41.7, -93.7)) elements.push({ type: 'way', id: 101 });
-    if (near(c, 41.72, -93.72)) elements.push({ type: 'node', id: 202 });
-  }
-  elements.push({ type: 'count', id: 0, tags: { total: '2' } }, trail, park);
-  return { version: 0.6, elements };
+function nominatimFixture(url: string): unknown {
+  const q = new URL(url).searchParams;
+  const at = `${q.get('lat')},${q.get('lon')}`;
+  if (at === '41.701,-93.699') return { category: 'leisure', type: 'park', name: 'Prairie Test Park', display_name: 'Prairie Test Park, Johnston, Polk County, Iowa, United States', address: { leisure: 'Prairie Test Park', town: 'Johnston', county: 'Polk County', state: 'Iowa', country: 'United States' } };
+  if (at === '41.720,-93.720') return { category: 'highway', type: 'residential', name: 'Creek Test Road', address: { road: 'Creek Test Road', town: 'Johnston', state: 'Iowa' } };
+  return { error: 'Unable to geocode' };
 }
 
-test('Map tab: no filter card; Birds and Places cards under the map, tap zooms and fades, Show all, Overpass only for Places, 320 px in both themes', async ({ browser }) => {
+test('Map tab: no filter card; Birds and Places (1 km areas) cards under the map, tap zooms and fades, Show all, Nominatim only for Places, 320 px in both themes', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
   const page = await context.newPage();
   await page.addInitScript(returningVisitor);
   // No real network for photos or places in this test.
   await page.route(/wikipedia\.org|wikimedia\.org/, (route) => route.abort());
-  const overpassBodies: string[] = [];
-  await page.route('https://overpass-api.de/api/interpreter', async (route) => {
+  const geocodeCalls: Array<{ url: string; at: number }> = [];
+  await page.route(NOMINATIM, async (route) => {
     const req = route.request();
-    overpassBodies.push(req.postData() ?? '');
-    expect(req.method()).toBe('POST');
-    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(overpassFixture(req.postData() ?? '')) });
+    geocodeCalls.push({ url: req.url(), at: Date.now() });
+    expect(req.method()).toBe('GET');
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(nominatimFixture(req.url())) });
   });
   await page.goto('./#/settings');
   await seedSightings(page);
@@ -335,7 +326,7 @@ test('Map tab: no filter card; Birds and Places cards under the map, tap zooms a
   await expect(birdCards.nth(1)).toContainText(/1 sighting · /);
   await expect(page.getByTestId('map-count')).toHaveText('3 species · 4 sightings with a location');
   for (const box of await Promise.all((await birdCards.all()).map((c) => c.boundingBox()))) expect(box!.height).toBeGreaterThanOrEqual(44);
-  expect(overpassBodies, 'nothing goes to Overpass from the Birds view').toHaveLength(0);
+  expect(geocodeCalls, 'nothing goes to Nominatim from the Birds view').toHaveLength(0);
 
   // Tap a bird: map zooms to its sightings, the others fade, the newest one's popup opens.
   await page.getByTestId('map-bird-card').filter({ hasText: 'Black-capped Chickadee' }).click();
@@ -355,66 +346,91 @@ test('Map tab: no filter card; Birds and Places cards under the map, tap zooms a
   await expect(page.getByTestId('map')).toHaveAttribute('data-focus', 'bird:Euphagus carolinus');
   await page.getByTestId('map-bird-card').filter({ hasText: 'Rusty Blackbird' }).click();
   await expect(page).toHaveURL(/#\/species\/Euphagus%20carolinus$/);
+  expect(geocodeCalls).toHaveLength(0);
 
-  // Places view: one Overpass request, sightings grouped by place, the rest under "Other spots".
+  // Places view: three areas at once (coordinates first), then a name per area, one request at a time.
   await page.goto('./#/map');
   await page.getByRole('tab', { name: 'Places' }).click();
   const placeCards = page.getByTestId('map-place-card');
   await expect(placeCards).toHaveCount(3);
-  expect(overpassBodies).toHaveLength(1);
-  const sent = decodeURIComponent(overpassBodies[0].replace(/^data=/, ''));
-  expect(sent).toContain('around:500,41.700,-93.700');
-  expect(sent).not.toMatch(/41\.7001|shop|amenity/);
-  await expect(placeCards.nth(0)).toContainText('Prairie Test Park');
-  await expect(placeCards.nth(0)).toContainText('Park · 2 sightings · 2 species');
-  await expect(placeCards.nth(1)).toContainText('Creek Test Trail');
-  await expect(placeCards.nth(1)).toContainText('Trail · 1 sighting · 1 species');
-  await expect(page.getByText('Not near a nature spot')).toBeVisible();
-  await expect(placeCards.nth(2)).toHaveAttribute('data-place', 'other');
-  await expect(placeCards.nth(2)).toContainText('Other spots');
-  await expect(placeCards.nth(2)).toContainText('1 sighting · 1 species');
-  await expect(page.getByTestId('map-count')).toContainText('2 places · nature spots only');
-  await expect(page.getByTestId('places-credit')).toContainText('OpenStreetMap');
+  expect(await placeCards.evaluateAll((els) => els.map((e) => e.getAttribute('data-place')))).toEqual(['41.701,-93.699', '41.720,-93.720', '41.800,-93.600']);
+  await expect(page.getByTestId('map-count')).toHaveText('3 areas · each about 1 km across');
+  await expect(placeCards.nth(0)).toContainText('Prairie Test Park', { timeout: 15_000 });
+  await expect(placeCards.nth(1)).toContainText('Creek Test Road', { timeout: 15_000 });
+  await expect(placeCards.nth(2)).toHaveAttribute('data-named', 'false');
+  await expect(page.getByTestId('map-place-looking')).toHaveCount(0, { timeout: 15_000 });
+  await expect(placeCards.nth(0)).toContainText('Johnston, Iowa');
+  await expect(placeCards.nth(0)).toContainText('2 sightings · 2 species');
+  await expect(placeCards.nth(0).locator('.map-pill')).toHaveCount(2);
+  await expect(placeCards.nth(1)).toContainText('1 sighting · 1 species');
+  // Nominatim had no name: the area still lists, with its coordinates.
+  await expect(placeCards.nth(2)).toContainText('Near 41.800, −93.600');
+  await expect(page.getByText('Other spots')).toHaveCount(0);
+  await expect(page.getByTestId('map-places-status')).toBeHidden();
+  await expect(page.getByTestId('places-credit')).toContainText('Place names: © OpenStreetMap contributors');
+  // Only the rounded centres, 1.1 s apart.
+  expect(geocodeCalls).toHaveLength(3);
+  for (const c of geocodeCalls) expect(c.url).toMatch(/^https:\/\/nominatim\.openstreetmap\.org\/reverse\?format=jsonv2&lat=-?\d+\.\d{3}&lon=-?\d+\.\d{3}&zoom=17&addressdetails=1$/);
+  for (let i = 1; i < geocodeCalls.length; i++) expect(geocodeCalls[i].at - geocodeCalls[i - 1].at).toBeGreaterThanOrEqual(1000);
+  // Tap an area: the map fits it, the dashed 1 km circle, the others faded.
   await placeCards.nth(0).click();
-  await expect(page.getByTestId('map')).toHaveAttribute('data-focus', 'place:way/101');
+  await expect(page.getByTestId('map')).toHaveAttribute('data-focus', 'place:41.701,-93.699');
   await expect(page.locator('.map-marker-selected')).toHaveCount(2);
   await expect(page.locator('path.place-outline')).toHaveCount(1);
+  await expect(page.locator('path.place-outline')).toHaveAttribute('stroke-dasharray', '6 5');
   await expect(page.getByTestId('map-count')).toContainText('Showing Prairie Test Park · Show all');
   // The choice is remembered, and a second visit uses the cache (no new request).
   await page.goto('./#/listen');
   await page.goto('./#/map');
   await expect(page.getByRole('tab', { name: 'Places' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('map-place-card').first()).toContainText('Prairie Test Park');
   await expect(page.getByTestId('map-place-card')).toHaveCount(3);
-  expect(overpassBodies).toHaveLength(1);
+  expect(geocodeCalls).toHaveLength(3);
   await context.close();
 
-  // Busy server and offline: plain lines, a Retry, and the Birds view still works.
+  // Busy server while online: the areas still list with their coordinates, a plain line and a Retry.
   const busyCtx = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
   const busy = await busyCtx.newPage();
   await busy.addInitScript(returningVisitor);
   await busy.route(/wikipedia\.org|wikimedia\.org/, (route) => route.abort());
-  await busy.route('https://overpass-api.de/api/interpreter', (route) => route.fulfill({ status: 429, headers: { 'Access-Control-Allow-Origin': '*' }, body: '' }));
+  let busyCalls = 0;
+  await busy.route(NOMINATIM, (route) => {
+    busyCalls++;
+    return route.fulfill({ status: 503, headers: { 'Access-Control-Allow-Origin': '*' }, body: '' });
+  });
   await busy.goto('./#/settings');
   await seedSightings(busy);
   await busy.goto('./#/map');
   await busy.getByRole('tab', { name: 'Places' }).click();
   await expect(busy.getByTestId('map-places-status')).toContainText('Place names are busy, try again later.');
+  await expect(busy.getByTestId('map-places-status')).not.toContainText('need a connection');
   await expect(busy.getByTestId('map-places-retry')).toBeVisible();
+  await expect(busy.getByTestId('map-place-card')).toHaveCount(3);
+  await expect(busy.getByTestId('map-place-card').first()).toContainText('Near 41.701, −93.699');
+  expect(busyCalls, 'the queue stops at the first failure').toBe(1);
   await busyCtx.setOffline(true);
   await busy.getByRole('tab', { name: 'Birds' }).click();
   await expect(busy.getByTestId('map-bird-card')).toHaveCount(3);
   await busyCtx.close();
 
+  // Offline (navigator.onLine false): the connection line, nothing sent, the areas still listed.
   const offCtx = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
   const off = await offCtx.newPage();
   await off.addInitScript(returningVisitor);
   await off.route(/wikipedia\.org|wikimedia\.org|tile\.openstreetmap\.org/, (route) => route.abort());
+  let offCalls = 0;
+  await off.route(NOMINATIM, (route) => {
+    offCalls++;
+    return route.abort();
+  });
   await off.goto('./#/settings');
   await seedSightings(off);
   await offCtx.setOffline(true);
   await off.goto('./#/map');
   await off.getByRole('tab', { name: 'Places' }).click();
   await expect(off.getByTestId('map-places-status')).toContainText('Place names need a connection.');
+  await expect(off.getByTestId('map-place-card')).toHaveCount(3);
+  expect(offCalls).toBe(0);
   await offCtx.close();
 
   // 320 px, both themes: nothing wider than the screen in either view.
@@ -422,7 +438,7 @@ test('Map tab: no filter card; Birds and Places cards under the map, tap zooms a
   const np = await narrow.newPage();
   await np.addInitScript(returningVisitor);
   await np.route(/wikipedia\.org|wikimedia\.org/, (route) => route.abort());
-  await np.route('https://overpass-api.de/api/interpreter', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(overpassFixture(route.request().postData() ?? '')) }));
+  await np.route(NOMINATIM, (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(nominatimFixture(route.request().url())) }));
   await np.goto('./#/settings');
   await seedSightings(np);
   for (const theme of ['dark', 'light']) {
@@ -432,6 +448,7 @@ test('Map tab: no filter card; Birds and Places cards under the map, tap zooms a
     for (const v of ['Birds', 'Places']) {
       await np.getByRole('tab', { name: v }).click();
       await expect(np.getByTestId(v === 'Birds' ? 'map-bird-card' : 'map-place-card').first()).toBeVisible();
+      if (v === 'Places') await expect(np.getByTestId('map-place-card').first()).toContainText('Prairie Test Park', { timeout: 15_000 });
       const widths = await np.evaluate(() => ({
         view: document.querySelector('main.view')!.scrollWidth,
         right: Math.max(...[...document.querySelectorAll('[data-testid="map-bird-card"], [data-testid="map-place-card"], [data-testid="map-cards-switch"]')].map((c) => c.getBoundingClientRect().right)),

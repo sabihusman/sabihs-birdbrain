@@ -78,14 +78,14 @@ await collect();
 await page.goto('http://localhost:4180/#/map');
 await page.waitForTimeout(3000);
 await collect();
-// Places view (DECISIONS.md #72): one located sighting and a stubbed Overpass answer. The CSP is
+// Places view (DECISIONS.md #73): one located sighting and a stubbed Nominatim answer. The CSP is
 // checked before a request reaches page.route, so a blocked connect-src would still be reported.
-await page.route('https://overpass-api.de/api/interpreter', (route) =>
+await page.route(/^https:\/\/nominatim\.openstreetmap\.org\/reverse\?/, (route) =>
   route.fulfill({
     status: 200,
     contentType: 'application/json',
     headers: { 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ elements: [{ type: 'count', id: 0 }, { type: 'way', id: 1 }, { type: 'count', id: 0 }, { type: 'way', id: 1, bounds: { minlat: 41.69, minlon: -93.71, maxlat: 41.71, maxlon: -93.69 }, tags: { leisure: 'park', name: 'CSP Check Park' } }] }),
+    body: JSON.stringify({ category: 'leisure', type: 'park', name: 'CSP Check Park', address: { town: 'Johnston', state: 'Iowa' } }),
   }),
 );
 await page.evaluate(
