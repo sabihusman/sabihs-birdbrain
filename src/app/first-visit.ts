@@ -7,12 +7,14 @@
  * - stored settings (the user changed something),
  * - the "model wanted" flag (the user tapped "Start identifying", or started
  *   listening, the sample clip or an import),
- * - the model files in the Cache API (a download finished here before).
+ * - the model files in the Cache API (a download finished here before),
+ * - a signed-in session (an account on this phone; DECISIONS.md #81).
  *
  * The cache check is asynchronous and guarded: a browser without Cache Storage, or
  * one that refuses it in a private window, counts as "nothing cached".
  */
 import { ACOUSTIC_MODEL_FILE, MODEL_CACHE_NAME } from '../model/constants';
+import { SESSION_KEY } from '../api/client';
 import { SETTINGS_KEY } from './settings';
 
 /** localStorage key set the first time the visitor asks for the model. */
@@ -26,6 +28,8 @@ export interface VisitSignals {
   modelWanted: boolean;
   /** The acoustic model's `model.json` is in the model cache. */
   modelCached: boolean;
+  /** A session is stored: someone signed in on this phone, so it is not a first visit (DECISIONS.md #81). */
+  signedIn?: boolean;
 }
 
 /**
@@ -40,15 +44,15 @@ export function shouldAutoLoadModel(s: Pick<VisitSignals, 'modelWanted' | 'model
 
 /** The welcome layer shows only when nothing says this phone has used Birdbrain before. */
 export function shouldShowWelcome(s: VisitSignals): boolean {
-  return !s.settingsStored && !s.modelWanted && !s.modelCached;
+  return !s.settingsStored && !s.modelWanted && !s.modelCached && !s.signedIn;
 }
 
-/** The two localStorage signals; a storage that throws (private mode, blocked site data) reads as empty. */
-export function readStoredSignals(storage: Storage | null): Pick<VisitSignals, 'settingsStored' | 'modelWanted'> {
+/** The localStorage signals; a storage that throws (private mode, blocked site data) reads as empty. */
+export function readStoredSignals(storage: Storage | null): Pick<VisitSignals, 'settingsStored' | 'modelWanted' | 'signedIn'> {
   try {
-    return { settingsStored: storage?.getItem(SETTINGS_KEY) != null, modelWanted: storage?.getItem(MODEL_WANTED_KEY) === MODEL_WANTED_VALUE };
+    return { settingsStored: storage?.getItem(SETTINGS_KEY) != null, modelWanted: storage?.getItem(MODEL_WANTED_KEY) === MODEL_WANTED_VALUE, signedIn: storage?.getItem(SESSION_KEY) != null };
   } catch {
-    return { settingsStored: false, modelWanted: false };
+    return { settingsStored: false, modelWanted: false, signedIn: false };
   }
 }
 
