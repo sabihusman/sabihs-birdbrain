@@ -32,6 +32,6 @@ export function pendingApprovalMail(to: string, appUrl: string): Mail {
   return {
     to,
     subject: 'Your Birdbrain account is waiting for approval',
-    text: `Thanks for creating a Sabih’s Birdbrain account. Sabih approves each new account by hand, so yours is waiting for approval. You will get an email when it is approved.\n\nUntil then, identifying birds on your phone works as before; Ask about this bird and friends start working once you are approved.\n\nYour account: ${appUrl}/#/settings/account`,
+    text: `Thanks for creating a Sabih’s Birdbrain account. Sabih approves each new account by hand, so yours is waiting for approval. You will get an email when it is approved.\n\nUntil then, identifying birds on your phone works as before; Ask about this bird and friends start working once you are approved.\n\nYour account: ${appUrl}/#/account`,
   };
 }

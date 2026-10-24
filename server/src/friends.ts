@@ -28,6 +28,8 @@ export interface FriendRow {
   id: string;
   name: string;
   since: number;
+  /** Whether my species list goes to this friend (DECISIONS.md #79). */
+  sharing: boolean;
 }
 
 export interface IncomingInvite {
@@ -121,14 +123,30 @@ export class FriendsStore {
     return this.db.prepare('SELECT 1 FROM friendship WHERE user_a = ? AND user_b = ?').get(x, y) !== undefined;
   }
 
-  /** Accepted friends who are still approved members, by display name. */
+  /** Accepted friends who are still approved members, by display name, with whether I share with each. */
   friendsOf(userId: string): FriendRow[] {
     const rows = this.db
       .prepare(
-        "SELECT u.id, u.name, f.since FROM friendship f JOIN user u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END WHERE (f.user_a = ? OR f.user_b = ?) AND u.status = 'approved' ORDER BY lower(u.name), u.id",
+        "SELECT u.id, u.name, f.since, CASE WHEN f.user_a = ? THEN f.a_shares ELSE f.b_shares END AS sharing FROM friendship f JOIN user u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END WHERE (f.user_a = ? OR f.user_b = ?) AND u.status = 'approved' ORDER BY lower(u.name), u.id",
       )
-      .all(userId, userId, userId) as Array<{ id: string; name: string; since: number }>;
-    return rows.map((r) => ({ id: r.id, name: String(r.name ?? ''), since: Number(r.since) }));
+      .all(userId, userId, userId, userId) as Array<{ id: string; name: string; since: number; sharing: number }>;
+    return rows.map((r) => ({ id: r.id, name: String(r.name ?? ''), since: Number(r.since), sharing: Number(r.sharing) === 1 }));
+  }
+
+  /** Accepted, still approved friends who share their list with `userId`. */
+  private sharersWith(userId: string): Array<{ id: string; name: string }> {
+    return this.db
+      .prepare(
+        "SELECT u.id, u.name FROM friendship f JOIN user u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END WHERE ((f.user_a = ? AND f.b_shares = 1) OR (f.user_b = ? AND f.a_shares = 1)) AND u.status = 'approved' ORDER BY lower(u.name), u.id",
+      )
+      .all(userId, userId, userId) as Array<{ id: string; name: string }>;
+  }
+
+  /** Turn my list on or off for one friend; false when we are not friends. The other direction is theirs. */
+  setSharing(userId: string, friendId: string, on: boolean): boolean {
+    const [x, y] = userId < friendId ? [userId, friendId] : [friendId, userId];
+    const column = userId === x ? 'a_shares' : 'b_shares';
+    return this.db.prepare(`UPDATE friendship SET ${column} = ? WHERE user_a = ? AND user_b = ?`).run(on ? 1 : 0, x, y).changes > 0;
   }
 
   /** Remove the pair in either direction; true when a row went away. */
@@ -157,9 +175,9 @@ export class FriendsStore {
     return rows.map((r) => ({ sci: r.scientific, lastSeen: r.last_seen }));
   }
 
-  /** What a member may see: each accepted (still approved) friend's display name and (sci, lastSeen) pairs. */
+  /** What a member may see: the display name and (sci, lastSeen) pairs of each friend who shares with them. */
   friendsSpecies(userId: string): Array<{ id: string; displayName: string; species: SharedSpecies[] }> {
-    return this.friendsOf(userId).map((f) => ({ id: f.id, displayName: f.name, species: this.sharedSpeciesOf(f.id) }));
+    return this.sharersWith(userId).map((f) => ({ id: f.id, displayName: String(f.name ?? ''), species: this.sharedSpeciesOf(f.id) }));
   }
 
   private transaction(fn: () => void): void {

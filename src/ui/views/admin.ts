@@ -240,7 +240,7 @@ export function userManagementView(ctx: ViewContext): View {
         b.addEventListener('click', () => askFirst(u, action, host, buttons));
         buttons.appendChild(b);
       }
-      host.appendChild(self ? el('p', { class: 'small muted' }, 'Your own account. Change your password in Settings → Account.') : buttons);
+      host.appendChild(self ? el('p', { class: 'small muted' }, 'Your own account. Change your password on My account.') : buttons);
       const joined = new Date(u.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' });
       list.appendChild(
         el(

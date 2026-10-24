@@ -5,7 +5,7 @@ import { el, fmtDate } from '../dom';
 import { switchRow, textRow } from './rows';
 
 /**
- * Friends and sharing, inside the Account card for approved members
+ * Friends and sharing, on the My account page for approved members (DECISIONS.md #79)
  * (DECISIONS.md #44): invites for me (accept / decline), my friends
  * (remove), add a friend by email, and the "Share my species list with
  * friends" switch with its consent text. Everything goes through the API
@@ -16,6 +16,11 @@ export function shareStatusText(enabled: boolean, lastError: string | null): str
   if (!enabled) return 'Sharing is off. Nothing about your sightings is on the server.';
   if (lastError) return `Sharing is on, but the last upload failed: ${lastError}. Trying again shortly; your next sighting also retries.`;
   return 'Sharing is on. Your list is updated after each new sighting.';
+}
+
+/** What a per-friend switch did, in plain words (DECISIONS.md #79). */
+export function friendShareNotice(name: string, on: boolean): string {
+  return on ? `${name} can see your species list again.` : `${name} no longer sees your species list. You still see theirs if they share it.`;
 }
 
 export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () => void } {
@@ -67,7 +72,24 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
       return;
     }
     for (const f of list) {
-      const remove = el('button', { class: 'btn small', type: 'button', 'aria-label': `Remove ${f.name} from your friends` }, 'Remove');
+      const shareOn = f.sharing !== false;
+      const share = el('input', { type: 'checkbox', checked: shareOn, 'aria-label': `Share my species list with ${f.name}`, 'data-testid': 'friend-share' });
+      const remove = el('button', { class: 'btn small', type: 'button', 'aria-label': `Remove ${f.name} from your friends`, 'data-testid': 'friend-remove' }, 'Remove');
+      share.addEventListener('change', () => {
+        const on = share.checked;
+        share.disabled = true;
+        void run(async () => {
+          try {
+            await api.setFriendSharing(f.id, on);
+            notify({ kind: 'info', text: friendShareNotice(f.name, on) });
+          } catch (e) {
+            share.checked = !on;
+            throw e;
+          } finally {
+            share.disabled = false;
+          }
+        });
+      });
       remove.addEventListener('click', () =>
         void run(async () => {
           remove.disabled = true;
@@ -77,7 +99,15 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
           void cache.refresh();
         }),
       );
-      friendsBox.append(el('div', { class: 'friend-row', 'data-testid': 'friend' }, el('div', { class: 'friend-name' }, el('strong', null, f.name), el('div', { class: 'small muted' }, `friends since ${fmtDate(f.since)}`)), remove));
+      friendsBox.append(
+        el(
+          'div',
+          { class: 'friend-row', 'data-testid': 'friend' },
+          el('div', { class: 'friend-name' }, el('strong', null, f.name), el('div', { class: 'small muted' }, `friends since ${fmtDate(f.since)}`)),
+          el('label', { class: 'friend-share' }, el('span', { class: 'small' }, `Share with ${f.name}`), share),
+          remove,
+        ),
+      );
     }
   };
 
@@ -95,7 +125,7 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
   // Add a friend
   const email = el('input', { type: 'email', autocomplete: 'off', placeholder: 'Friend’s email', required: true, 'aria-label': 'Friend’s email', 'data-testid': 'invite-email' });
   const send = el('button', { class: 'btn small', type: 'submit', 'data-testid': 'invite-send' }, 'Send invite');
-  const inviteForm = el('form', { class: 'stack' }, el('h3', null, 'Add a friend'), el('div', { class: 'row' }, el('div', { class: 'field', style: 'flex:1;margin:0' }, email), send), el('p', { class: 'small muted' }, 'They get an email and accept in their own Account card. Friends see your display name, never your email. Up to 10 invites a day; invites expire after 30 days.'));
+  const inviteForm = el('form', { class: 'stack' }, el('h3', null, 'Add a friend'), el('div', { class: 'row' }, el('div', { class: 'field', style: 'flex:1;margin:0' }, email), send), el('p', { class: 'small muted' }, 'They get an email and accept on their My account page. Friends see your display name, never your email. Up to 10 invites a day; invites expire after 30 days.'));
   inviteForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!inviteForm.reportValidity()) return;
@@ -113,7 +143,7 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
 
   root.append(
     el('p', { class: 'small muted', 'data-testid': 'share-consent' }, SHARING_CONSENT_TEXT),
-    el('p', { class: 'small muted' }, 'Friends can share which birds they have spotted; the Species tab shows “Spotted by” next to a bird a friend has shared. Nothing is shared until you turn sharing on.'),
+    el('p', { class: 'small muted' }, 'Friends can share which birds they have spotted; the Species tab shows “Spotted by” next to a bird a friend has shared. Nothing is shared until you turn on “Share my species list”. The switch next to each friend stops or restarts your list going to that friend only.'),
     invitesBox,
     friendsBox,
     inviteForm,

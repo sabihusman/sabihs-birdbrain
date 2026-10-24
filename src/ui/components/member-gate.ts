@@ -4,7 +4,7 @@ import { el } from '../dom';
 
 /** The one-line "Sign in to unlock" note shown in place of a member feature (DESIGN_GUIDE.md §9). */
 export function lockedNoteEl(access: Exclude<MemberAccess, 'member'>, feature: string): HTMLElement {
-  return el('p', { class: 'small muted locked-note' }, lockedNote(access, feature), ' ', access === 'signed-out' ? el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.') : null);
+  return el('p', { class: 'small muted locked-note' }, lockedNote(access, feature), ' ', access === 'signed-out' ? el('a', { href: '#/signin' }, 'Sign in or create an account.') : null);
 }
 
 export interface Gated {

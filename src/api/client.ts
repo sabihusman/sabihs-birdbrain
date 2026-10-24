@@ -84,6 +84,8 @@ export interface Friend {
   id: string;
   name: string;
   since: number;
+  /** Whether my species list goes to this friend (DECISIONS.md #79); older servers leave it out. */
+  sharing?: boolean;
 }
 
 /** An invite addressed to me, pending and unexpired; only the inviter's display name travels. */
@@ -338,6 +340,11 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
 
   respondToInvite(id: string, action: 'accept' | 'decline'): Promise<{ ok: boolean }> {
     return this.call(`/v1/friends/invites/${encodeURIComponent(id)}/${action}`, {});
+  }
+
+  /** Share my species list with one friend, or stop; their direction is theirs (DECISIONS.md #79). */
+  setFriendSharing(id: string, on: boolean): Promise<{ ok: boolean; sharing: boolean }> {
+    return this.call(`/v1/friends/${encodeURIComponent(id)}/share`, { on });
   }
 
   removeFriend(id: string): Promise<{ ok: boolean }> {

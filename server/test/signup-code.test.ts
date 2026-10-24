@@ -26,7 +26,7 @@ describe('Create account finishes with an emailed code (DECISIONS.md #77)', () =
     expect(user).toMatchObject({ status: 'pending', name: 'Robin' });
     const pending = mailsTo(t, email, /waiting for approval/);
     expect(pending).toHaveLength(1);
-    expect(pending[0].text).toContain(`${ORIGIN}/#/settings/account`);
+    expect(pending[0].text).toContain(`${ORIGIN}/#/account`);
     expect(mailsTo(t, ADMIN, /sign-up/)).toHaveLength(1);
     // Signing in again later sends neither again.
     await signUpAndLogin(t, email);

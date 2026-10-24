@@ -2488,3 +2488,28 @@ other open branches, so this may be renumbered at merge.)
 - **Tests:** `server/test/password-reset.test.ts` (6), the admin reset tests rewritten for the
   link, `tests/auth-pages.test.ts`, and an e2e test of both pages, the mismatch check, the token
   leaving the address bar, a used link, a missing token and 320 px in both themes.
+
+## 79. My account page; sharing is switched per friend
+
+- **Problem (Sabih):** members had no place of their own to manage their password and the
+  friends they share with, and could not stop sharing with one friend without removing them.
+- **Page (`#/account`, "My account"):** reached from Settings › Account ("My account ›
+  Password, friends and sharing"), where the card now shows only who is signed in, that link,
+  Manage users for the admin, and Sign out. The page holds Display name and Change password
+  (with "Reset it by email"), "Share my species list", the friends panel open rather than
+  folded (consent text, invites for you, friends, add a friend), Sign out and Delete my account.
+  Sign-in and "Your account" now land here; the invite and "waiting for approval" mails link here.
+- **Per friend (Sabih's choice: a switch plus Remove):** each friend row has "Share with
+  <name>" and Remove. The switch stops or restarts only my list going to that friend; their
+  list still comes to me if they share it. Remove still ends the friendship both ways.
+  "Share my species list" stays the master switch: it decides whether the list is on the
+  server at all (DECISIONS.md #44); the per-friend switch decides who may read it.
+- **Server:** `friendship` gains `a_shares` and `b_shares` (user_a's list goes to user_b, and
+  the reverse), default 1. Existing databases get the columns with 1, so every current
+  friendship keeps sharing as before. `GET /v1/friends` adds `sharing` (my direction only);
+  `POST /v1/friends/:id/share { on }` sets it, 404 for a non-friend; `GET /v1/friends/species`
+  returns only friends who share with me.
+- **Tests:** server per-friend tests (both directions, restore, non-friends, bad bodies,
+  non-members, migration of an old database); the member and admin e2e steps moved to My
+  account; a new e2e test (Settings link, open friends, switch on/off with a failed change put
+  back, Remove, 320 px in both themes with a 44 px switch row).

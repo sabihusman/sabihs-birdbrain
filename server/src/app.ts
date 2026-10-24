@@ -77,6 +77,7 @@ export const displayNameSchema = z
 const nameSchema = z.object({ name: displayNameSchema }).strict();
 const signupSchema = z.object({ email: emailSchema, password: passwordSchema, name: displayNameSchema.optional() }).strict();
 const inviteSchema = z.object({ email: emailSchema }).strict();
+const shareSchema = z.object({ on: z.boolean() }).strict();
 const sharedSpeciesSchema = z
   .object({
     species: z.array(z.object({ sci: z.string().min(1).max(80), lastSeen: z.string().length(10).refine(isCalendarDay, 'not a calendar day') }).strict()).max(MAX_SHARED_SPECIES),
@@ -448,7 +449,7 @@ export function createApp(deps: AppDeps) {
         await mailer.send({
           to: target.email,
           subject: 'A friend invite on Birdbrain',
-          text: `${m.user.name} invited you to be friends on Sabih’s Birdbrain.\n\nOpen the Account card on the Settings tab to accept or decline: ${config.allowedOrigins[0]}/#/settings\n\nFriends can share which birds they have spotted and the date they last spotted each one, and nothing else, and only if they turn sharing on. The invite expires in ${INVITE_TTL_DAYS} days. If you do not know this person, ignore this message.`,
+          text: `${m.user.name} invited you to be friends on Sabih’s Birdbrain.\n\nOpen My account to accept or decline: ${config.allowedOrigins[0]}/#/account\n\nFriends can share which birds they have spotted and the date they last spotted each one, and nothing else, and only if they turn sharing on. The invite expires in ${INVITE_TTL_DAYS} days. If you do not know this person, ignore this message.`,
         });
       } catch (err) {
         // The invite is stored and shows up in the app; the mail is only a nudge.
@@ -487,7 +488,21 @@ export function createApp(deps: AppDeps) {
     return json(c, 200, { ok: true });
   });
 
-  /** Each accepted friend's display name and (scientific name, last-seen day) pairs; nothing else. */
+  /**
+   * Share my species list with one friend, or stop (DECISIONS.md #79). Only my direction changes;
+   * 404 when we are not friends, so ids cannot be probed beyond what the friends list shows.
+   */
+  app.post('/v1/friends/:id/share', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const id = idParam.safeParse(c.req.param('id'));
+    const body = await readJson(c, shareSchema);
+    if (!id.success || !body) return json(c, 400, { error: 'invalid_request' });
+    if (!friends.setSharing(m.user.id, id.data, body.on)) return json(c, 404, { error: 'not_found' });
+    return json(c, 200, { ok: true, sharing: body.on });
+  });
+
+  /** Each friend who shares with me: display name and (scientific name, last-seen day) pairs; nothing else. */
   app.get('/v1/friends/species', async (c) => {
     const m = await requireMember(c);
     if ('error' in m) return m.error;

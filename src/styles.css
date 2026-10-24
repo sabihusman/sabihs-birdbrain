@@ -353,6 +353,11 @@ textarea { color: inherit; }
 .rule { border: 0; border-top: 1px solid var(--line); margin: var(--space-2) 0; }
 .friend-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 10px; border-radius: var(--radius-control); background: var(--surface-2); min-height: 48px; }
 .friend-name { min-width: 0; overflow-wrap: anywhere; }
+/* Name on its own line when narrow; the per-friend switch and Remove share the next (DECISIONS.md #79). */
+.friend-row:has(.friend-share) { flex-wrap: wrap; }
+.friend-row:has(.friend-share) .friend-name { flex: 1 1 100%; }
+.friend-share { display: flex; align-items: center; gap: 10px; min-height: 44px; flex: 1 1 0; min-width: 0; cursor: pointer; }
+.friend-share input { width: 24px; height: 24px; flex: none; accent-color: var(--accent); }
 .friends-panel input[type=email], .friends-panel input[type=text], .field input[type=text], .field input[type=email] { min-height: 44px; padding: 8px 10px; border-radius: var(--radius-control); border: 1px solid var(--border); background: var(--surface); width: 100%; }
 .spotted-by-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 48px; padding: 8px 12px; border-radius: var(--radius-control); background: var(--surface-2); color: var(--text); font: inherit; text-align: left; }
 .spotted-by-row.me { border: 1px solid var(--accent); width: 100%; }
