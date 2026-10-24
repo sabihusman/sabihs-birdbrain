@@ -115,10 +115,11 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
     const form = el(
       'form',
       { class: 'stack name-form', 'data-testid': 'password-form' },
-      el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'Current password (or the temporary one from the email)'), current),
+      el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'Current password'), current),
       el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'New password (8+ characters)'), next),
       el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'New password again'), again),
       el('div', { class: 'row' }, save, cancel),
+      el('p', { class: 'small' }, 'Forgot your current password? ', el('a', { href: '#/forgot-password', 'data-testid': 'to-forgot-from-change' }, 'Reset it by email')),
     );
     const match = () => again.setCustomValidity(again.value && again.value !== next.value ? 'The two new passwords are different.' : '');
     next.addEventListener('input', match);

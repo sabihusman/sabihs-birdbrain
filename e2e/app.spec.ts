@@ -1373,7 +1373,7 @@ test('User management: admin-only button in Settings, confirmations, plain resul
   const robin = rows.nth(1);
   await expect(robin).toContainText('Robin');
   await expect(robin.getByTestId('admin-user-status')).toContainText('Waiting for approval');
-  for (const name of ['Approve', 'Reject', 'Reset password', 'Delete']) {
+  for (const name of ['Approve', 'Reject', 'Send reset link', 'Delete']) {
     const box = await robin.getByRole('button', { name, exact: true }).boundingBox();
     expect(box!.height, `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
   }
@@ -1385,9 +1385,9 @@ test('User management: admin-only button in Settings, confirmations, plain resul
 
   // Reset asks first; a failed mail is said plainly.
   await robin.getByTestId('user-reset').dispatchEvent('click');
-  await expect(robin.getByTestId('confirm-panel')).toContainText('temporary password');
+  await expect(robin.getByTestId('confirm-panel')).toContainText('a link to choose a new password');
   await robin.getByTestId('confirm-reset').dispatchEvent('click');
-  await expect(page.getByTestId('admin-result')).toHaveText('Password reset, but the email could not be sent. Try again.');
+  await expect(page.getByTestId('admin-result')).toHaveText('The reset link could not be emailed. Nothing was changed. Try again.');
 
   // Delete stays disabled until the address is typed.
   await rows.nth(1).getByTestId('user-delete').dispatchEvent('click');
@@ -1664,6 +1664,78 @@ test('Sign in and Create account are separate pages; Create account ends on "Wai
     if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) !== theme) await page.getByTestId('theme-toggle').click();
     expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
     for (const hash of ['#/signup', '#/signin']) {
+      await page.goto(`./${hash}`);
+      await expect(page.locator('form').first()).toBeVisible();
+      expect(await page.evaluate(() => document.querySelector('main.view')!.scrollWidth), `${theme} ${hash} at 320 px`).toBeLessThanOrEqual(320);
+    }
+  }
+  await context.close();
+});
+
+test('Forgot password and the reset page: an emailed link, the new password typed twice, the token kept out of the address bar (DECISIONS.md #78)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  const posted: string[] = [];
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/auth\/forgot-password$/, (route) => {
+    posted.push(`forgot ${route.request().postData()}`);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+  await page.route(/\/v1\/auth\/reset-password$/, (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}') as { token: string; newPassword: string };
+    posted.push(`reset ${body.token} ${body.newPassword}`);
+    if (body.token !== 'tok_live_0123456789abcdef') return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'invalid_token' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+
+  // Sign in › Forgot password? › the same answer for any address.
+  await page.goto('./#/signin');
+  await page.getByRole('link', { name: 'Forgot password?' }).click();
+  await expect(page).toHaveURL(/#\/forgot-password$/);
+  const forgot = page.getByTestId('forgot-page');
+  await forgot.getByLabel('Email').fill('sam@example.com');
+  await forgot.getByRole('button', { name: 'Email me a reset link' }).click();
+  await expect(forgot.getByTestId('forgot-sent')).toContainText('If an account uses that address, we emailed it a link');
+  expect(posted).toEqual(['forgot {"email":"sam@example.com"}']);
+
+  // The emailed link: the token leaves the address bar at once.
+  await page.goto('./#/reset-password?token=tok_live_0123456789abcdef');
+  const reset = page.getByTestId('reset-page');
+  await expect(reset.getByRole('heading', { name: 'Choose a new password' })).toBeVisible();
+  await expect(page).toHaveURL(/#\/reset-password$/);
+  // Different passwords: nothing is sent.
+  await reset.getByLabel('New password (8 or more characters)').fill('a brand new password');
+  await reset.getByLabel('New password again').fill('a brand new passwork');
+  await reset.getByRole('button', { name: 'Save new password' }).click();
+  expect(await reset.getByLabel('New password again').evaluate((e) => (e as HTMLInputElement).validationMessage)).toBe('The two passwords are different.');
+  expect(posted).toHaveLength(1);
+  await reset.getByLabel('New password again').fill('a brand new password');
+  await reset.getByRole('button', { name: 'Save new password' }).click();
+  await expect(reset.getByTestId('reset-done')).toContainText('Your password is changed. You were signed out on every device');
+  expect(posted[1]).toBe('reset tok_live_0123456789abcdef a brand new password');
+  await reset.getByRole('link', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/#\/signin$/);
+
+  // A used or expired link says so and offers a new one.
+  await page.goto('./#/reset-password?token=tok_used_0123456789abcdef');
+  await page.getByLabel('New password (8 or more characters)').fill('another new password');
+  await page.getByLabel('New password again').fill('another new password');
+  await page.getByRole('button', { name: 'Save new password' }).click();
+  await expect(page.getByTestId('auth-message')).toHaveText('This link has expired or was already used. Ask for a new one.');
+  await expect(page.getByRole('link', { name: 'Ask for a new link' })).toHaveAttribute('href', '#/forgot-password');
+
+  // No token at all.
+  await page.goto('./#/reset-password');
+  await page.reload();
+  await expect(page.getByTestId('reset-no-token')).toContainText('This link is incomplete.');
+
+  // 320 px, both themes.
+  await page.setViewportSize({ width: 320, height: 640 });
+  for (const theme of ['dark', 'light']) {
+    await page.goto('./#/settings');
+    if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) !== theme) await page.getByTestId('theme-toggle').click();
+    for (const hash of ['#/forgot-password', '#/reset-password?token=tok_live_0123456789abcdef']) {
       await page.goto(`./${hash}`);
       await expect(page.locator('form').first()).toBeVisible();
       expect(await page.evaluate(() => document.querySelector('main.view')!.scrollWidth), `${theme} ${hash} at 320 px`).toBeLessThanOrEqual(320);

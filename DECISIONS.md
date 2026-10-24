@@ -2460,3 +2460,31 @@ other open branches, so this may be renumbered at merge.)
 - **Tests:** `server/test/signup-code.test.ts`, updated auth tests (the helper now finishes
   sign-up with its own code), `tests/auth-pages.test.ts`, and an e2e test of both pages,
   the password check, a wrong code, the waiting screen and 320 px in both themes.
+
+## 78. Forgot password: an emailed one-use link to a reset page; the admin button sends the same link
+
+- **Problem (Sabih):** there was no "Forgot password?". The only reset was the admin's, which
+  mailed a temporary password that the person then had to change in Settings.
+- **Pages:** "Forgot password?" on Sign in (and "Reset it by email" under Change password) opens
+  `#/forgot-password`: one email field, then "If an account uses that address, we emailed it a
+  link…". The link opens `#/reset-password?token=…`: the new password twice, with a match check,
+  then "Your password is changed. You were signed out on every device…". The page takes the token
+  out of the address bar at once (`history.replaceState`), so it does not stay in the history.
+  A used, expired or incomplete link says so and offers a new one.
+- **Server:** `POST /v1/auth/forgot-password` always answers `{ ok: true }`; a link goes out only
+  for an account that can sign in (not disabled or rejected) with a password. The token is made
+  the way Better Auth's own `requestPasswordReset` makes it (`createVerificationValue` with the
+  `reset-password:` prefix), because its HTTP handler is not mounted and the page is a hash route.
+  `POST /v1/auth/reset-password` calls Better Auth's `resetPassword` (length check, one use,
+  `revokeSessionsOnPasswordReset: true`), then drops half-finished sign-ins and mails "Your
+  Birdbrain password was changed". Links work for 60 minutes. Tokens are stored as SHA-256 hashes
+  (`verification.storeIdentifier` override for `reset-password:`), so the database alone cannot
+  reset a password.
+- **Admin (Sabih's choice: send the link):** "Reset password" became "Send reset link". It mails
+  the same link and changes nothing until it is used; no password is mailed any more. The
+  temporary-password code is removed.
+- **Mail failures:** Forgot password answers the same either way (anything else would say the
+  address exists); the admin page says when the mail failed.
+- **Tests:** `server/test/password-reset.test.ts` (6), the admin reset tests rewritten for the
+  link, `tests/auth-pages.test.ts`, and an e2e test of both pages, the mismatch check, the token
+  leaving the address bar, a used link, a missing token and 320 px in both themes.

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
-import { TEMP_PASSWORD_ALPHABET, TEMP_PASSWORD_LENGTH, temporaryPassword } from '../src/admin-users.js';
 import { createAuth, migrateAuth } from '../src/auth.js';
 import { openDatabase } from '../src/db.js';
 import { FakeMailer } from '../src/mailer.js';
@@ -25,11 +24,11 @@ async function setup() {
 
 const login = (t: TestApp, email: string, password: string) => post(t.app, '/v1/auth/login', { email, password });
 
-/** The temporary password from the reset mail (the only place it ever appears). */
-function tempFrom(t: TestApp, email: string): string {
-  const m = t.mailer.last(email)?.text.match(/temporary password is (\S+)/);
-  if (!m) throw new Error('no temporary password in mail');
-  return m[1];
+/** The token from the reset link in the latest mail to `email`. */
+function tokenFrom(t: TestApp, email: string): string {
+  const m = t.mailer.last(email)?.text.match(/#\/reset-password\?token=([A-Za-z0-9_%-]+)/);
+  if (!m) throw new Error('no reset link in mail');
+  return decodeURIComponent(m[1]);
 }
 
 describe('approval stays mandatory', () => {
@@ -62,21 +61,8 @@ describe('password length', () => {
   });
 });
 
-describe('temporary password', () => {
-  it('is 16 characters from the safe alphabet and differs every time', () => {
-    const seen = new Set<string>();
-    for (let i = 0; i < 200; i++) {
-      const p = temporaryPassword();
-      expect(p).toHaveLength(TEMP_PASSWORD_LENGTH);
-      for (const ch of p) expect(TEMP_PASSWORD_ALPHABET).toContain(ch);
-      seen.add(p);
-    }
-    expect(seen.size).toBe(200);
-  });
-});
-
-describe('admin reset password', () => {
-  it('sets a mailed temporary password that signs in, the old one stops working, every session ends', async () => {
+describe('admin reset password (a link, DECISIONS.md #78)', () => {
+  it('mails the user a reset link and changes nothing until it is used; then the new password works and every session ends', async () => {
     const { t, admin, db } = await setup();
     const sam = await approvedMember(t, admin, 'sam@example.com');
     const second = await signUpAndLogin(t, 'sam@example.com'); // a second device
@@ -88,31 +74,35 @@ describe('admin reset password', () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toEqual({ ok: true, emailed: true });
 
-    // Mail went to the user only, and only once.
+    // Mail went to the user only, once, with a link and no password.
     expect(t.mailer.sent.map((m) => m.to)).toEqual(['sam@example.com']);
-    const temp = tempFrom(t, 'sam@example.com');
-    expect(temp).toHaveLength(16);
-    expect(t.mailer.sent[0].text).toContain('Sabih reset your Birdbrain password');
-    expect(t.mailer.sent[0].text).toContain('Settings → Account');
-    expect(JSON.stringify(body)).not.toContain(temp);
+    const mail = t.mailer.sent[0];
+    expect(mail.subject).toBe('Choose a new Birdbrain password');
+    expect(mail.text).toContain('Sabih sent you this link');
+    expect(mail.text).toMatch(/https:\/\/birdbrain-test\.vercel\.app\/#\/reset-password\?token=/);
+    expect(mail.text).not.toMatch(/password is/i);
+    const token = tokenFrom(t, 'sam@example.com');
+    expect(JSON.stringify(body)).not.toContain(token);
 
-    // Old sessions are dead, the half-finished code step is gone.
+    // Nothing changed yet: the old password and sessions still work.
+    expect((await get(t.app, '/v1/me', bearer(sam.token))).status).toBe(200);
+    expect((await login(t, 'sam@example.com', PASSWORD)).status).toBe(200);
+
+    // The link sets the new password; old sessions and half-finished sign-ins end.
+    expect((await post(t.app, '/v1/auth/reset-password', { token, newPassword: 'a brand new password' })).status).toBe(200);
     expect((await get(t.app, '/v1/me', bearer(sam.token))).status).toBe(401);
     expect((await get(t.app, '/v1/me', bearer(second))).status).toBe(401);
     expect(db.prepare('SELECT count(*) AS n FROM session WHERE userId = ?').get(sam.id)).toEqual({ n: 0 });
     expect(db.prepare('SELECT count(*) AS n FROM login_challenge WHERE user_id = ?').get(sam.id)).toEqual({ n: 0 });
-
-    // Old password no longer signs in, the temporary one does (and the account stays approved).
     expect((await login(t, 'sam@example.com', PASSWORD)).status).toBe(401);
-    const li = await login(t, 'sam@example.com', temp);
+    const li = await login(t, 'sam@example.com', 'a brand new password');
     expect(li.status).toBe(200);
     const { challenge } = (await li.json()) as { challenge: string };
     const ve = await post(t.app, '/v1/auth/verify', { challenge, code: codeFrom(t.mailer, 'sam@example.com') });
-    expect(ve.status).toBe(200);
     expect(((await ve.json()) as { user: { status: string } }).user.status).toBe('approved');
   });
 
-  it('keeps the reset when the mail fails and says emailed: false', async () => {
+  it('says emailed: false when the mail fails, and nothing changes', async () => {
     const { t, admin } = await setup();
     const sam = await approvedMember(t, admin, 'sam@example.com');
     t.mailer.send = async () => {
@@ -120,8 +110,7 @@ describe('admin reset password', () => {
     };
     const res = await post(t.app, `/v1/admin/users/${sam.id}/reset-password`, {}, bearer(admin));
     expect([res.status, await res.json()]).toEqual([200, { ok: true, emailed: false }]);
-    expect((await get(t.app, '/v1/me', bearer(sam.token))).status).toBe(401);
-    expect((await login(t, 'sam@example.com', PASSWORD)).status).toBe(401);
+    expect((await get(t.app, '/v1/me', bearer(sam.token))).status).toBe(200);
   });
 
   it('refuses the admin account, unknown ids, non-admins and anonymous callers', async () => {

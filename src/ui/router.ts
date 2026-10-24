@@ -13,10 +13,21 @@ export type Route =
   | { name: 'help' }
   /** Sign in and Create account, each on its own page (DECISIONS.md #77). */
   | { name: 'signin' }
-  | { name: 'signup' };
+  | { name: 'signup' }
+  /** "Forgot password?" and the page the emailed link opens (DECISIONS.md #78). */
+  | { name: 'forgot-password' }
+  | { name: 'reset-password'; token: string };
+
+/** The `?a=b` part after a route, e.g. `#/reset-password?token=…`. */
+function hashQuery(hash: string): URLSearchParams {
+  const q = hash.indexOf('?');
+  return new URLSearchParams(q < 0 ? '' : hash.slice(q + 1));
+}
 
 export function parseHash(hash: string): Route {
-  const path = hash.replace(/^#\/?/, '');
+  const query = hashQuery(hash);
+  const bare = hash.includes('?') ? hash.slice(0, hash.indexOf('?')) : hash;
+  const path = bare.replace(/^#\/?/, '');
   const [head, ...rest] = path.split('/');
   const tail = rest.map(decodeURIComponent).join('/');
   switch (head) {
@@ -39,6 +50,10 @@ export function parseHash(hash: string): Route {
       return { name: 'signin' };
     case 'signup':
       return { name: 'signup' };
+    case 'forgot-password':
+      return { name: 'forgot-password' };
+    case 'reset-password':
+      return { name: 'reset-password', token: query.get('token') ?? '' };
     default:
       return { name: 'listen' };
   }
@@ -72,6 +87,10 @@ export function hrefFor(route: Route): string {
       return '#/signin';
     case 'signup':
       return '#/signup';
+    case 'forgot-password':
+      return '#/forgot-password';
+    case 'reset-password':
+      return route.token ? `#/reset-password?token=${encodeURIComponent(route.token)}` : '#/reset-password';
   }
 }
 
