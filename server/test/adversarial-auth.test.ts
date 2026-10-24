@@ -225,9 +225,15 @@ describe('adversarial: authorization', () => {
   it('signup and login leak nothing about which addresses exist', async () => {
     const t = await buildTestApp({ limits: { ipPerWindow: 1000, emailPerWindow: 1000 } });
     await post(t.app, '/v1/auth/signup', { email: 'known@example.com', password: PASSWORD });
-    const again = await post(t.app, '/v1/auth/signup', { email: 'known@example.com', password: PASSWORD });
+    // A different password for a known address: the same status and shape as a fresh address.
+    const again = await post(t.app, '/v1/auth/signup', { email: 'known@example.com', password: 'some other password' });
     const fresh = await post(t.app, '/v1/auth/signup', { email: 'fresh@example.com', password: PASSWORD });
-    expect(await again.json()).toEqual(await fresh.json());
+    expect([again.status, fresh.status]).toEqual([200, 200]);
+    const [a, f] = (await Promise.all([again.json(), fresh.json()])) as Array<{ challenge: string; expiresInSeconds: number }>;
+    expect(Object.keys(a).sort()).toEqual(Object.keys(f).sort());
+    expect(a.challenge).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(f.challenge).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(a.expiresInSeconds).toBe(f.expiresInSeconds);
     const wrongPw = await post(t.app, '/v1/auth/login', { email: 'known@example.com', password: 'definitely wrong pw' });
     const noUser = await post(t.app, '/v1/auth/login', { email: 'nobody@example.com', password: 'definitely wrong pw' });
     expect([wrongPw.status, noUser.status]).toEqual([401, 401]);

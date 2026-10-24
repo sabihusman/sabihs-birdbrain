@@ -10,7 +10,10 @@ export type Route =
   | { name: 'settings'; section?: 'account' }
   | { name: 'admin' }
   | { name: 'admin-users' }
-  | { name: 'help' };
+  | { name: 'help' }
+  /** Sign in and Create account, each on its own page (DECISIONS.md #77). */
+  | { name: 'signin' }
+  | { name: 'signup' };
 
 export function parseHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, '');
@@ -32,6 +35,10 @@ export function parseHash(hash: string): Route {
       return rest[0] === 'users' ? { name: 'admin-users' } : { name: 'admin' };
     case 'help':
       return { name: 'help' };
+    case 'signin':
+      return { name: 'signin' };
+    case 'signup':
+      return { name: 'signup' };
     default:
       return { name: 'listen' };
   }
@@ -61,6 +68,10 @@ export function hrefFor(route: Route): string {
       return '#/admin/users';
     case 'help':
       return '#/help';
+    case 'signin':
+      return '#/signin';
+    case 'signup':
+      return '#/signup';
   }
 }
 

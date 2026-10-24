@@ -9,6 +9,7 @@ import { mapView } from './views/map';
 import { settingsView } from './views/settings';
 import { helpView } from './views/help';
 import { adminView, userManagementView } from './views/admin';
+import { signInView, signUpView } from './views/auth';
 import type { ApiClient } from '../api/client';
 import { FriendsCache } from '../species/friends';
 import { SpeciesSharer } from '../species/sharing';
@@ -56,6 +57,8 @@ function tabGroup(route: Route): string {
     case 'help':
     case 'admin':
     case 'admin-users':
+    case 'signin':
+    case 'signup':
       return 'settings';
     default:
       return route.name;
@@ -189,6 +192,12 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
         break;
       case 'admin-users':
         current = userManagementView(ctx);
+        break;
+      case 'signin':
+        current = signInView(ctx);
+        break;
+      case 'signup':
+        current = signUpView(ctx);
         break;
     }
     main.appendChild(current.el);

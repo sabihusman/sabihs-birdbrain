@@ -7,24 +7,35 @@ describe('auth flow (integration, fake mailer, in-memory SQLite)', () => {
     const email = 'member@example.com';
     const password = 'correct horse battery staple';
 
-    // signup: same answer whether or not the address exists
+    // signup: a challenge and a code by mail; the answer has the same shape whether or not the address exists
     const su1 = await post(t.app, '/v1/auth/signup', { email, password });
     expect(su1.status).toBe(200);
+    const su1Body = (await su1.json()) as { challenge: string; expiresInSeconds: number; token?: string };
+    expect(su1Body.token).toBeUndefined();
+    expect(t.mailer.last(email)?.subject).toBe('Your Birdbrain code');
     const su2 = await post(t.app, '/v1/auth/signup', { email, password: 'another password here' });
     expect(su2.status).toBe(200);
-    expect(await su2.json()).toEqual(await su1.clone().json().catch(() => su1.json()));
+    const su2Body = (await su2.json()) as { challenge: string; expiresInSeconds: number };
+    expect(Object.keys(su2Body).sort()).toEqual(Object.keys(su1Body).sort());
+    expect(su2Body.challenge).toHaveLength(su1Body.challenge.length);
+    expect(su2Body.expiresInSeconds).toBe(su1Body.expiresInSeconds);
+    // the owner is told instead, with no code, and the second challenge matches nothing
+    expect(t.mailer.last(email)?.subject).toBe('You already have a Birdbrain account');
+    expect(t.mailer.last(email)?.text).not.toMatch(/\b\d{6}\b/);
+    expect((await post(t.app, '/v1/auth/verify', { challenge: su2Body.challenge, code: '123456' })).status).toBe(401);
+    const sentBefore = t.mailer.sent.length;
 
     // wrong password: generic 401, no mail
     const bad = await post(t.app, '/v1/auth/login', { email, password: 'wrong password here!' });
     expect(bad.status).toBe(401);
-    expect(t.mailer.sent.length).toBe(0);
+    expect(t.mailer.sent.length).toBe(sentBefore);
 
     // login sends a code and returns a challenge, not a token
     const li = await post(t.app, '/v1/auth/login', { email, password });
     expect(li.status).toBe(200);
     const liBody = (await li.json()) as { challenge: string; token?: string };
     expect(liBody.token).toBeUndefined();
-    expect(t.mailer.sent.length).toBe(1);
+    expect(t.mailer.sent.length).toBe(sentBefore + 1);
     const code = codeFrom(t.mailer, email);
 
     // wrong code is rejected; right code releases the token

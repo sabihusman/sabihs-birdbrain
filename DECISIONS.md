@@ -2435,3 +2435,28 @@ other open branches, so this may be renumbered at merge.)
   width: 100%; height: 100%; }`, so `object-fit: cover` crops the photo to the circle.
 - **Test:** e2e serves a 3:1 photo for one bird and a 1:3 photo for another and checks
   that each pin photo exactly covers the inside of its ring. It fails without the fix.
+
+## 77. Sign in and Create account are separate pages; Create account ends with a code and "Waiting for approval"
+
+- **Problem (Sabih):** sign-in and sign-up shared one form in the Account card. A friend
+  struggled to create an account, and after "Create account" nothing said the account waits
+  for approval. The server also told Sabih about a new account only after its first sign-in
+  with a code, so an account created and never signed in to never reached him.
+- **Pages:** `#/signin` (email, password, then the emailed code) and `#/signup` (optional
+  display name, email, password twice with a match check, then the code). They link to each
+  other. Settings › Account shows "Sign in" and "Create account" buttons instead of a form;
+  signed in, the card is unchanged. A signed-in visitor on either page is told so.
+- **Code at sign-up (Sabih's choice: a 6-digit code, not an email link):** `POST
+  /v1/auth/signup` now answers `{ challenge, expiresInSeconds }`, like `/v1/auth/login`,
+  and mails a code. The answer is the same for every address, so it still reveals nothing:
+  a new address gets its account and a code; an existing address with its own password gets
+  a code (this also rescues accounts made with the old form and never confirmed); an
+  existing address with another password, or a disabled or rejected account, gets "You
+  already have a Birdbrain account" with a sign-in link, and its challenge matches nothing.
+- **After the code:** a pending account sees "Waiting for approval" and gets the same
+  note by email; Sabih's sign-up notice goes out at that moment (once, as before).
+- **Not changed:** sign-in still sends a code every time; the display name follows the
+  same rules as the name form (1–40 characters, no control characters).
+- **Tests:** `server/test/signup-code.test.ts`, updated auth tests (the helper now finishes
+  sign-up with its own code), `tests/auth-pages.test.ts`, and an e2e test of both pages,
+  the password check, a wrong code, the waiting screen and 320 px in both themes.
