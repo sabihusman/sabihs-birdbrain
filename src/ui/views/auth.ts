@@ -56,7 +56,7 @@ function show(line: HTMLElement, text: string): void {
  * this step (up to the server's attempt limit), any other failure goes back.
  */
 function codeStep(ctx: ViewContext, opts: { email: string; challenge: string; expiresInSeconds: number; purpose: 'sign-in' | 'sign-up'; onBack: (text: string) => void; onDone: (u: AuthUser) => void }): HTMLElement {
-  const code = el('input', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', pattern: '\\d{6}', maxlength: '6', required: true, 'data-testid': 'code-input' });
+  const code = el('input', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', pattern: String.raw`\d{6}`, maxlength: '6', required: true, 'data-testid': 'code-input' });
   const verify = el('button', { class: 'btn primary', type: 'submit', 'data-testid': 'code-verify' }, 'Verify');
   const back = el('button', { class: 'btn', type: 'button', 'data-testid': 'code-back' }, opts.purpose === 'sign-up' ? 'Back' : 'Use a different email');
   const message = statusLine('code-message');

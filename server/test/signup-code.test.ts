@@ -84,7 +84,7 @@ describe('Create account finishes with an emailed code (DECISIONS.md #77)', () =
     const before = t.mailer.sent.length;
     const su = await signup(t, email);
     expect(su.status).toBe(200);
-    expect(t.mailer.sent.length).toBe(before + 1);
+    expect(t.mailer.sent).toHaveLength(before + 1);
     expect(t.mailer.last(email)!.subject).toBe('You already have a Birdbrain account');
     expect((await post(t.app, '/v1/auth/verify', { challenge: su.challenge, code: '123456' })).status).toBe(401);
   });
@@ -94,7 +94,7 @@ describe('Create account finishes with an emailed code (DECISIONS.md #77)', () =
     const token = await signUpAndLogin(t, 'plain@example.com');
     const me = (await (await get(t.app, '/v1/me', bearer(token))).json()) as { user: { name: string } };
     expect(me.user.name).toBe('plain');
-    expect((await signup(t, 'evil@example.com', PASSWORD, 'Bob‮evil')).status).toBe(400);
+    expect((await signup(t, 'evil@example.com', PASSWORD, 'Bob\u202Eevil')).status).toBe(400);
     expect((await signup(t, 'long@example.com', PASSWORD, 'x'.repeat(41))).status).toBe(400);
   });
 

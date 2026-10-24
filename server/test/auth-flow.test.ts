@@ -28,14 +28,14 @@ describe('auth flow (integration, fake mailer, in-memory SQLite)', () => {
     // wrong password: generic 401, no mail
     const bad = await post(t.app, '/v1/auth/login', { email, password: 'wrong password here!' });
     expect(bad.status).toBe(401);
-    expect(t.mailer.sent.length).toBe(sentBefore);
+    expect(t.mailer.sent).toHaveLength(sentBefore);
 
     // login sends a code and returns a challenge, not a token
     const li = await post(t.app, '/v1/auth/login', { email, password });
     expect(li.status).toBe(200);
     const liBody = (await li.json()) as { challenge: string; token?: string };
     expect(liBody.token).toBeUndefined();
-    expect(t.mailer.sent.length).toBe(sentBefore + 1);
+    expect(t.mailer.sent).toHaveLength(sentBefore + 1);
     const code = codeFrom(t.mailer, email);
 
     // wrong code is rejected; right code releases the token
