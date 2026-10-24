@@ -1,6 +1,7 @@
 import { ApiError, describeApiError, type AuthUser } from '../../api/client';
 import type { View, ViewContext } from '../app';
 import { SIGN_UP_PRIVACY_LINE, whatWeStoreFold } from '../components/what-we-store';
+import { setSharingOn } from '../../species/sharing';
 import { el } from '../dom';
 
 /**
@@ -23,10 +24,21 @@ export const AUTH_TEXT = {
   signUpCodeWrong: 'That code is wrong or has expired. Go back and create the account again to get a new code.',
   forgotIntro: 'Enter the email you signed up with. We will email you a link to choose a new password.',
   forgotSent: 'If an account uses that address, we emailed it a link to choose a new password. The link works once, for 60 minutes. Check your spam folder if it does not arrive.',
+  inviteExpired: 'This invite link has expired or was already used. You can still create an account; ask your friend to invite you again afterwards.',
   resetIntro: 'Choose a new password for your account. Type it twice so we know it is right.',
   resetDone: 'Your password is changed. You were signed out on every device, so sign in again with the new password.',
   resetNoToken: 'This link is incomplete. Open the link from the email again, or ask for a new one.',
 } as const;
+
+/** The line above the Create account form when it was opened from an invite link (DECISIONS.md #80). */
+export function inviteIntro(fromName: string): string {
+  return `${fromName} invited you. Once Sabih approves your account, you and ${fromName} become friends, and you see which birds ${fromName} has spotted and the day they last spotted each one.`;
+}
+
+/** The consent box for sharing back; unticked until the person ticks it. */
+export function shareBackLabel(fromName: string): string {
+  return `Also share which birds I’ve spotted, and the day I last spotted each one, with ${fromName}`;
+}
 
 /** "We emailed a 6-digit code to x. It expires in 10 minutes." */
 export function codeSentText(email: string, expiresInSeconds: number, purpose: 'sign-in' | 'sign-up'): string {
@@ -149,13 +161,29 @@ export function signInView(ctx: ViewContext): View {
   return { el: root };
 }
 
-export function signUpView(ctx: ViewContext): View {
+export function signUpView(ctx: ViewContext, invite?: string): View {
   const { api } = ctx;
+  // Like the reset link, the invite token leaves the address bar at once and stays in memory only.
+  if (invite && typeof history !== 'undefined') history.replaceState(null, '', `${location.pathname}${location.search}#/signup`);
   const message = statusLine();
   const body = el('div', { class: 'stack' });
   const { root } = page('Create account', 'signup-page', body, message);
+  /** The inviter's name once the link checks out; null without a link or when it is no longer valid. */
+  let inviter: string | null = null;
+  let inviteChecked = !invite;
+  const shareBack = el('input', { type: 'checkbox', 'data-testid': 'signup-share-back' });
+  let inviteHost: HTMLElement | null = null;
+  /** Who invited them and the unticked consent box, or a note that the link no longer works. */
+  const fillInvite = () => {
+    if (!inviteHost) return;
+    if (inviter) inviteHost.replaceChildren(el('div', { class: 'stack invite-box', 'data-testid': 'signup-invite' }, el('p', null, inviteIntro(inviter)), el('label', { class: 'switch' }, el('span', null, shareBackLabel(inviter)), shareBack)));
+    else if (invite && inviteChecked) inviteHost.replaceChildren(el('p', { class: 'notice info', 'data-testid': 'signup-invite-expired' }, AUTH_TEXT.inviteExpired));
+    else inviteHost.replaceChildren();
+  };
 
-  const done = (u: AuthUser) => {
+  const done = (u: AuthUser, shareBack: boolean) => {
+    // The ticked box is this person's "Share my species list" consent; it uploads once they are approved.
+    if (shareBack) setSharingOn(u.id, true);
     show(message, '');
     const pending = u.status === 'pending';
     body.replaceChildren(
@@ -179,9 +207,12 @@ export function signUpView(ctx: ViewContext): View {
     const match = () => again.setCustomValidity(again.value && again.value !== password.value ? 'The two passwords are different.' : '');
     password.addEventListener('input', match);
     again.addEventListener('input', match);
+    inviteHost = el('div', { class: 'stack' });
+    fillInvite();
     const f = el(
       'form',
       { class: 'stack' },
+      inviteHost,
       el('p', { class: 'small' }, AUTH_TEXT.signUpIntro),
       field('Your name (what friends see; optional)', name),
       field('Email', email),
@@ -201,8 +232,9 @@ export function signUpView(ctx: ViewContext): View {
       show(message, '');
       try {
         const address = email.value.trim();
-        const res = await api.signup(address, password.value, name.value.trim() || undefined);
-        body.replaceChildren(codeStep(ctx, { email: address, challenge: res.challenge, expiresInSeconds: res.expiresInSeconds, purpose: 'sign-up', onBack: render, onDone: done }));
+        const sharing = inviter !== null && shareBack.checked;
+        const res = await api.signup(address, password.value, { name: name.value.trim() || undefined, invite: inviter !== null ? invite : undefined, shareWithInviter: sharing });
+        body.replaceChildren(codeStep(ctx, { email: address, challenge: res.challenge, expiresInSeconds: res.expiresInSeconds, purpose: 'sign-up', onBack: render, onDone: (u) => done(u, sharing) }));
       } catch (err) {
         show(message, describeApiError(err));
       } finally {
@@ -217,6 +249,20 @@ export function signUpView(ctx: ViewContext): View {
     body.replaceChildren(api.user ? alreadySignedIn(api.user) : form());
   };
   render('');
+  if (invite) {
+    void api
+      .inviteInfo(invite)
+      .then((info) => {
+        inviter = info.fromName;
+      })
+      .catch(() => {
+        inviter = null;
+      })
+      .finally(() => {
+        inviteChecked = true;
+        fillInvite();
+      });
+  }
   return { el: root };
 }
 

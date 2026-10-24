@@ -47,6 +47,18 @@ export function openDatabase(path: string): DatabaseSync {
       b_shares INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (user_a, user_b)
     );
+    -- Invites to an address with no account (DECISIONS.md #80): hashed token and address only.
+    CREATE TABLE IF NOT EXISTS email_invite (
+      id TEXT PRIMARY KEY,
+      from_user_id TEXT NOT NULL,
+      email_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      claimed_by TEXT,
+      share_back INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS email_invite_from ON email_invite (from_user_id, email_hash);
+    CREATE INDEX IF NOT EXISTS email_invite_claimed ON email_invite (claimed_by);
     CREATE TABLE IF NOT EXISTS shared_species (
       user_id TEXT NOT NULL,
       scientific TEXT NOT NULL,
