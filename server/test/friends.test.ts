@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INVITE_TTL_DAYS } from '../src/friends.js';
 import { ADMIN, approvedMember, bearer, buildTestApp, get, post, signUpAndLogin, type TestApp } from './helpers.js';
 
-const INVITE_SENT = { ok: true, message: 'Invite sent' };
+const INVITE_SENT = { ok: true, message: 'Invite sent', newAccount: false };
+const INVITE_NEW = { ok: true, newAccount: true };
 const PASSWORD = 'correct horse battery staple';
 
 interface FriendsList {
@@ -70,15 +71,17 @@ describe('invites', () => {
       bodies.push(await res.json());
     };
     await send('sam@example.com'); // approved: mailed
-    await send('nobody@example.com'); // no account: nothing
     await send('alex@example.com'); // self: nothing
     await send('pending@example.com'); // not approved: nothing
     await send('SAM@example.com'); // open invite already: nothing more
     expect(inviteMails(t, 'sam@example.com')).toHaveLength(1);
-    expect(inviteMails(t, 'nobody@example.com')).toHaveLength(0);
     expect(inviteMails(t, 'alex@example.com')).toHaveLength(0);
     expect(inviteMails(t, 'pending@example.com')).toHaveLength(0);
     for (const b of bodies) expect(b).toEqual(INVITE_SENT);
+    // No account: a different answer and a Create account link instead (DECISIONS.md #80).
+    const fresh = await post(t.app, '/v1/friends/invite', { email: 'nobody@example.com' }, bearer(alex.token));
+    expect(await fresh.json()).toMatchObject(INVITE_NEW);
+    expect(t.mailer.last('nobody@example.com')?.subject).toBe('An invite to Sabih’s Birdbrain');
     const mail = inviteMails(t, 'sam@example.com')[0];
     expect(mail.text).toContain('Alex invited you');
     expect(mail.text).toContain('My account');

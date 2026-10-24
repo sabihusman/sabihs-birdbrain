@@ -124,26 +124,30 @@ describe('adversarial: who can read a shared species list', () => {
 });
 
 describe('adversarial: enumeration and probing', () => {
-  it('the invite answer is byte-identical for an existing, missing, own, pending, friend and already-invited address', async () => {
+  it('among addresses with an account the invite answer is byte-identical; an address without one is told so (DECISIONS.md #80)', async () => {
     const { t, admin, target } = await world();
     const friend = await approvedMember(t, admin, 'friend@example.com');
     await signUpAndLogin(t, 'pending@example.com');
     await post(t.app, '/v1/friends/invite', { email: 'friend@example.com' }, bearer(target.token));
     const inv = (await listOf(t, friend.token)).invites[0];
     await post(t.app, `/v1/friends/invites/${inv.id}/accept`, {}, bearer(friend.token));
-    await post(t.app, '/v1/friends/invite', { email: 'invited@example.com' }, bearer(target.token));
-    const addresses = ['exists@example.com', 'missing@example.com', 'target@example.com', 'pending@example.com', 'friend@example.com', 'invited@example.com', ADMIN];
     await approvedMember(t, admin, 'exists@example.com');
+    await approvedMember(t, admin, 'invited@example.com');
+    await post(t.app, '/v1/friends/invite', { email: 'invited@example.com' }, bearer(target.token));
+    // Existing: approved, own, pending, already a friend, already invited, the admin.
     const answers: string[] = [];
-    for (const email of addresses) {
+    for (const email of ['exists@example.com', 'target@example.com', 'pending@example.com', 'friend@example.com', 'invited@example.com', ADMIN]) {
       const res = await post(t.app, '/v1/friends/invite', { email }, bearer(target.token));
       answers.push(`${res.status} ${await res.text()}`);
     }
     expect(new Set(answers).size).toBe(1);
-    expect(answers[0]).toBe('200 {"ok":true,"message":"Invite sent"}');
+    expect(answers[0]).toBe('200 {"ok":true,"message":"Invite sent","newAccount":false}');
+    // Sabih's choice: an address without an account is told apart, so the sender knows a Create account link went out.
+    const missing = await post(t.app, '/v1/friends/invite', { email: 'missing@example.com' }, bearer(target.token));
+    expect(await missing.json()).toMatchObject({ ok: true, newAccount: true });
     // mails went only where an invite could be delivered; none of them names any address
     const invites = t.mailer.sent.filter((m) => /friend invite/i.test(m.subject));
-    expect(invites.map((m) => m.to).sort()).toEqual(['exists@example.com', 'friend@example.com', ADMIN].sort());
+    expect(invites.map((m) => m.to).sort()).toEqual(['exists@example.com', 'friend@example.com', 'invited@example.com', ADMIN].sort());
     for (const m of invites) expect(m.text).not.toMatch(/@/);
     // the cap counts every attempt alike, so a probe cannot tell a delivered invite from a dropped one by its budget
     const capped = await buildTestApp({ limits: { ipPerWindow: 10_000, emailPerWindow: 10_000, invitesPerDay: 3 } });
