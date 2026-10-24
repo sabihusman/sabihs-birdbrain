@@ -10,6 +10,16 @@ describe('Sign in and Create account pages (DECISIONS.md #77)', () => {
     expect(hrefFor({ name: 'signup' })).toBe('#/signup');
   });
 
+  it('the reset link carries its token in the fragment and round-trips (DECISIONS.md #78)', () => {
+    expect(parseHash('#/forgot-password')).toEqual({ name: 'forgot-password' });
+    expect(parseHash('#/reset-password?token=abc_DEF-123')).toEqual({ name: 'reset-password', token: 'abc_DEF-123' });
+    expect(parseHash('#/reset-password')).toEqual({ name: 'reset-password', token: '' });
+    expect(hrefFor({ name: 'reset-password', token: 'a b' })).toBe('#/reset-password?token=a%20b');
+    expect(parseHash(hrefFor({ name: 'reset-password', token: 'a b/c' }))).toEqual({ name: 'reset-password', token: 'a b/c' });
+    // Other routes ignore a query.
+    expect(parseHash('#/signin?x=1')).toEqual({ name: 'signin' });
+  });
+
   it('say where the code went, why, and for how long', () => {
     expect(codeSentText('a@b.co', 600, 'sign-in')).toBe('We emailed a 6-digit code to a@b.co. It expires in 10 minutes.');
     expect(codeSentText('a@b.co', 600, 'sign-up')).toBe('We emailed a 6-digit code to a@b.co. Enter it to finish creating your account. It expires in 10 minutes.');

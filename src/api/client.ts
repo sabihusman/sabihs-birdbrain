@@ -175,6 +175,8 @@ export function describeApiError(e: unknown): string {
       return 'This account has no password to reset.';
     case 'forbidden':
       return 'Only the admin can do that.';
+    case 'invalid_token':
+      return 'This link has expired or was already used. Ask for a new one.';
     default:
       return `Request failed (${e.status}).`;
   }
@@ -250,6 +252,17 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
 
   login(email: string, password: string): Promise<{ challenge: string; expiresInSeconds: number }> {
     return this.call('/v1/auth/login', { email, password });
+  }
+
+  /** "Forgot password?": the same answer for every address (DECISIONS.md #78). */
+  forgotPassword(email: string): Promise<{ ok: boolean }> {
+    return this.call('/v1/auth/forgot-password', { email });
+  }
+
+  /** Set a new password with the token from the emailed link. The server ends every session, this one included. */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await this.call('/v1/auth/reset-password', { token, newPassword });
+    this.setSession(null);
   }
 
   async verify(challenge: string, code: string): Promise<AuthUser> {
@@ -353,7 +366,7 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return this.call(`/v1/admin/users/${encodeURIComponent(id)}/${action}`, {});
   }
 
-  /** The server mails the user a temporary password; the admin never sees it. `emailed: false` means the reset applied but the mail failed. */
+  /** The server mails the user a reset link (DECISIONS.md #78); nothing changes until they use it. `emailed: false` means the mail failed. */
   adminResetPassword(id: string): Promise<{ ok: boolean; emailed: boolean }> {
     return this.call(`/v1/admin/users/${encodeURIComponent(id)}/reset-password`, {});
   }

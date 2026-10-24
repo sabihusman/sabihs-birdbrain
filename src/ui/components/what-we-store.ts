@@ -24,6 +24,7 @@ export const WHAT_WE_STORE_GROUPS: WhatWeStoreGroup[] = [
       'If you create an account, the server keeps your email address and your password (hashed, so it cannot be read back).',
       'It also keeps your display name and your sign-in sessions.',
       'The 6-digit sign-in codes are kept hashed, for a few minutes.',
+      'Password reset links are kept hashed too, for an hour.',
       'It keeps your friends and open invites, and a count of the questions you ask each day.',
     ],
   },

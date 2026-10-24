@@ -35,7 +35,11 @@ export function authOptions(db: DatabaseSync, config: Config) {
       autoSignIn: false,
       minPasswordLength: 8,
       maxPasswordLength: 128,
+      // A password reset by emailed link signs the account out everywhere (DECISIONS.md #78).
+      revokeSessionsOnPasswordReset: true,
     },
+    // Reset tokens are stored as SHA-256 hashes, so a copy of the database cannot reset passwords.
+    verification: { storeIdentifier: { default: 'plain', overrides: { 'reset-password:': 'hashed' } } },
     session: {
       expiresIn: config.SESSION_TTL_SECONDS,
       updateAge: config.SESSION_UPDATE_AGE_SECONDS,

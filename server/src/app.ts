@@ -9,7 +9,8 @@ import { answerQuestion, type AnswerModel, type CapConfig } from './ask.js';
 import { publicUser, toAppUser, type AppUser, type Auth, type UserStatus } from './auth.js';
 import { deleteUserCompletely, deletionMail } from './account-deletion.js';
 import { existingAccountMail, pendingApprovalMail, signupCodeMail } from './account-mail.js';
-import { passwordChangedMail, resetMail, setPasswordAndRevoke, temporaryPassword } from './admin-users.js';
+import { passwordChangedMail } from './admin-users.js';
+import { createResetToken, dropLoginChallenges, resetLink, resetLinkMail, resetTokenUser } from './password-reset.js';
 import type { Config } from './config.js';
 import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
 import { createAnswerCache, type AnswerCache } from './answer-cache.js';
@@ -62,6 +63,8 @@ const SPECIES_UPLOAD_PATH = '/v1/me/species';
 
 
 const loginSchema = z.object({ email: emailSchema, password: passwordSchema }).strict();
+const forgotSchema = z.object({ email: emailSchema }).strict();
+const resetSchema = z.object({ token: z.string().min(16).max(128), newPassword: passwordSchema }).strict();
 const verifySchema = z.object({ challenge: z.string().min(16).max(64), code: z.string().regex(/^\d{6}$/) }).strict();
 const idParam = z.string().min(1).max(64);
 /** Display name: trimmed, 1–40 characters, no control or format characters (bidi overrides, zero-width marks). */
@@ -268,6 +271,58 @@ export function createApp(deps: AppDeps) {
       }
     }
     return json(c, 200, { token: ch.session_token, expiresAt: expiresAt.toISOString(), user: publicUser(user) });
+  });
+
+  /**
+   * "Forgot password?" (DECISIONS.md #78): always the same answer, so it reveals nothing. A link
+   * goes out only for an account that can sign in (not disabled or rejected) and has a password.
+   */
+  app.post('/v1/auth/forgot-password', async (c) => {
+    if (!requireAuthRate(c)) return json(c, 429, { error: 'rate_limited' });
+    const body = await readJson(c, forgotSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    if (!loginByEmail.allow(`email:${body.email}`)) return json(c, 429, { error: 'rate_limited' });
+    const user = users.getByEmail(body.email);
+    const ctx = await auth.$context;
+    if (user && user.status !== 'disabled' && user.status !== 'rejected' && (await ctx.internalAdapter.findCredentialAccount(user.id))) {
+      const token = await createResetToken(auth, user.id);
+      try {
+        await mailer.send(resetLinkMail(user.email, resetLink(config.allowedOrigins[0], token), 'self'));
+      } catch (err) {
+        // Answering differently would say the address exists; the person can ask again.
+        console.error(`[error] reset mail failed: ${describeMailError(err)}`);
+      }
+    }
+    return json(c, 200, { ok: true });
+  });
+
+  /**
+   * Choose a new password with the link's token. Better Auth's `resetPassword` checks the length,
+   * consumes the token once and (revokeSessionsOnPasswordReset) ends every session; we also drop
+   * half-finished sign-ins and send the "password changed" notice.
+   */
+  app.post('/v1/auth/reset-password', async (c) => {
+    if (!requireAuthRate(c)) return json(c, 429, { error: 'rate_limited' });
+    const body = await readJson(c, resetSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    const userId = await resetTokenUser(auth, body.token);
+    if (!userId) return json(c, 400, { error: 'invalid_token' });
+    try {
+      await auth.api.resetPassword({ body: { token: body.token, newPassword: body.newPassword } });
+    } catch (err) {
+      if (err instanceof APIError) return json(c, 400, { error: 'invalid_token' });
+      throw err;
+    }
+    dropLoginChallenges(db, userId);
+    const user = users.get(userId);
+    if (user) {
+      try {
+        await mailer.send(passwordChangedMail(user.email, 'reset'));
+      } catch (err) {
+        console.error(`[error] password-changed mail failed: ${describeMailError(err)}`);
+      }
+    }
+    return json(c, 200, { ok: true });
   });
 
   app.post('/v1/auth/refresh', async (c) => {
@@ -503,19 +558,18 @@ export function createApp(deps: AppDeps) {
   }
 
   /**
-   * Reset a user's password (DECISIONS.md #61): a random temporary password is
-   * set with Better Auth's hashing, every session ends, and the password goes
-   * to the user by mail only. The admin never sees it. A mail failure keeps
-   * the reset and answers `emailed: false`.
+   * Send a user the same reset link as "Forgot password?" (DECISIONS.md #61, #78). Nothing changes
+   * until they use it; the admin never sees a password. `emailed: false` means the mail failed.
    */
   app.post('/v1/admin/users/:id/reset-password', async (c) => {
     const t = await adminTarget(c);
     if ('error' in t) return t.error;
-    const password = temporaryPassword();
-    if (!(await setPasswordAndRevoke(auth, db, t.target.id, password))) return json(c, 400, { error: 'no_password_account' });
+    const ctx = await auth.$context;
+    if (!(await ctx.internalAdapter.findCredentialAccount(t.target.id))) return json(c, 400, { error: 'no_password_account' });
+    const token = await createResetToken(auth, t.target.id);
     let emailed = false;
     try {
-      await mailer.send(resetMail(t.target.email, password));
+      await mailer.send(resetLinkMail(t.target.email, resetLink(config.allowedOrigins[0], token), 'admin'));
       emailed = true;
     } catch (err) {
       console.error(`[error] reset mail failed: ${describeMailError(err)}`);

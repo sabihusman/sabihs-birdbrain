@@ -19,6 +19,11 @@ export const AUTH_TEXT = {
   pendingMeanwhile: 'Until then, listening and identifying birds work as before.',
   readyTitle: 'Your account is ready',
   signUpCodeWrong: 'That code is wrong or has expired. Go back and create the account again to get a new code.',
+  forgotIntro: 'Enter the email you signed up with. We will email you a link to choose a new password.',
+  forgotSent: 'If an account uses that address, we emailed it a link to choose a new password. The link works once, for 60 minutes. Check your spam folder if it does not arrive.',
+  resetIntro: 'Choose a new password for your account. Type it twice so we know it is right.',
+  resetDone: 'Your password is changed. You were signed out on every device, so sign in again with the new password.',
+  resetNoToken: 'This link is incomplete. Open the link from the email again, or ask for a new one.',
 } as const;
 
 /** "We emailed a 6-digit code to x. It expires in 10 minutes." */
@@ -101,6 +106,7 @@ export function signInView(ctx: ViewContext): View {
       field('Email', email),
       field('Password', password),
       submit,
+      el('p', null, el('a', { href: '#/forgot-password', 'data-testid': 'to-forgot' }, 'Forgot password?')),
       el('p', { class: 'small muted' }, 'We email you a 6-digit code each time you sign in.'),
       el('p', null, 'New here? ', el('a', { href: '#/signup', 'data-testid': 'to-signup' }, 'Create an account')),
     );
@@ -209,5 +215,72 @@ export function signUpView(ctx: ViewContext): View {
     body.replaceChildren(api.user ? alreadySignedIn(api.user) : form());
   };
   render('');
+  return { el: root };
+}
+
+export function forgotPasswordView(ctx: ViewContext): View {
+  const message = statusLine();
+  const body = el('div', { class: 'stack' });
+  const { root } = page('Reset your password', 'forgot-page', body, message);
+  const email = el('input', { type: 'email', autocomplete: 'email', required: true, 'data-testid': 'forgot-email' });
+  const submit = el('button', { class: 'btn primary block', type: 'submit', 'data-testid': 'forgot-submit' }, 'Email me a reset link');
+  const f = el('form', { class: 'stack' }, el('p', null, AUTH_TEXT.forgotIntro), field('Email', email), submit, el('p', null, el('a', { href: '#/signin' }, '‹ Back to sign in')));
+  let busy = false;
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (busy || !f.reportValidity()) return;
+    busy = submit.disabled = true;
+    show(message, '');
+    try {
+      await ctx.api.forgotPassword(email.value.trim());
+      body.replaceChildren(el('div', { class: 'stack', role: 'status', 'data-testid': 'forgot-sent' }, el('p', null, AUTH_TEXT.forgotSent), el('a', { class: 'btn', href: '#/signin' }, 'Back to sign in')));
+    } catch (err) {
+      show(message, describeApiError(err));
+    } finally {
+      busy = submit.disabled = false;
+    }
+  });
+  body.append(f);
+  return { el: root };
+}
+
+/**
+ * The page the emailed link opens. The token is taken out of the address bar at once, so it is
+ * not left in the browser history; it stays in memory for this page only.
+ */
+export function resetPasswordView(ctx: ViewContext, token: string): View {
+  if (token && typeof history !== 'undefined') history.replaceState(null, '', `${location.pathname}${location.search}#/reset-password`);
+  const message = statusLine();
+  const body = el('div', { class: 'stack' });
+  const { root } = page('Choose a new password', 'reset-page', body, message);
+  if (!token) {
+    body.append(el('p', { 'data-testid': 'reset-no-token' }, AUTH_TEXT.resetNoToken), el('a', { class: 'btn', href: '#/forgot-password' }, 'Ask for a new link'));
+    return { el: root };
+  }
+  const password = el('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: '8', maxlength: '128', 'data-testid': 'reset-password' });
+  const again = el('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: '8', maxlength: '128', 'data-testid': 'reset-password-again' });
+  const submit = el('button', { class: 'btn primary block', type: 'submit', 'data-testid': 'reset-submit' }, 'Save new password');
+  const match = () => again.setCustomValidity(again.value && again.value !== password.value ? 'The two passwords are different.' : '');
+  password.addEventListener('input', match);
+  again.addEventListener('input', match);
+  const f = el('form', { class: 'stack' }, el('p', null, AUTH_TEXT.resetIntro), field('New password (8 or more characters)', password), field('New password again', again), submit);
+  let busy = false;
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    match();
+    if (busy || !f.reportValidity()) return;
+    busy = submit.disabled = true;
+    show(message, '');
+    try {
+      await ctx.api.resetPassword(token, password.value);
+      body.replaceChildren(el('div', { class: 'stack', role: 'status', 'data-testid': 'reset-done' }, el('p', null, AUTH_TEXT.resetDone), el('a', { class: 'btn primary', href: '#/signin' }, 'Sign in')));
+    } catch (err) {
+      show(message, describeApiError(err));
+      if (err instanceof ApiError && err.code === 'invalid_token') body.replaceChildren(el('a', { class: 'btn', href: '#/forgot-password' }, 'Ask for a new link'));
+    } finally {
+      busy = submit.disabled = false;
+    }
+  });
+  body.append(f);
   return { el: root };
 }

@@ -38,10 +38,10 @@ describe('user management rows', () => {
   });
 
   it('asks first and reports in plain words, including a failed reset mail', () => {
-    expect(confirmText('reset', 'sam@example.com')).toMatch(/temporary password.*not see the password/);
+    expect(confirmText('reset', 'sam@example.com')).toBe('Email sam@example.com a link to choose a new password? Their password stays the same until they use the link. You will not see the new one.');
     expect(confirmText('delete', 'sam@example.com')).toMatch(/no undo.*Type their email/);
-    expect(resultText('reset', 'sam@example.com', true)).toMatch(/^Password reset\. sam@example.com was emailed/);
-    expect(resultText('reset', 'sam@example.com', false)).toBe('Password reset, but the email could not be sent. Try again.');
+    expect(resultText('reset', 'sam@example.com', true)).toBe('Reset link sent to sam@example.com. It works once, for 60 minutes.');
+    expect(resultText('reset', 'sam@example.com', false)).toBe('The reset link could not be emailed. Nothing was changed. Try again.');
     expect(resultText('delete', 'sam@example.com', true)).toMatch(/was deleted/);
   });
 

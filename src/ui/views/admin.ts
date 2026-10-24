@@ -92,7 +92,7 @@ export function userActions(u: Pick<AdminUser, 'status' | 'role'>, self: boolean
   return out;
 }
 
-export const ACTION_LABEL: Record<UserAction, string> = { approve: 'Approve', reject: 'Reject', disable: 'Disable', reset: 'Reset password', delete: 'Delete' };
+export const ACTION_LABEL: Record<UserAction, string> = { approve: 'Approve', reject: 'Reject', disable: 'Disable', reset: 'Send reset link', delete: 'Delete' };
 
 /** The question asked before each action, in plain words. */
 export function confirmText(action: UserAction, email: string): string {
@@ -104,7 +104,7 @@ export function confirmText(action: UserAction, email: string): string {
     case 'disable':
       return `Disable ${email}? They are signed out everywhere and cannot sign in until you approve them again.`;
     case 'reset':
-      return `Reset the password for ${email}? They get an email with a temporary password and are signed out everywhere. You will not see the password.`;
+      return `Email ${email} a link to choose a new password? Their password stays the same until they use the link. You will not see the new one.`;
     case 'delete':
       return `Delete ${email} for good? Their sign-in, sessions, friends, invites and shared species list are removed at once. There is no undo. Type their email to confirm.`;
   }
@@ -120,7 +120,7 @@ export function resultText(action: UserAction, email: string, emailed?: boolean)
     case 'disable':
       return `${email} is disabled and signed out.`;
     case 'reset':
-      return emailed ? `Password reset. ${email} was emailed a temporary password and signed out everywhere.` : 'Password reset, but the email could not be sent. Try again.';
+      return emailed ? `Reset link sent to ${email}. It works once, for 60 minutes.` : 'The reset link could not be emailed. Nothing was changed. Try again.';
     case 'delete':
       return emailed ? `${email} was deleted. A confirmation email was sent to them.` : `${email} was deleted. The confirmation email could not be sent.`;
   }

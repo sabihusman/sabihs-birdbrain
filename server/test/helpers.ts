@@ -32,6 +32,8 @@ export interface TestApp {
   mailer: FakeMailer;
   config: Config;
   modelCalls: Array<{ systemInstruction: string; prompt: string }>;
+  /** The app's database, for tests that check what is stored. */
+  db?: DatabaseSync;
 }
 
 export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerModel | null; env?: Partial<NodeJS.ProcessEnv>; limits?: Parameters<typeof createApp>[0]['limits']; mailer?: Mailer; now?: () => number; providerUsage?: ProviderUsageStore } = {}): Promise<TestApp> {
@@ -51,7 +53,7 @@ export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerMod
         }));
   const wiki: WikiFetcher = opts.wiki ?? (async (sci) => ({ title: sci, extract: `${sci} is a bird. It eats seeds.`, url: `https://en.wikipedia.org/wiki/${sci.replace(' ', '_')}` }));
   const app = createApp({ config, db, auth, mailer: opts.mailer ?? mailer, labels: LABELS, wiki, model, limits: opts.limits, now: opts.now, providerUsage: opts.providerUsage });
-  return { app, mailer, config, modelCalls };
+  return { app, mailer, config, modelCalls, db };
 }
 
 export async function post(app: App, path: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {

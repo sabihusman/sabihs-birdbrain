@@ -75,10 +75,12 @@ Key modules:
   holds the base URL from `VITE_API_BASE_URL`); `src/ui/views/account.ts`,
   `admin.ts`, `src/ui/components/ask-box.ts`, `location-block.ts`,
   `src/geo/pluscode.ts`, `src/audio/import-cap.ts`. `admin.ts` holds two
-  admin-only pages: `#/admin/users` (User management: approve, reset password,
+  admin-only pages: `#/admin/users` (User management: approve, send reset link,
   delete; the only entry is Settings › Account › "Manage users") and `#/admin`
-  (Ask costs). Server side: `server/src/admin-users.ts` (temporary password,
-  reset through Better Auth's `$context`). See DECISIONS.md #61.
+  (Ask costs). See DECISIONS.md #61. Account pages (`src/ui/views/auth.ts`):
+  `#/signin`, `#/signup` (code at sign-up, "Waiting for approval", #77),
+  `#/forgot-password` and `#/reset-password?token=` (emailed one-use link,
+  `server/src/password-reset.ts`, token hashed at rest, #78).
 
 Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 

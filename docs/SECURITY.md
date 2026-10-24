@@ -49,7 +49,7 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 | --- | --- | --- |
 | 6.1.1 Documented anti-automation | Met | This file plus Nginx: app limits 20 auth requests / 10 min per IP, 6 logins / 10 min per email, 5 code attempts per challenge; Nginx adds 6 r/min per IP with burst 5 and 3 connections per IP. |
 | 6.2.1 / 6.2.9 Password length | Met | Minimum 8, maximum 128 characters (Better Auth `minPasswordLength` / `maxPasswordLength`, mirrored by the request schema); lowered from 10 on 2026-10-21 at the owner's request (DECISIONS.md #61). Existing passwords keep working. |
-| 6.2.2 / 6.2.3 Password change | Met | `POST /v1/me/password` uses Better Auth's `changePassword` (current password required, every other session revoked, a notice mail sent). There is no self-service "forgot password" link; the admin can reset a password from User management, which mails a random temporary password to the user (see "Admin user management" below). |
+| 6.2.2 / 6.2.3 Password change | Met | `POST /v1/me/password` uses Better Auth's `changePassword` (current password required, every other session revoked, a notice mail sent). Forgot password (DECISIONS.md #78): `POST /v1/auth/forgot-password` always answers `{ ok: true }` and mails a one-use link (60 minutes) only to an account that can sign in; `POST /v1/auth/reset-password` sets the new password through Better Auth's `resetPassword`, which consumes the token and (with `revokeSessionsOnPasswordReset`) ends every session; half-finished sign-ins are dropped and a notice is mailed. Tokens are stored as SHA-256 hashes (`verification.storeIdentifier`). The admin's "Send reset link" mails the same link; no password is ever mailed. |
 | 6.2.4 / 6.2.12 Breached-password check | **Gap** | Not implemented. Better Auth's `haveibeenpwned` plugin can add this without storing passwords; candidate for a follow-up. |
 | 6.2.5 / 6.2.8 No composition rules, exact verification | Met | Any characters; Better Auth hashes the exact string (scrypt). |
 | 6.2.6 / 6.2.7 Masked input, paste allowed | Met | `type=password`, no paste blocking. |
@@ -236,26 +236,20 @@ everyone else ("Only the admin can open this page."), but the control is the
 server: every `/v1/admin/*` route runs `requireAdmin` (approved session with
 role `admin`) and answers 403 `forbidden` otherwise.
 
-- **Reset password** (`POST /v1/admin/users/:id/reset-password`). The server
-  draws a 16-character password from a 57-symbol alphabet with
-  `crypto.randomBytes` (rejection sampling, about 93 bits), hashes and
-  stores it through Better Auth's own context (`password.hash`,
-  `internalAdapter.updatePassword`), deletes every session with
-  `internalAdapter.deleteUserSessions` and drops any half-finished sign-in
-  code. The password is mailed to the user and nowhere else: the response
-  is `{ ok, emailed }`, nothing is logged. A mail failure keeps the reset
-  (`emailed: false`) and the page says so. Accepted risk: the temporary
-  password travels by email in clear text, the same channel that already
-  carries the sign-in code; the mail asks the user to change it at once.
-  Note that `MAIL_TRANSPORT=console` (development only) prints mail bodies,
-  this one included.
+- **Send reset link** (`POST /v1/admin/users/:id/reset-password`, DECISIONS.md
+  #78). The server mails the user the same one-use reset link as "Forgot
+  password?" (60 minutes, token stored hashed). Nothing changes until the user
+  uses it; the admin never sees a password or the token. The response is
+  `{ ok, emailed }` and a mail failure says `emailed: false`. Until #78 this
+  mailed a random temporary password instead.
 - **Delete user** (`POST /v1/admin/users/:id/delete`, body
   `{ confirm: <the user's email> }`). The same one-transaction wipe as
   `/v1/me/delete` and the same confirmation mail to the deleted address.
 - **Not on the admin.** Both answer 400 `own_account` for the admin's own
   id or any admin account, before anything changes.
-- Tests: `server/test/admin-users.test.ts` (old password and old tokens dead,
-  temporary password signs in, mail only to the user, 403 for members,
+- Tests: `server/test/admin-users.test.ts` and `password-reset.test.ts` (nothing
+  changes until the link is used, then old password and old tokens dead, link
+  works once and for an hour, token hashed at rest, mail only to the user, 403 for members,
   pending users and anonymous callers, full-table check after delete).
 
 ## Account deletion (2026-10-19)
