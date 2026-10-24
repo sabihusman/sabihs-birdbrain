@@ -70,13 +70,11 @@ export function codeFrom(mailer: FakeMailer, to: string): string {
   return m[1];
 }
 
-/** Sign up and complete the code step; returns a bearer token. */
+/** Create the account (or, when it exists, give its password) and enter the emailed code; returns a bearer token. */
 export async function signUpAndLogin(t: TestApp, email: string, password = 'correct horse battery staple'): Promise<string> {
   const su = await post(t.app, '/v1/auth/signup', { email, password });
   if (su.status !== 200) throw new Error(`signup ${su.status}`);
-  const li = await post(t.app, '/v1/auth/login', { email, password });
-  if (li.status !== 200) throw new Error(`login ${li.status}`);
-  const { challenge } = (await li.json()) as { challenge: string };
+  const { challenge } = (await su.json()) as { challenge: string };
   const ve = await post(t.app, '/v1/auth/verify', { challenge, code: codeFrom(t.mailer, email) });
   if (ve.status !== 200) throw new Error(`verify ${ve.status}`);
   return ((await ve.json()) as { token: string }).token;

@@ -71,7 +71,8 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   await page.getByTestId('welcome-signin').click();
   await expect(page).toHaveURL(/#\/settings\/account$/);
   await expect(page.getByTestId('account')).toBeVisible();
-  await expect(page.getByTestId('account').getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByTestId('account').getByRole('link', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByTestId('account').getByRole('link', { name: 'Create account' })).toBeVisible();
   expect(modelRequests, 'nothing downloaded before Start identifying').toBe(0);
   // Back on Listen the layer is still up (no settings were changed), and Start identifying takes it down.
   await page.goto('./#/listen');
@@ -116,14 +117,15 @@ test('the model loads only when needed: every tab and Account work with model re
   await page.route(/\/v1\//, (route) => route.abort());
   await page.route(/\/v1\/auth\/login$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ challenge: 'c1', expiresInSeconds: 600 }) }));
 
-  // Settings › Account: the sign-in form is reachable and usable.
+  // Settings › Account › Sign in: the sign-in page is reachable and usable.
   await page.goto('./#/settings');
   await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
-  const account = page.getByTestId('account');
-  await account.getByLabel('Email').fill('new@example.com');
-  await account.getByLabel('Password').fill('correct horse battery staple');
-  await account.getByRole('button', { name: 'Sign in' }).click();
-  await expect(account).toContainText('We emailed a code to new@example.com');
+  await page.getByTestId('account').getByRole('link', { name: 'Sign in' }).click();
+  const signin = page.getByTestId('signin-page');
+  await signin.getByLabel('Email').fill('new@example.com');
+  await signin.getByLabel('Password').fill('correct horse battery staple');
+  await signin.getByRole('button', { name: 'Sign in' }).click();
+  await expect(signin).toContainText('We emailed a 6-digit code to new@example.com');
   // Species (bundled list), Map and Recordings all render without the model.
   await page.goto('./#/species');
   await expect(page.getByTestId('local-note')).toContainText('needs the bird model');
@@ -885,7 +887,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   expect(await page.evaluate(() => localStorage.getItem('birdbrain.auth.v1'))).toBeNull();
   await page.getByTestId('deleted-done').click();
   await expect(page.getByTestId('account-deleted')).toHaveCount(0);
-  await expect(page.getByTestId('account').getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByTestId('account').getByRole('link', { name: 'Sign in' })).toBeVisible();
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // kept: the box was unchecked
 });
@@ -1586,5 +1588,86 @@ test('maps stay under the sticky header and the tab bar while scrolling (DECISIO
   const mapAfter = (await map.boundingBox())!;
   expect(mapAfter.y, 'the map now starts under the header').toBeLessThan(headerBox.y + headerBox.height);
   expect(await topmost(195, headerBox.y + headerBox.height / 2)).toBe('header');
+  await context.close();
+});
+
+test('Sign in and Create account are separate pages; Create account ends on "Waiting for approval"; 320 px in both themes (DECISIONS.md #77)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  const posted: string[] = [];
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/auth\/signup$/, (route) => {
+    posted.push(`signup ${route.request().postData()}`);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ challenge: 'c'.repeat(32), expiresInSeconds: 600 }) });
+  });
+  await page.route(/\/v1\/auth\/verify$/, (route) => {
+    const { code } = JSON.parse(route.request().postData() ?? '{}') as { code: string };
+    posted.push(`verify ${code}`);
+    if (code !== '246810') return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'invalid_code' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 't1', expiresAt: null, user: { id: 'u9', email: 'robin@example.com', name: 'Robin', status: 'pending', role: 'member' } }) });
+  });
+
+  // Settings › Account offers both, as links to their own pages.
+  await page.goto('./#/settings');
+  const account = page.getByTestId('account');
+  await expect(account.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '#/signin');
+  await account.getByRole('link', { name: 'Create account' }).click();
+  await expect(page).toHaveURL(/#\/signup$/);
+  const signup = page.getByTestId('signup-page');
+  await expect(signup.getByRole('heading', { name: 'Create account' })).toBeVisible();
+  await expect(signup).toContainText('Sabih approves each new account by hand.');
+  // The two pages link to each other.
+  await signup.getByRole('link', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/#\/signin$/);
+  await expect(page.getByTestId('signin-page').getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await page.getByTestId('to-signup').click();
+  await expect(page).toHaveURL(/#\/signup$/);
+
+  // Different passwords: nothing is sent.
+  await signup.getByLabel('Your name (what friends see; optional)').fill('Robin');
+  await signup.getByLabel('Email').fill('robin@example.com');
+  await signup.getByLabel('Password (8 or more characters)').fill('correct horse battery');
+  await signup.getByLabel('Password again').fill('correct horse batterx');
+  await signup.getByRole('button', { name: 'Create account' }).click();
+  expect(await signup.getByLabel('Password again').evaluate((e) => (e as HTMLInputElement).validationMessage)).toBe('The two passwords are different.');
+  expect(posted).toEqual([]);
+
+  // Same passwords: the code step, a wrong code stays there, the right one ends on "Waiting for approval".
+  await signup.getByLabel('Password again').fill('correct horse battery');
+  await signup.getByRole('button', { name: 'Create account' }).click();
+  await expect(signup.getByTestId('code-sent')).toHaveText('We emailed a 6-digit code to robin@example.com. Enter it to finish creating your account. It expires in 10 minutes.');
+  expect(JSON.parse(posted[0].slice('signup '.length))).toEqual({ email: 'robin@example.com', password: 'correct horse battery', name: 'Robin' });
+  await signup.getByLabel('6-digit code').fill('000000');
+  await signup.getByRole('button', { name: 'Verify' }).click();
+  await expect(signup.getByTestId('code-message')).toHaveText('That code is wrong or has expired. Go back and create the account again to get a new code.');
+  await signup.getByLabel('6-digit code').fill('246810');
+  await signup.getByRole('button', { name: 'Verify' }).click();
+  const pending = signup.getByTestId('signup-pending');
+  await expect(pending.getByRole('heading', { name: 'Waiting for approval' })).toBeVisible();
+  await expect(pending).toContainText('you will get an email when yours is approved');
+  await expect(pending).toContainText('Until then, listening and identifying birds work as before.');
+  expect(posted).toEqual([posted[0], 'verify 000000', 'verify 246810']);
+
+  // Signed in now: both pages say so instead of showing a form, and the Account card shows the wait too.
+  await page.goto('./#/signin');
+  await expect(page.getByTestId('auth-signed-in')).toContainText('You are signed in as robin@example.com.');
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('account-status')).toContainText('Awaiting approval by Sabih');
+
+  // 320 px, both themes: neither page is wider than the screen.
+  await page.evaluate(() => localStorage.removeItem('birdbrain.auth.v1'));
+  await page.reload(); // a hash change alone keeps the session in memory
+  await page.setViewportSize({ width: 320, height: 640 });
+  for (const theme of ['dark', 'light']) {
+    await page.goto('./#/settings');
+    if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) !== theme) await page.getByTestId('theme-toggle').click();
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
+    for (const hash of ['#/signup', '#/signin']) {
+      await page.goto(`./${hash}`);
+      await expect(page.locator('form').first()).toBeVisible();
+      expect(await page.evaluate(() => document.querySelector('main.view')!.scrollWidth), `${theme} ${hash} at 320 px`).toBeLessThanOrEqual(320);
+    }
+  }
   await context.close();
 });

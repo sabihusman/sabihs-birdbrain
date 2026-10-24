@@ -47,7 +47,7 @@ describe('login when the code email cannot be sent', () => {
 
   it('answers 503 email_unavailable quickly instead of hanging', async () => {
     const t = await buildTestApp({ mailer: withSendTimeout(new HangingMailer(), 30) });
-    expect((await post(t.app, '/v1/auth/signup', { email, password })).status).toBe(200);
+    expect((await post(t.app, '/v1/auth/signup', { email, password })).status).toBe(503); // the account exists; its code mail could not go
     const started = Date.now();
     const res = await post(t.app, '/v1/auth/login', { email, password }, { Origin: ORIGIN });
     expect(Date.now() - started).toBeLessThan(2_000);
@@ -56,7 +56,7 @@ describe('login when the code email cannot be sent', () => {
   });
   it('answers 503 email_unavailable when the transport fails outright', async () => {
     const t = await buildTestApp({ mailer: withSendTimeout(new ThrowingMailer()) });
-    expect((await post(t.app, '/v1/auth/signup', { email, password })).status).toBe(200);
+    expect((await post(t.app, '/v1/auth/signup', { email, password })).status).toBe(503); // the account exists; its code mail could not go
     const res = await post(t.app, '/v1/auth/login', { email, password }, { Origin: ORIGIN });
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'email_unavailable' });

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { bodyLimit } from 'hono/body-limit';
@@ -7,6 +8,7 @@ import { APIError } from 'better-auth/api';
 import { answerQuestion, type AnswerModel, type CapConfig } from './ask.js';
 import { publicUser, toAppUser, type AppUser, type Auth, type UserStatus } from './auth.js';
 import { deleteUserCompletely, deletionMail } from './account-deletion.js';
+import { existingAccountMail, pendingApprovalMail, signupCodeMail } from './account-mail.js';
 import { passwordChangedMail, resetMail, setPasswordAndRevoke, temporaryPassword } from './admin-users.js';
 import type { Config } from './config.js';
 import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
@@ -18,7 +20,7 @@ import { FriendsStore, INVITES_PER_DAY, INVITE_TTL_DAYS, MAX_SHARED_SPECIES, isC
 import { clientIp, emailSchema, passwordSchema, readJson } from './http.js';
 import type { SpeciesLabels } from './labels.js';
 import { LoginChallenges } from './login-codes.js';
-import { MailError, type Mailer } from './mailer.js';
+import { MailError, type Mail, type Mailer } from './mailer.js';
 import { RateLimiter } from './rate-limit.js';
 import { SignupNotifier } from './signup-notify.js';
 import { Users } from './users.js';
@@ -58,7 +60,7 @@ export const BODY_LIMIT_BYTES = 16 * 1024;
 export const SPECIES_BODY_LIMIT_BYTES = 256 * 1024;
 const SPECIES_UPLOAD_PATH = '/v1/me/species';
 
-const signupSchema = z.object({ email: emailSchema, password: passwordSchema, name: z.string().trim().max(80).optional() }).strict();
+
 const loginSchema = z.object({ email: emailSchema, password: passwordSchema }).strict();
 const verifySchema = z.object({ challenge: z.string().min(16).max(64), code: z.string().regex(/^\d{6}$/) }).strict();
 const idParam = z.string().min(1).max(64);
@@ -70,6 +72,7 @@ export const displayNameSchema = z
   .max(40)
   .refine((v) => !/[\p{Cc}\p{Cf}]/u.test(v), 'control characters are not allowed');
 const nameSchema = z.object({ name: displayNameSchema }).strict();
+const signupSchema = z.object({ email: emailSchema, password: passwordSchema, name: displayNameSchema.optional() }).strict();
 const inviteSchema = z.object({ email: emailSchema }).strict();
 const sharedSpeciesSchema = z
   .object({
@@ -159,17 +162,52 @@ export function createApp(deps: AppDeps) {
 
   // ---- auth -----------------------------------------------------------------
 
+  /**
+   * Create an account and email a 6-digit code to finish it (DECISIONS.md #77). The answer is
+   * always a challenge, so no one can tell which addresses have accounts:
+   * - new address: the account is created (pending) and the code is mailed;
+   * - existing address with its password: the code is mailed, as for sign-in;
+   * - existing address, other password: the owner gets "you already have an account" and the
+   *   challenge matches nothing, so any code is "wrong or expired".
+   */
   app.post('/v1/auth/signup', async (c) => {
     if (!requireAuthRate(c)) return json(c, 429, { error: 'rate_limited' });
     const body = await readJson(c, signupSchema);
     if (!body) return json(c, 400, { error: 'invalid_request' });
+    if (!loginByEmail.allow(`email:${body.email}`)) return json(c, 429, { error: 'rate_limited' });
+    challenges.purgeExpired();
     try {
       await auth.api.signUpEmail({ body: { email: body.email, password: body.password, name: body.name ?? body.email.split('@')[0] } });
     } catch (err) {
-      // Existing address or weak password: respond exactly like success so addresses cannot be enumerated.
+      if (!(err instanceof APIError)) throw err; // existing address: carry on and try its password
+    }
+    let session: { token: string; user: AppUser } | null = null;
+    try {
+      const res = await auth.api.signInEmail({ body: { email: body.email, password: body.password } });
+      session = { token: res.token, user: toAppUser(res.user as unknown as Record<string, unknown>) };
+    } catch (err) {
       if (!(err instanceof APIError)) throw err;
     }
-    return json(c, 200, { ok: true, message: 'If the address can be registered you can now sign in. New accounts wait for approval.' });
+    const ttlMinutes = Math.round(config.LOGIN_CODE_TTL_SECONDS / 60);
+    const blocked = session && (session.user.status === 'disabled' || session.user.status === 'rejected');
+    if (blocked) users.revokeSessions(session!.user.id);
+    let challenge: string;
+    let mail: Mail;
+    if (session && !blocked) {
+      const ch = challenges.create(session.user.id, session.user.email, session.token);
+      challenge = ch.id;
+      mail = signupCodeMail(session.user.email, ch.code, ttlMinutes);
+    } else {
+      challenge = randomBytes(24).toString('base64url');
+      mail = existingAccountMail(body.email, config.allowedOrigins[0]);
+    }
+    try {
+      await mailer.send(mail);
+    } catch (err) {
+      console.error(`[error] signup mail failed: ${describeMailError(err)}`);
+      return json(c, 503, { error: 'email_unavailable' });
+    }
+    return json(c, 200, { challenge, expiresInSeconds: config.LOGIN_CODE_TTL_SECONDS });
   });
 
   app.post('/v1/auth/login', async (c) => {
@@ -220,7 +258,15 @@ export function createApp(deps: AppDeps) {
     const expiresAt = users.sessionExpiry(ch.session_token);
     if (!user || !expiresAt) return json(c, 401, { error: 'invalid_code' });
     // First successful verification of a pending account: tell the admin (rate-limited, address only).
-    if (before && !before.emailVerified && user.status === 'pending') await signups.notify(user.email);
+    if (before && !before.emailVerified && user.status === 'pending') {
+      await signups.notify(user.email);
+      // And tell the person it is waiting (DECISIONS.md #77); a mail failure changes nothing.
+      try {
+        await mailer.send(pendingApprovalMail(user.email, config.allowedOrigins[0]));
+      } catch (err) {
+        console.error(`[error] pending mail failed: ${describeMailError(err)}`);
+      }
+    }
     return json(c, 200, { token: ch.session_token, expiresAt: expiresAt.toISOString(), user: publicUser(user) });
   });
 

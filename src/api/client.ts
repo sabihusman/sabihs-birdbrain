@@ -137,7 +137,7 @@ export function describeApiError(e: unknown): string {
     case 'rate_limited':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'email_unavailable':
-      return 'The sign-in email could not be sent right now. Try again in a minute.';
+      return 'The email with your code could not be sent right now. Try again in a minute.';
     case 'account_disabled':
       return 'This account is disabled.';
     case 'not_approved':
@@ -243,8 +243,9 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return data as T;
   }
 
-  signup(email: string, password: string): Promise<{ ok: boolean; message: string }> {
-    return this.call('/v1/auth/signup', { email, password });
+  /** Create an account; like `login`, it answers with a challenge and the code goes by email (DECISIONS.md #77). */
+  signup(email: string, password: string, name?: string): Promise<{ challenge: string; expiresInSeconds: number }> {
+    return this.call('/v1/auth/signup', name ? { email, password, name } : { email, password });
   }
 
   login(email: string, password: string): Promise<{ challenge: string; expiresInSeconds: number }> {
