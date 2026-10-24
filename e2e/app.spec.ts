@@ -804,19 +804,12 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(page.getByTestId('history-list')).toContainText('No position recorded');
   await expect(page.getByTestId('history-map')).toBeHidden();
 
-  // Account card for a member: grouped rows, long text behind collapsed rows, deleting on its own
-  // screen (DECISIONS.md #43, #57).
+  // Settings › Account for a member: who is signed in, the way to My account, Sign out (DECISIONS.md #79).
   await page.goto('./#/settings');
   await expect(page.getByTestId('account-name')).toHaveText('member');
   await expect(page.getByTestId('account-email')).toHaveText('member@example.com');
   await expect(page.getByTestId('account-role')).toHaveText('Member');
-  await expect(page.getByTestId('share-species')).not.toBeChecked();
-  await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
-  // The consent text and the invite form sit behind the Friends row until it is opened.
-  await expect(page.getByTestId('invite-send')).toBeHidden();
-  await page.getByTestId('friends-fold').getByText('Friends and invites').click();
-  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
-  await expect(page.getByTestId('invite-send')).toBeVisible();
+  await expect(page.getByTestId('share-species')).toHaveCount(0); // sharing lives on My account now
   // "What we store" is the last thing on Settings, closed, with every fact inside.
   const wws = page.getByTestId('what-we-store');
   await expect(wws).not.toHaveAttribute('open', /.*/);
@@ -824,6 +817,15 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await wws.getByText('What we store').click();
   await expect(wws).toContainText('Only on this phone');
   await expect(wws).toContainText('Copies in the nightly server backup are removed within 14 days.');
+  // My account: grouped rows, sharing and friends open (not folded), deleting on its own screen (DECISIONS.md #43, #57, #79).
+  await page.getByTestId('my-account-link').click();
+  await expect(page).toHaveURL(/#\/account$/);
+  const mine = page.getByTestId('my-account');
+  await expect(mine.getByRole('heading', { name: 'My account' })).toBeVisible();
+  await expect(page.getByTestId('share-species')).not.toBeChecked();
+  await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
+  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
+  await expect(page.getByTestId('invite-send')).toBeVisible();
   // Delete: the row opens its own screen, and the button stays disabled until the password and the
   // word are typed; a wrong word does nothing.
   await expect(page.getByTestId('delete-password')).toHaveCount(0);
@@ -835,7 +837,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await page.getByTestId('delete-word').fill('delete');
   await expect(page.getByTestId('delete-account')).toBeEnabled();
   await page.getByTestId('delete-account').click();
-  await expect(page.getByTestId('account')).toContainText('Type DELETE in capitals to confirm. Your account was not deleted.');
+  await expect(mine).toContainText('Type DELETE in capitals to confirm. Your account was not deleted.');
   await expect(page.getByTestId('account-deleted')).toHaveCount(0);
   await page.getByTestId('delete-cancel').click();
   await expect(page.getByTestId('account-name')).toHaveText('member');
@@ -873,7 +875,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await page.evaluate(() => {
     localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'member', status: 'approved', role: 'member' } }));
   });
-  await page.goto('./#/settings');
+  await page.goto('./#/account');
   await page.reload();
   await expect(page.getByTestId('account-name')).toHaveText('member');
   await page.getByTestId('delete-row').click();
@@ -887,7 +889,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   expect(await page.evaluate(() => localStorage.getItem('birdbrain.auth.v1'))).toBeNull();
   await page.getByTestId('deleted-done').click();
   await expect(page.getByTestId('account-deleted')).toHaveCount(0);
-  await expect(page.getByTestId('account').getByRole('link', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByTestId('my-account').getByRole('link', { name: 'Sign in' })).toBeVisible();
   await page.goto('./#/species/Acanthis%20cabaret');
   await expect(page.locator('dl.kv dd').first()).toHaveText('1 (1 analysed window)'); // kept: the box was unchecked
 });
@@ -1129,7 +1131,8 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
     if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
   });
   await page.route(/\/v1\//, (route) => route.abort());
-  await page.goto('./#/settings');
+  // My account (DECISIONS.md #79) holds the delete row.
+  await page.goto('./#/account');
   await expect(page.getByTestId('account-role')).toHaveText('Admin');
   await expect(page.getByTestId('account-name')).toHaveText('Sabih');
   const del = page.getByTestId('delete-row');
@@ -1143,6 +1146,9 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
     const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     expect(m.sw, label).toBeLessThanOrEqual(m.iw);
   };
+  await noScroll('my account at 320px');
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('account-role')).toHaveText('Admin');
   await noScroll('settings closed at 320px');
   const fold = page.getByTestId('what-we-store');
   await fold.scrollIntoViewIfNeeded();
@@ -1740,6 +1746,69 @@ test('Forgot password and the reset page: an emailed link, the new password type
       await expect(page.locator('form').first()).toBeVisible();
       expect(await page.evaluate(() => document.querySelector('main.view')!.scrollWidth), `${theme} ${hash} at 320 px`).toBeLessThanOrEqual(320);
     }
+  }
+  await context.close();
+});
+
+test('My account: friends open with a "Share with" switch each and Remove; Settings links to it; 320 px in both themes (DECISIONS.md #79)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.addInitScript(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Sam', status: 'approved', role: 'member' } })));
+  const now = Date.now();
+  const friends = [
+    { id: 'f1', name: 'Robin', since: now - 86_400_000 * 10, sharing: true },
+    { id: 'f2', name: 'Alexandria Montgomery-Featherstonehaugh', since: now - 86_400_000 * 3, sharing: false },
+  ];
+  const posted: string[] = [];
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/friends$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ friends, invites: [] }) }));
+  await page.route(/\/v1\/friends\/f\d\/(share|remove)$/, (route) => {
+    const url = route.request().url();
+    posted.push(`${url.slice(url.indexOf('/v1/'))} ${route.request().postData()}`);
+    if (url.includes('/f2/share')) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'internal_error' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, sharing: false }) });
+  });
+
+  // Settings › Account is a summary with the way in.
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('my-account-link')).toContainText('Password, friends and sharing');
+  await expect(page.getByTestId('friend')).toHaveCount(0);
+  await page.getByTestId('my-account-link').click();
+  await expect(page).toHaveURL(/#\/account$/);
+
+  // Friends are open, each with its own switch.
+  const rows = page.getByTestId('friend');
+  await expect(rows).toHaveCount(2);
+  const robin = rows.filter({ hasText: 'Robin' });
+  const alex = rows.filter({ hasText: 'Alexandria' });
+  await expect(robin.getByRole('checkbox', { name: 'Share my species list with Robin' })).toBeChecked();
+  await expect(alex.getByTestId('friend-share')).not.toBeChecked();
+  await expect(robin).toContainText('Share with Robin');
+
+  // Turning it off for Robin: one request, a plain notice.
+  await robin.getByTestId('friend-share').uncheck();
+  await expect(page.getByText('Robin no longer sees your species list. You still see theirs if they share it.')).toBeVisible();
+  expect(posted).toEqual(['/v1/friends/f1/share {"on":false}']);
+  await expect(robin.getByTestId('friend-share')).not.toBeChecked();
+  // A failed change puts the switch back and says so.
+  await alex.getByTestId('friend-share').check();
+  await expect(page.locator('.notice.error')).toBeVisible();
+  await expect(alex.getByTestId('friend-share')).not.toBeChecked();
+  // Remove is separate and still there.
+  await robin.getByTestId('friend-remove').click();
+  await expect.poll(() => posted.at(-1)).toBe('/v1/friends/f1/remove {}');
+
+  // 320 px, both themes: nothing wider than the screen, and the switch is a full-size tap target.
+  await page.setViewportSize({ width: 320, height: 700 });
+  for (const theme of ['dark', 'light']) {
+    await page.goto('./#/settings');
+    if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) !== theme) await page.getByTestId('theme-toggle').click();
+    await page.goto('./#/account');
+    await expect(page.getByTestId('friend')).toHaveCount(2);
+    expect(await page.evaluate(() => document.querySelector('main.view')!.scrollWidth), `${theme} My account at 320 px`).toBeLessThanOrEqual(320);
+    const share = await page.getByTestId('friend').first().locator('.friend-share').boundingBox();
+    expect(share!.height, `${theme} switch row height`).toBeGreaterThanOrEqual(44);
   }
   await context.close();
 });

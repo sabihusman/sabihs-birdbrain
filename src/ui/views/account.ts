@@ -3,8 +3,7 @@ import { ApiError, describeApiError, type AuthUser } from '../../api/client';
 import { canManageUsers, isMember } from '../../app/access';
 import { setSharingOn } from '../../species/sharing';
 import { clearAllData } from '../../storage/db';
-import type { ViewContext } from '../app';
-import { disclosure } from '../components/disclosure';
+import type { View, ViewContext } from '../app';
 import { friendsPanel, sharingRow } from '../components/friends-panel';
 import { actionRow, linkRow, rowGroup } from '../components/rows';
 import { SIGN_UP_PRIVACY_LINE, whatWeStoreFold } from '../components/what-we-store';
@@ -27,9 +26,12 @@ export function avatarLetter(user: { name?: string | null; email: string }): str
  * delete). Long text sits behind collapsed rows so the card fits a phone; deleting
  * opens its own screen rather than unfolding inline (DESIGN_GUIDE.md §5).
  */
-export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: () => void } {
+/** Settings shows a short `card`; `#/account` (My account, DECISIONS.md #79) shows the whole `page`. */
+export type AccountMode = 'card' | 'page';
+
+export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { el: HTMLElement; dispose: () => void } {
   const { api, controller } = ctx;
-  const root = el('section', { class: 'card', 'data-testid': 'account' });
+  const root = el('section', { class: 'card', 'data-testid': mode === 'page' ? 'my-account' : 'account' });
   const panels: Array<{ dispose: () => void }> = [];
   let step: Step = api.signedIn ? 'signed-in' : 'signed-out';
   let message = '';
@@ -48,7 +50,7 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
     if (step === 'delete' && user) {
       root.append(renderDeleteScreen(user));
     } else {
-      root.appendChild(el('h2', null, 'Account'));
+      root.appendChild(el('h2', null, mode === 'page' ? 'My account' : 'Account'));
       if (step === 'deleted') root.append(renderDeleted());
       else if (step === 'signed-in' && user) root.append(renderSignedIn(user));
       else root.append(renderSignedOut());
@@ -145,25 +147,22 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
     current.focus();
   };
 
-  const renderSignedIn = (u: AuthUser) => {
-    const nameHost = el('div', { class: 'stack name-host' });
-    const accountRows = [
-      actionRow('Display name', { hint: u.name || u.email, testId: 'edit-name', onClick: () => nameForm(u, nameHost) }),
-      actionRow('Change password', { hint: '8 to 128 characters', testId: 'change-password', onClick: () => passwordForm(nameHost) }),
-      // Admin only (DECISIONS.md #61): one entry to the user management page; Ask costs is linked from there.
-      canManageUsers(u) ? linkRow('Manage users', '#/admin/users', { hint: 'Approve, reset passwords, delete accounts', testId: 'manage-users' }) : null,
-    ];
+  /** Settings: who is signed in, the way to My account, and Sign out. */
+  const renderSummary = (u: AuthUser) =>
+    el(
+      'div',
+      { class: 'stack' },
+      identityCard(u),
+      el('div', { class: 'small', 'data-testid': 'account-status' }, statusText(u)),
+      rowGroup(
+        null,
+        linkRow('My account', '#/account', { hint: isMember(u) ? 'Password, friends and sharing' : 'Name and password', testId: 'my-account-link' }),
+        canManageUsers(u) ? linkRow('Manage users', '#/admin/users', { hint: 'Approve, send reset links, delete accounts', testId: 'manage-users' }) : null,
+      ),
+      signOutButton(),
+    );
 
-    const groups: Array<HTMLElement | null> = [identityCard(u), el('div', { class: 'small', 'data-testid': 'account-status' }, statusText(u)), rowGroup(null, ...accountRows), nameHost];
-
-    if (isMember(u)) {
-      const share = sharingRow(ctx);
-      const panel = friendsPanel(ctx);
-      panels.push(share, panel);
-      const friends = disclosure({ title: 'Friends and invites', summary: 'Invite, accept, remove', testId: 'friends-fold', className: 'fold-row' }, panel.el);
-      groups.push(rowGroup('Friends', share.el, friends));
-    }
-
+  const signOutButton = () => {
     const out = el('button', { class: 'btn block', type: 'button', 'data-testid': 'sign-out' }, 'Sign out');
     out.addEventListener('click', async () => {
       await api.logout();
@@ -171,7 +170,30 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
       message = 'Signed out.';
       render();
     });
-    groups.push(el('div', { class: 'stack' }, out));
+    return el('div', { class: 'stack' }, out);
+  };
+
+  const renderSignedIn = (u: AuthUser) => {
+    if (mode === 'card') return renderSummary(u);
+    const nameHost = el('div', { class: 'stack name-host' });
+    const accountRows = [
+      actionRow('Display name', { hint: u.name || u.email, testId: 'edit-name', onClick: () => nameForm(u, nameHost) }),
+      actionRow('Change password', { hint: '8 to 128 characters', testId: 'change-password', onClick: () => passwordForm(nameHost) }),
+      // Admin only (DECISIONS.md #61): one entry to the user management page; Ask costs is linked from there.
+      canManageUsers(u) ? linkRow('Manage users', '#/admin/users', { hint: 'Approve, send reset links, delete accounts', testId: 'manage-users' }) : null,
+    ];
+
+    const groups: Array<HTMLElement | null> = [identityCard(u), el('div', { class: 'small', 'data-testid': 'account-status' }, statusText(u)), rowGroup('Sign-in', ...accountRows), nameHost];
+
+    if (isMember(u)) {
+      // Friends are the point of this page, so they are open rather than folded (DECISIONS.md #79).
+      const share = sharingRow(ctx);
+      const panel = friendsPanel(ctx);
+      panels.push(share, panel);
+      groups.push(rowGroup('Sharing', share.el), el('div', { class: 'row-group', 'data-testid': 'friends-section' }, el('h3', { class: 'row-group-title' }, 'Friends'), panel.el));
+    }
+
+    groups.push(signOutButton());
 
     const isAdmin = u.role === 'admin';
     groups.push(
@@ -305,4 +327,14 @@ export function accountSection(ctx: ViewContext): { el: HTMLElement; dispose: ()
       disposePanels();
     },
   };
+}
+
+/**
+ * My account (`#/account`, DECISIONS.md #79): the whole account on its own page, like the admin's
+ * User management: name and password, sharing, friends with a switch each, sign out and delete.
+ */
+export function accountView(ctx: ViewContext): View {
+  const section = accountSection(ctx, 'page');
+  const root = el('div', null, el('div', { class: 'row' }, el('a', { class: 'btn small', href: '#/settings/account', 'data-testid': 'account-back' }, '‹ Settings')), section.el);
+  return { el: root, dispose: section.dispose };
 }

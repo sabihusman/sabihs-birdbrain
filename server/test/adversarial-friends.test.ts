@@ -88,9 +88,9 @@ describe('adversarial: who can read a shared species list', () => {
     expect(text).not.toMatch(/@/); // no address anywhere
     expect(text).not.toMatch(/T\d\d:\d\d/); // no times
     expect(text).not.toMatch(/lat|lon|count|hits|confidence|clip|recording/i);
-    // the friend list endpoint is as sparse: id, name, since
+    // the friend list endpoint is as sparse: id, name, since, and whether I share with them (DECISIONS.md #79)
     const list = await listOf(t, friend.token);
-    expect(Object.keys(list.friends[0]).sort()).toEqual(['id', 'name', 'since']);
+    expect(Object.keys(list.friends[0]).sort()).toEqual(['id', 'name', 'sharing', 'since']);
     expect(JSON.stringify(list)).not.toMatch(/@/);
   });
 

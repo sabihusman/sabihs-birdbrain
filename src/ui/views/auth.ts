@@ -9,8 +9,10 @@ import { el } from '../dom';
  * approval. The Account card in Settings links here and shows the signed-in state.
  */
 
-/** Where both pages go back to, and where a finished sign-in lands. */
+/** Where both pages go back to. */
 export const ACCOUNT_HREF = '#/settings/account';
+/** Where a finished sign-in lands and "Your account" goes: My account (DECISIONS.md #79). */
+export const MY_ACCOUNT_HREF = '#/account';
 
 export const AUTH_TEXT = {
   signUpIntro: 'An account is optional. It adds Ask about this bird and sharing your species list with friends. Sabih approves each new account by hand.',
@@ -87,7 +89,7 @@ function codeStep(ctx: ViewContext, opts: { email: string; challenge: string; ex
 
 /** Shown on both pages when someone is already signed in. */
 function alreadySignedIn(u: AuthUser): HTMLElement {
-  return el('div', { class: 'stack', 'data-testid': 'auth-signed-in' }, el('p', null, `You are signed in as ${u.email}.`), el('a', { class: 'btn primary', href: ACCOUNT_HREF }, 'Go to your account'));
+  return el('div', { class: 'stack', 'data-testid': 'auth-signed-in' }, el('p', null, `You are signed in as ${u.email}.`), el('a', { class: 'btn primary', href: MY_ACCOUNT_HREF }, 'Go to your account'));
 }
 
 export function signInView(ctx: ViewContext): View {
@@ -126,7 +128,7 @@ export function signInView(ctx: ViewContext): View {
             purpose: 'sign-in',
             onBack: render,
             onDone: () => {
-              location.hash = ACCOUNT_HREF;
+              location.hash = MY_ACCOUNT_HREF;
             },
           }),
         );
@@ -163,7 +165,7 @@ export function signUpView(ctx: ViewContext): View {
         el('h3', null, pending ? AUTH_TEXT.pendingTitle : AUTH_TEXT.readyTitle),
         pending ? el('p', null, AUTH_TEXT.pending) : el('p', null, `You are signed in as ${u.email}.`),
         pending ? el('p', { class: 'small muted' }, AUTH_TEXT.pendingMeanwhile) : null,
-        el('div', { class: 'row' }, el('a', { class: 'btn primary', href: '#/listen' }, 'Start listening'), el('a', { class: 'btn', href: ACCOUNT_HREF }, 'Your account')),
+        el('div', { class: 'row' }, el('a', { class: 'btn primary', href: '#/listen' }, 'Start listening'), el('a', { class: 'btn', href: MY_ACCOUNT_HREF }, 'Your account')),
       ),
     );
   };

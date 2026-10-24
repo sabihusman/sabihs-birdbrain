@@ -16,6 +16,8 @@ export type Route =
   | { name: 'signup' }
   /** "Forgot password?" and the page the emailed link opens (DECISIONS.md #78). */
   | { name: 'forgot-password' }
+  /** My account: password, sharing and friends (DECISIONS.md #79). */
+  | { name: 'account' }
   | { name: 'reset-password'; token: string };
 
 /** The `?a=b` part after a route, e.g. `#/reset-password?token=…`. */
@@ -52,6 +54,8 @@ export function parseHash(hash: string): Route {
       return { name: 'signup' };
     case 'forgot-password':
       return { name: 'forgot-password' };
+    case 'account':
+      return { name: 'account' };
     case 'reset-password':
       return { name: 'reset-password', token: query.get('token') ?? '' };
     default:
@@ -89,6 +93,8 @@ export function hrefFor(route: Route): string {
       return '#/signup';
     case 'forgot-password':
       return '#/forgot-password';
+    case 'account':
+      return '#/account';
     case 'reset-password':
       return route.token ? `#/reset-password?token=${encodeURIComponent(route.token)}` : '#/reset-password';
   }

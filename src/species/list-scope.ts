@@ -78,6 +78,6 @@ function subjectOf(spottedOnly: boolean, friendsOnly: boolean): string | null {
 function noteFor(spottedOnly: boolean, friendsOnly: boolean, friendCount: number, localNote: string | null): string | null {
   if (spottedOnly && friendsOnly) return 'Showing every species you or a friend have spotted, local or not.';
   if (spottedOnly) return 'Showing every species you have a sighting of on this device, local or not.';
-  if (friendsOnly) return friendCount ? 'Showing every species a friend has shared, local or not. Friends share only the bird and the day they last spotted it.' : 'No friend has shared a list yet. Add friends in Settings › Account.';
+  if (friendsOnly) return friendCount ? 'Showing every species a friend has shared, local or not. Friends share only the bird and the day they last spotted it.' : 'No friend has shared a list yet. Add friends on My account (Settings › Account).';
   return localNote;
 }

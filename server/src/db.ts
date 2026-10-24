@@ -38,10 +38,13 @@ export function openDatabase(path: string): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS friend_invite_to ON friend_invite (to_user_id, status);
     CREATE INDEX IF NOT EXISTS friend_invite_from ON friend_invite (from_user_id, status);
+    -- a_shares: user_a's species list goes to user_b; b_shares the other way (DECISIONS.md #79).
     CREATE TABLE IF NOT EXISTS friendship (
       user_a TEXT NOT NULL,
       user_b TEXT NOT NULL,
       since INTEGER NOT NULL,
+      a_shares INTEGER NOT NULL DEFAULT 1,
+      b_shares INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (user_a, user_b)
     );
     CREATE TABLE IF NOT EXISTS shared_species (
@@ -57,7 +60,15 @@ export function openDatabase(path: string): DatabaseSync {
       PRIMARY KEY (day, user_id)
     );
   `);
+  // Databases from before DECISIONS.md #79: both directions keep sharing, as they did.
+  addColumnIfMissing(db, 'friendship', 'a_shares', 'INTEGER NOT NULL DEFAULT 1');
+  addColumnIfMissing(db, 'friendship', 'b_shares', 'INTEGER NOT NULL DEFAULT 1');
   return db;
+}
+
+function addColumnIfMissing(db: DatabaseSync, table: string, column: string, type: string): void {
+  const cols = db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE "${table}" ADD COLUMN "${column}" ${type}`);
 }
 
 /** UTC calendar day, used as the quota bucket. */

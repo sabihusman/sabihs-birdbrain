@@ -81,10 +81,10 @@ describe('invites', () => {
     for (const b of bodies) expect(b).toEqual(INVITE_SENT);
     const mail = inviteMails(t, 'sam@example.com')[0];
     expect(mail.text).toContain('Alex invited you');
-    expect(mail.text).toContain('Account');
+    expect(mail.text).toContain('My account');
     expect(mail.text).not.toContain('alex@example.com'); // no third-party address, only the display name
     expect(mail.text).not.toContain('sam@example.com');
-    expect(mail.text).toContain('#/settings');
+    expect(mail.text).toContain('#/account'); // My account (DECISIONS.md #79)
     // the invitee sees it with the inviter's display name only
     const list = await listOf(t, sam.token);
     expect(list.invites).toHaveLength(1);
@@ -269,5 +269,59 @@ describe('account deletion', () => {
     // a pending (unapproved) user may delete their own account
     expect((await post(t.app, '/v1/me/delete', { password: PASSWORD, confirm: 'DELETE' }, bearer(pending))).status).toBe(200);
     expect((await get(t.app, '/v1/me', bearer(pending))).status).toBe(401);
+  });
+});
+
+describe('sharing per friend (DECISIONS.md #79)', () => {
+  const upload = (t: TestApp, token: string, species: Array<{ sci: string; lastSeen: string }>) => post(t.app, '/v1/me/species', { species }, bearer(token));
+
+  it('both directions share by default; turning it off for one friend hides only my list from them, and back on restores it', async () => {
+    const { t, alex, sam } = await setup();
+    await befriend(t, alex, sam);
+    expect((await upload(t, alex.token, [{ sci: 'Turdus merula', lastSeen: '2026-10-20' }])).status).toBe(200);
+    expect((await upload(t, sam.token, [{ sci: 'Parus major', lastSeen: '2026-10-21' }])).status).toBe(200);
+    expect((await listOf(t, alex.token)).friends).toEqual([expect.objectContaining({ name: 'Sam', sharing: true })]);
+    expect((await speciesOf(t, sam.token)).friends.map((f) => f.displayName)).toEqual(['Alex']);
+
+    // Alex stops sharing with Sam: Sam no longer sees Alex's list; Alex still sees Sam's.
+    const off = await post(t.app, `/v1/friends/${sam.id}/share`, { on: false }, bearer(alex.token));
+    expect([off.status, await off.json()]).toEqual([200, { ok: true, sharing: false }]);
+    expect((await speciesOf(t, sam.token)).friends).toEqual([]);
+    expect((await speciesOf(t, alex.token)).friends).toEqual([{ id: sam.id, displayName: 'Sam', species: [{ sci: 'Parus major', lastSeen: '2026-10-21' }] }]);
+    expect((await listOf(t, alex.token)).friends[0].sharing).toBe(false);
+    expect((await listOf(t, sam.token)).friends[0].sharing).toBe(true); // Sam's own direction is untouched
+    // Still friends both ways.
+    expect((await listOf(t, sam.token)).friends.map((f) => f.name)).toEqual(['Alex']);
+
+    expect((await post(t.app, `/v1/friends/${sam.id}/share`, { on: true }, bearer(alex.token))).status).toBe(200);
+    expect((await speciesOf(t, sam.token)).friends.map((f) => f.displayName)).toEqual(['Alex']);
+  });
+
+  it('refuses non-friends, bad bodies and non-members', async () => {
+    const { t, admin, alex, sam } = await setup();
+    expect((await post(t.app, `/v1/friends/${sam.id}/share`, { on: false }, bearer(alex.token))).status).toBe(404);
+    await befriend(t, alex, sam);
+    for (const body of [{}, { on: 'no' }, { on: false, extra: 1 }]) expect((await post(t.app, `/v1/friends/${sam.id}/share`, body, bearer(alex.token))).status).toBe(400);
+    const pending = await signUpAndLogin(t, 'pending@example.com');
+    expect((await post(t.app, `/v1/friends/${sam.id}/share`, { on: false }, bearer(pending))).status).toBe(403);
+    expect((await post(t.app, `/v1/friends/${sam.id}/share`, { on: false })).status).toBe(401);
+    expect((await speciesOf(t, admin)).friends).toEqual([]);
+  });
+
+  it('a database from before keeps every friendship sharing both ways', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const { mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { openDatabase } = await import('../src/db.js');
+    const path = join(mkdtempSync(join(tmpdir(), 'bb-friends-')), 'old.db');
+    const old = new DatabaseSync(path);
+    old.exec('CREATE TABLE friendship (user_a TEXT NOT NULL, user_b TEXT NOT NULL, since INTEGER NOT NULL, PRIMARY KEY (user_a, user_b))');
+    old.prepare('INSERT INTO friendship VALUES (?, ?, ?)').run('a', 'b', 1);
+    old.close();
+    const db = openDatabase(path);
+    expect(db.prepare('SELECT user_a, user_b, a_shares, b_shares FROM friendship').all()).toEqual([{ user_a: 'a', user_b: 'b', a_shares: 1, b_shares: 1 }]);
+    openDatabase(path).close(); // opening again changes nothing
+    db.close();
   });
 });

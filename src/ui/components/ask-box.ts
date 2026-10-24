@@ -21,7 +21,7 @@ export function askBox(api: ApiClient, species: Species, location: () => GeoLoca
     root.replaceChildren(el('h2', null, 'Ask about this bird'));
     const user = api.user;
     if (!user) {
-      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, 'Sign in to ask. Members can ask an AI questions about a species, answered only from its Wikipedia article, its NatureServe conservation status and recent eBird sightings. ', el('a', { href: '#/settings' }, 'Sign in or create an account in Settings.')));
+      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, 'Sign in to ask. Members can ask an AI questions about a species, answered only from its Wikipedia article, its NatureServe conservation status and recent eBird sightings. ', el('a', { href: '#/signin' }, 'Sign in or create an account.')));
       return;
     }
     if (user.status !== 'approved') {
