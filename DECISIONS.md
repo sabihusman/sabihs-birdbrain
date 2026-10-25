@@ -2698,7 +2698,8 @@ other open branches, so this may be renumbered at merge.)
   Cardinal from 80% to 39% in heavy noise. The dynamic shield wrecked the doves even in clean air
   (Collared Dove 99% → 47%), because a dove's coo sits in 150–550 Hz and triggers it. Songbirds
   stayed above 60% with no filter even at −20 dB. Averaged over all birds, nothing beat no filter
-  in clean or moderate conditions; at −20 dB the best gain was 3 points.
+  in clean or moderate (0 dB) conditions; at −12 dB the 550 Hz cut averaged 64% against 56%, all of
+  it from the doves while the Cardinal and Chickadee lost; at −20 dB the best gain was 3 points.
 - **Decision (Sabih):** not built; the 150 Hz low-cut stays as it is. Audit item 3 closed: the
   app's filter and no filter scored within a few points everywhere, so its phase shift does not
   measurably change confidence.
