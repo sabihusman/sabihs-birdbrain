@@ -1694,7 +1694,7 @@ test('Sign in and Create account are separate pages; Create account ends on "Wai
   expect(JSON.parse(posted[0].slice('signup '.length))).toEqual({ email: 'robin@example.com', password: 'correct horse battery', name: 'Robin' });
   await signup.getByLabel('6-digit code').fill('000000');
   await signup.getByRole('button', { name: 'Verify' }).click();
-  await expect(signup.getByTestId('code-message')).toHaveText('That code is wrong or has expired. Go back and create the account again to get a new code.');
+  await expect(signup.getByTestId('code-message')).toHaveText('Wrong or expired code. Go back for a new one.');
   await signup.getByLabel('6-digit code').fill('246810');
   await signup.getByRole('button', { name: 'Verify' }).click();
   const pending = signup.getByTestId('signup-pending');
@@ -1881,7 +1881,7 @@ test('Invite links: Create account says who invited them, asks before sharing ba
   // A live link: who invited them, the box unticked, the token out of the address bar.
   await page.goto('./#/signup?invite=inv_live_0123456789abcdef');
   const signup = page.getByTestId('signup-page');
-  await expect(signup.getByTestId('signup-invite')).toContainText('Alex invited you. Once Sabih approves your account, you and Alex become friends');
+  await expect(signup.getByTestId('signup-invite')).toContainText('Alex invited you. Once Sabih approves you, you’ll be friends and see Alex’s birds.');
   await expect(page).toHaveURL(/#\/signup$/);
   const box = signup.getByRole('checkbox', { name: 'Share my birds (and the last day I saw each) with Alex' });
   await expect(box).not.toBeChecked();
@@ -1901,7 +1901,7 @@ test('Invite links: Create account says who invited them, asks before sharing ba
   await page.evaluate(() => localStorage.removeItem('birdbrain.auth.v1'));
   await page.reload(); // sign out in memory first; the link is then opened like any other
   await page.goto('./#/signup?invite=inv_used_0123456789abcdef');
-  await expect(page.getByTestId('signup-invite-expired')).toContainText('This invite link has expired or was already used.');
+  await expect(page.getByTestId('signup-invite-expired')).toContainText('This invite has expired or was used. You can still sign up and ask for a new one.');
   await expect(page.getByTestId('signup-share-back')).toHaveCount(0);
 
   // The sender: an address without an account is said so plainly, and the note says what sharing does.
