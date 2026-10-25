@@ -14,7 +14,7 @@ import { parseLabels, type Species } from '../model/labels';
 import { selectDetections, type Score } from '../model/postprocess';
 import { InferenceClient, type ModelStatus } from '../model/worker-client';
 import { Emitter } from '../shared/emitter';
-import { getClip, newId, putRecording, recordDetections } from '../storage/db';
+import { getClipMeta, newId, putRecording, recordDetections } from '../storage/db';
 import type { ClipRecord, DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
 import { LocationManager, type LocationState } from './location';
 import { PositionWatch, positionStamp } from './position-watch';
@@ -590,7 +590,7 @@ export class AppController extends Emitter<ControllerEvents> {
     const pending = this.pendingClips.get(det.scientific);
     if (pending && !shouldReplaceClip(pending.candidate, candidate)) return;
     if (!pending) {
-      const existing = await getClip(det.scientific).catch(() => undefined);
+      const existing = await getClipMeta(det.scientific).catch(() => undefined);
       if (!shouldReplaceClip(existing, candidate)) return;
     }
     this.pendingClips.set(det.scientific, { candidate, offsetSamples });

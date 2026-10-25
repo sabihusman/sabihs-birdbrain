@@ -2659,3 +2659,24 @@ other open branches, so this may be renumbered at merge.)
   between passes, and Cancel works mid-run (`src/model/inference.worker.ts`).
 - **Tests:** `tests/why-plan.test.ts`; the WebAssembly e2e test now imports the sample, checks the
   Coarse note and the "Run at Medium" button, and starts and cancels a 25-pass run.
+
+## 87. Audio has its own IndexedDB store, so listing recordings never reads audio
+
+- **Source:** audit item 1a (Sabih chose it).
+- **Problem:** recordings and clips kept their audio inside the same row as their details, so
+  `listRecordings` and `listClips` read every sound to show a list. Browsers keep a stored Blob on
+  disk and hand back a reference, so that was cheap; but where Safari refuses Blobs and the audio is
+  stored as bytes (DECISIONS.md #82), every byte of every recording was read into memory.
+- **Change:** IndexedDB version 6 adds an `audio` store keyed `rec:<id>` and `clip:<scientific>`.
+  New recordings and clips keep their details in `recordings` / `clips` and their audio in `audio`
+  (with the same Blob-or-bytes fallback). `listRecordings`, `listClips`, `getRecordingMeta` and
+  `getClipMeta` read details only; `getRecording` and `getClip` add the audio for the player,
+  re-analysis and export. Pages that only need a name, a date or a confidence use the detail reads.
+  Deleting a recording or clip, and "Delete all data", remove the audio too.
+- **No data is moved by the upgrade:** rewriting each row's Blob into the new store could hit the
+  same Safari refusal and abort the whole upgrade, leaving the app unable to open its database.
+  Rows saved before version 6 keep their audio inside and are still read correctly; their details
+  are returned without the audio by the list functions.
+- **Tests:** `tests/audio-store.test.ts` (details apart from audio, lists without audio, deletes,
+  an older row still plays, Delete all data); the migration test now expects version 6 with the
+  `audio` store; the Safari-fallback e2e test reads the bytes from the `audio` store.

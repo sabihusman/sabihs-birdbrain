@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { ClipRecord, DetectionRecord, RecordingRecord, SightingRecord, WikiCacheEntry } from './types';
+import type { ClipMeta, ClipRecord, DetectionRecord, RecordingMeta, RecordingRecord, SightingRecord, WikiCacheEntry } from './types';
 import { applyDetection, buildSightings, canMerge, DEFAULT_SIGHTING_GAP_SECONDS, sightingFromDetection } from '../species/sightings';
-import { fromStored, putWithBlobFallback } from './blob-fallback';
+import { fromStored, putWithBlobFallback, type BytesForm } from './blob-fallback';
 
 interface BirdbrainDB extends DBSchema {
   recordings: {
@@ -27,10 +27,35 @@ interface BirdbrainDB extends DBSchema {
     value: SightingRecord;
     indexes: { 'by-scientific': string; 'by-last': number; 'by-recording': string };
   };
+  /** Audio of recordings (`rec:<id>`) and clips (`clip:<scientific>`), apart from their details (DECISIONS.md #87). */
+  audio: {
+    key: string;
+    value: AudioRow;
+  };
+}
+
+/** One stored sound: a Blob, or its bytes where Safari refuses Blobs (DECISIONS.md #82). */
+interface AudioRow extends BytesForm {
+  key: string;
+  blob?: Blob;
+}
+
+const recAudioKey = (id: string) => `rec:${id}`;
+const clipAudioKey = (scientific: string) => `clip:${scientific}`;
+
+/** Details only: drops any audio a row from before DECISIONS.md #87 still carries. */
+function metaOf<T extends object>(row: T): Omit<T, 'blob' | 'audioBytes' | 'audioType'> {
+  const { blob: _b, audioBytes: _a, audioType: _t, ...meta } = row as T & { blob?: unknown; audioBytes?: unknown; audioType?: unknown };
+  return meta;
+}
+
+/** The audio of a row: from the audio store, else (older rows) from the row itself. */
+function audioOf(audio: AudioRow | undefined, legacy: (BytesForm & { blob?: Blob }) | undefined): Blob | undefined {
+  return fromStored<{ blob: Blob }>(audio as never)?.blob ?? fromStored<{ blob: Blob }>(legacy as never)?.blob;
 }
 
 export const DB_NAME = 'sabihs-birdbrain';
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 let dbPromise: Promise<IDBPDatabase<BirdbrainDB>> | null = null;
 
@@ -67,6 +92,12 @@ export function getDB(): Promise<IDBPDatabase<BirdbrainDB>> {
           // re-lump the stored sightings from the (unchanged) per-window hits.
           await rebuildSightings(tx);
         }
+        if (oldVersion < 6) {
+          // Audio moves to its own store so listing recordings never reads audio (DECISIONS.md #87).
+          // Existing rows are not rewritten here (a Safari private tab can refuse to store a Blob
+          // again, which would abort the whole upgrade); they keep their audio and are still read.
+          db.createObjectStore('audio', { keyPath: 'key' });
+        }
       },
     });
   }
@@ -93,27 +124,41 @@ export function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// Recordings (audio as a Blob, or as bytes where Safari refuses the Blob: DECISIONS.md #82)
+// Recordings: details in `recordings`, audio in `audio` (DECISIONS.md #82, #87)
 export async function putRecording(rec: RecordingRecord): Promise<void> {
   const db = await getDB();
-  await putWithBlobFallback((v) => db.put('recordings', v as RecordingRecord), rec);
+  await putWithBlobFallback((v) => db.put('audio', v as AudioRow), { key: recAudioKey(rec.id), blob: rec.blob });
+  await db.put('recordings', metaOf(rec) as RecordingRecord);
 }
 
+/** One recording with its audio (the player, re-analysis and export need it). */
 export async function getRecording(id: string): Promise<RecordingRecord | undefined> {
   const db = await getDB();
-  return fromStored<RecordingRecord>(await db.get('recordings', id));
+  const row = await db.get('recordings', id);
+  if (!row) return undefined;
+  const blob = audioOf(await db.get('audio', recAudioKey(id)), row as BytesForm & { blob?: Blob });
+  return blob ? { ...metaOf(row), blob } : undefined;
 }
 
-export async function listRecordings(): Promise<RecordingRecord[]> {
+/** One recording's details, without reading its audio. */
+export async function getRecordingMeta(id: string): Promise<RecordingMeta | undefined> {
+  const db = await getDB();
+  const row = await db.get('recordings', id);
+  return row ? metaOf(row) : undefined;
+}
+
+/** Every recording's details, newest first. No audio is read. */
+export async function listRecordings(): Promise<RecordingMeta[]> {
   const db = await getDB();
   const all = await db.getAllFromIndex('recordings', 'by-created');
-  return all.reverse().map((r) => fromStored<RecordingRecord>(r)!);
+  return all.reverse().map((r) => metaOf(r));
 }
 
 export async function deleteRecording(id: string): Promise<void> {
   const db = await getDB();
-  const tx = db.transaction(['recordings', 'detections', 'sightings'], 'readwrite');
+  const tx = db.transaction(['recordings', 'audio', 'detections', 'sightings'], 'readwrite');
   await tx.objectStore('recordings').delete(id);
+  await tx.objectStore('audio').delete(recAudioKey(id));
   for (const key of await tx.objectStore('detections').index('by-recording').getAllKeys(id)) await tx.objectStore('detections').delete(key);
   for (const key of await tx.objectStore('sightings').index('by-recording').getAllKeys(id)) await tx.objectStore('sightings').delete(key);
   await tx.done;
@@ -222,30 +267,46 @@ export async function putWikiCache(entry: WikiCacheEntry): Promise<void> {
   await db.put('wiki', entry);
 }
 
-// Species clips (one per species)
+// Species clips (one per species): details in `clips`, audio in `audio` (DECISIONS.md #87)
+/** One clip with its audio, for the players. */
 export async function getClip(scientific: string): Promise<ClipRecord | undefined> {
   const db = await getDB();
-  return fromStored<ClipRecord>(await db.get('clips', scientific));
+  const row = await db.get('clips', scientific);
+  if (!row) return undefined;
+  const blob = audioOf(await db.get('audio', clipAudioKey(scientific)), row as BytesForm & { blob?: Blob });
+  return blob ? { ...metaOf(row), blob } : undefined;
+}
+
+/** One clip's details (confidence, time, windows), without reading its audio. */
+export async function getClipMeta(scientific: string): Promise<ClipMeta | undefined> {
+  const db = await getDB();
+  const row = await db.get('clips', scientific);
+  return row ? metaOf(row) : undefined;
 }
 
 export async function putClip(clip: ClipRecord): Promise<void> {
   const db = await getDB();
-  await putWithBlobFallback((v) => db.put('clips', v as ClipRecord), clip);
+  await putWithBlobFallback((v) => db.put('audio', v as AudioRow), { key: clipAudioKey(clip.scientific), blob: clip.blob });
+  await db.put('clips', metaOf(clip) as ClipRecord);
 }
 
 export async function deleteClip(scientific: string): Promise<void> {
   const db = await getDB();
-  await db.delete('clips', scientific);
+  const tx = db.transaction(['clips', 'audio'], 'readwrite');
+  await tx.objectStore('clips').delete(scientific);
+  await tx.objectStore('audio').delete(clipAudioKey(scientific));
+  await tx.done;
 }
 
-export async function listClips(): Promise<ClipRecord[]> {
+/** Every clip's details. No audio is read. */
+export async function listClips(): Promise<ClipMeta[]> {
   const db = await getDB();
-  return (await db.getAll('clips')).map((c) => fromStored<ClipRecord>(c)!);
+  return (await db.getAll('clips')).map((c) => metaOf(c));
 }
 
 export async function clearAllData(): Promise<void> {
   const db = await getDB();
-  const tx = db.transaction(['recordings', 'detections', 'wiki', 'clips', 'sightings'], 'readwrite');
-  await Promise.all([tx.objectStore('recordings').clear(), tx.objectStore('detections').clear(), tx.objectStore('wiki').clear(), tx.objectStore('clips').clear(), tx.objectStore('sightings').clear()]);
+  const tx = db.transaction(['recordings', 'detections', 'wiki', 'clips', 'sightings', 'audio'], 'readwrite');
+  await Promise.all([tx.objectStore('recordings').clear(), tx.objectStore('detections').clear(), tx.objectStore('wiki').clear(), tx.objectStore('clips').clear(), tx.objectStore('sightings').clear(), tx.objectStore('audio').clear()]);
   await tx.done;
 }

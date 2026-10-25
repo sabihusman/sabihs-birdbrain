@@ -30,14 +30,16 @@ describe('clips: upgrade from DB version 3 keeps clips without windows', () => {
     v3.close();
 
     const db = await getDB();
-    expect(DB_VERSION).toBe(5);
-    expect(db.version).toBe(5);
-    expect(Array.from(db.objectStoreNames).sort()).toEqual(['clips', 'detections', 'recordings', 'sightings', 'wiki']);
+    expect(DB_VERSION).toBe(6);
+    expect(db.version).toBe(6);
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(['audio', 'clips', 'detections', 'recordings', 'sightings', 'wiki']);
     const clips = await listClips();
     expect(clips.length).toBe(1);
     const clip = (await getClip('Turdus merula'))!;
     expect(clip.confidence).toBe(0.8);
     expect(clip.windows).toBeUndefined();
     expect(clipWindows(clip)).toBeNull();
+    // Version 6 left the old row's audio where it was, and it still plays (DECISIONS.md #87).
+    expect(clip.blob.size).toBe(44);
   });
 });
