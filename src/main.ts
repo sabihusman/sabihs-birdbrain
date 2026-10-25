@@ -29,7 +29,12 @@ async function boot(): Promise<void> {
   controller.setAutoLoadModel(shouldAutoLoadModel(signals));
   // Species clips are collected only while an approved member is signed in (decided from the cached session, so it works offline).
   controller.setClipsEnabled(isMember(api.user));
-  api.on('change', (user) => controller.setClipsEnabled(isMember(user)));
+  api.on('change', (user) => {
+    controller.setClipsEnabled(isMember(user));
+    // Signing in makes this a returning visitor: Listen shows its normal layout, not the welcome
+    // with "Sign in / Create account" (DECISIONS.md #81). The model still waits for Start.
+    if (user) controller.setWelcomePending(false);
+  });
   mountApp(document.getElementById('app')!, controller, api);
   void api.refresh();
   registerPwa({ notify: (notice) => controller.emit('notice', notice), onUpdateAvailable: (apply) => showUpdateBanner(apply) });

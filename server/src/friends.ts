@@ -114,8 +114,16 @@ export class FriendsStore {
   // ---- friendships ------------------------------------------------------------
 
   private addFriendship(a: string, b: string, now: number): void {
-    const [x, y] = a < b ? [a, b] : [b, a];
-    this.db.prepare('INSERT OR IGNORE INTO friendship (user_a, user_b, since) VALUES (?, ?, ?)').run(x, y, now);
+    this.befriend(a, b, { firstShares: true, secondShares: true }, now);
+  }
+
+  /** Make `first` and `second` friends, with each direction's sharing set (DECISIONS.md #79, #80). */
+  befriend(first: string, second: string, shares: { firstShares: boolean; secondShares: boolean }, now = Date.now()): void {
+    const firstIsA = first < second;
+    const [x, y] = firstIsA ? [first, second] : [second, first];
+    const aShares = firstIsA ? shares.firstShares : shares.secondShares;
+    const bShares = firstIsA ? shares.secondShares : shares.firstShares;
+    this.db.prepare('INSERT OR IGNORE INTO friendship (user_a, user_b, since, a_shares, b_shares) VALUES (?, ?, ?, ?, ?)').run(x, y, now, aShares ? 1 : 0, bShares ? 1 : 0);
   }
 
   areFriends(a: string, b: string): boolean {

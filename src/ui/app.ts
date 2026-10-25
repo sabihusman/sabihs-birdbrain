@@ -201,7 +201,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
         current = signInView(ctx);
         break;
       case 'signup':
-        current = signUpView(ctx);
+        current = signUpView(ctx, route.invite);
         break;
       case 'forgot-password':
         current = forgotPasswordView(ctx);

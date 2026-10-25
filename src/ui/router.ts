@@ -13,7 +13,8 @@ export type Route =
   | { name: 'help' }
   /** Sign in and Create account, each on its own page (DECISIONS.md #77). */
   | { name: 'signin' }
-  | { name: 'signup' }
+  /** `invite`: the token from an invite link (DECISIONS.md #80). */
+  | { name: 'signup'; invite?: string }
   /** "Forgot password?" and the page the emailed link opens (DECISIONS.md #78). */
   | { name: 'forgot-password' }
   /** My account: password, sharing and friends (DECISIONS.md #79). */
@@ -50,8 +51,10 @@ export function parseHash(hash: string): Route {
       return { name: 'help' };
     case 'signin':
       return { name: 'signin' };
-    case 'signup':
-      return { name: 'signup' };
+    case 'signup': {
+      const invite = query.get('invite');
+      return invite ? { name: 'signup', invite } : { name: 'signup' };
+    }
     case 'forgot-password':
       return { name: 'forgot-password' };
     case 'account':
@@ -90,7 +93,7 @@ export function hrefFor(route: Route): string {
     case 'signin':
       return '#/signin';
     case 'signup':
-      return '#/signup';
+      return route.invite ? `#/signup?invite=${encodeURIComponent(route.invite)}` : '#/signup';
     case 'forgot-password':
       return '#/forgot-password';
     case 'account':

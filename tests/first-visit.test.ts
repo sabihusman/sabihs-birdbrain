@@ -20,6 +20,10 @@ describe('welcome layer: first visit or returning visitor (DECISIONS.md #68)', (
     expect(shouldShowWelcome({ settingsStored: true, modelWanted: false, modelCached: false })).toBe(false);
     expect(shouldShowWelcome({ settingsStored: false, modelWanted: true, modelCached: false })).toBe(false);
     expect(shouldShowWelcome({ settingsStored: false, modelWanted: false, modelCached: true })).toBe(false);
+    // Signed in on this phone: not a first visit, whatever else is missing (DECISIONS.md #81).
+    expect(shouldShowWelcome({ settingsStored: false, modelWanted: false, modelCached: false, signedIn: true })).toBe(false);
+    // ...but it is not a request for the model either.
+    expect(shouldAutoLoadModel({ modelWanted: false, modelCached: false })).toBe(false);
   });
 
   it('loads the model at startup only for a phone that asked for it before (DECISIONS.md #69)', () => {
@@ -31,15 +35,17 @@ describe('welcome layer: first visit or returning visitor (DECISIONS.md #68)', (
     expect(shouldAutoLoadModel({ modelWanted: false, modelCached: false })).toBe(false);
   });
 
-  it('reads the two localStorage signals and treats a broken storage as empty', () => {
+  it('reads the localStorage signals and treats a broken storage as empty', () => {
     const storage = new MemoryStorage();
-    expect(readStoredSignals(storage)).toEqual({ settingsStored: false, modelWanted: false });
+    expect(readStoredSignals(storage)).toEqual({ settingsStored: false, modelWanted: false, signedIn: false });
     storage.setItem(SETTINGS_KEY, '{}');
     expect(readStoredSignals(storage).settingsStored).toBe(true);
     markModelWanted(storage);
     expect(storage.getItem(MODEL_WANTED_KEY)).toBe('wanted');
     expect(readStoredSignals(storage).modelWanted).toBe(true);
-    expect(readStoredSignals(null)).toEqual({ settingsStored: false, modelWanted: false });
+    expect(readStoredSignals(null)).toEqual({ settingsStored: false, modelWanted: false, signedIn: false });
+    storage.setItem('birdbrain.auth.v1', '{}');
+    expect(readStoredSignals(storage).signedIn).toBe(true);
     const throwing = {
       getItem: () => {
         throw new Error('blocked');
@@ -48,7 +54,7 @@ describe('welcome layer: first visit or returning visitor (DECISIONS.md #68)', (
         throw new Error('blocked');
       },
     } as unknown as Storage;
-    expect(readStoredSignals(throwing)).toEqual({ settingsStored: false, modelWanted: false });
+    expect(readStoredSignals(throwing)).toEqual({ settingsStored: false, modelWanted: false, signedIn: false });
     expect(() => markModelWanted(throwing)).not.toThrow();
   });
 
@@ -66,9 +72,9 @@ describe('welcome layer: first visit or returning visitor (DECISIONS.md #68)', (
     expect(await isModelCached(broken, REMOTE)).toBe(false);
   });
 
-  it('combines all three signals', async () => {
+  it('combines all the signals', async () => {
     const storage = new MemoryStorage();
-    expect(await readVisitSignals(storage, fakeCaches(null, []), REMOTE)).toEqual({ settingsStored: false, modelWanted: false, modelCached: false });
+    expect(await readVisitSignals(storage, fakeCaches(null, []), REMOTE)).toEqual({ settingsStored: false, modelWanted: false, modelCached: false, signedIn: false });
     expect(await readVisitSignals(storage, fakeCaches(MODEL_CACHE_NAME, [`${REMOTE}model.json`]), REMOTE)).toMatchObject({ modelCached: true });
   });
 });

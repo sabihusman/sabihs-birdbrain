@@ -1813,6 +1813,112 @@ test('My account: friends open with a "Share with" switch each and Remove; Setti
   await context.close();
 });
 
+test('Invite links: Create account says who invited them, asks before sharing back, and the sender is told the address is new (DECISIONS.md #80)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  const signups: Array<Record<string, unknown>> = [];
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/auth\/invite-info$/, (route) => {
+    const { token } = JSON.parse(route.request().postData() ?? '{}') as { token: string };
+    if (token !== 'inv_live_0123456789abcdef') return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ fromName: 'Alex', expiresAt: Date.now() + 86_400_000 }) });
+  });
+  await page.route(/\/v1\/auth\/signup$/, (route) => {
+    signups.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ challenge: 'c'.repeat(32), expiresInSeconds: 600 }) });
+  });
+  await page.route(/\/v1\/auth\/verify$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 't1', expiresAt: null, user: { id: 'u9', email: 'robin@example.com', name: 'Robin', status: 'pending', role: 'member' } }) }));
+
+  // A live link: who invited them, the box unticked, the token out of the address bar.
+  await page.goto('./#/signup?invite=inv_live_0123456789abcdef');
+  const signup = page.getByTestId('signup-page');
+  await expect(signup.getByTestId('signup-invite')).toContainText('Alex invited you. Once Sabih approves your account, you and Alex become friends');
+  await expect(page).toHaveURL(/#\/signup$/);
+  const box = signup.getByRole('checkbox', { name: 'Also share which birds I’ve spotted, and the day I last spotted each one, with Alex' });
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await signup.getByLabel('Email').fill('robin@example.com');
+  await signup.getByLabel('Password (8 or more characters)').fill('correct horse battery');
+  await signup.getByLabel('Password again').fill('correct horse battery');
+  await signup.getByRole('button', { name: 'Create account' }).click();
+  await signup.getByLabel('6-digit code').fill('123456');
+  await signup.getByRole('button', { name: 'Verify' }).click();
+  await expect(signup.getByTestId('signup-pending')).toBeVisible();
+  expect(signups[0]).toEqual({ email: 'robin@example.com', password: 'correct horse battery', invite: 'inv_live_0123456789abcdef', shareWithInviter: true });
+  // The tick is this person's "Share my species list" consent on this phone.
+  expect(await page.evaluate(() => localStorage.getItem('birdbrain.share.v1:u9'))).toBe('on');
+
+  // A used or expired link: a plain note, and the account is created without it.
+  await page.evaluate(() => localStorage.removeItem('birdbrain.auth.v1'));
+  await page.reload(); // sign out in memory first; the link is then opened like any other
+  await page.goto('./#/signup?invite=inv_used_0123456789abcdef');
+  await expect(page.getByTestId('signup-invite-expired')).toContainText('This invite link has expired or was already used.');
+  await expect(page.getByTestId('signup-share-back')).toHaveCount(0);
+
+  // The sender: an address without an account is said so plainly, and the note says what sharing does.
+  await page.evaluate(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'alex@example.com', name: 'Alex', status: 'approved', role: 'member' } })));
+  await page.route(/\/v1\/friends$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ friends: [], invites: [] }) }));
+  await page.route(/\/v1\/friends\/invite$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, message: 'They don’t have an account yet, so we emailed them a link to create one. You become friends once Sabih approves it.', newAccount: true }) }));
+  await page.goto('./#/account');
+  await page.reload();
+  await expect(page.getByTestId('invite-share-note')).toHaveText('Your species list is not shared with anyone. Turn on “Share my species list” above if you want new friends to see it.');
+  await page.getByTestId('invite-email').fill('kim@example.com');
+  await page.getByTestId('invite-send').click();
+  await expect(page.getByText('They don’t have an account yet, so we emailed them a link to create one.')).toBeVisible();
+  await context.close();
+});
+
+test('signed in means returning: no welcome at startup or after signing in, Listen in Focus, and still no download (DECISIONS.md #81)', async ({ browser }) => {
+  // 1. A stored session and nothing else (no settings, no model flag, nothing cached).
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  let modelRequests = 0;
+  await page.route(MODEL_FILE, (route) => {
+    modelRequests++;
+    return route.abort();
+  });
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'sam@example.com', name: 'Sam', status: 'approved', role: 'admin' } }));
+      sessionStorage.setItem('seeded', '1');
+    }
+  });
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toHaveClass(/listen-focus-layout/);
+  await expect(page.getByTestId('welcome')).toHaveCount(0);
+  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  expect(modelRequests).toBe(0);
+  await context.close();
+
+  // 2. A true first visit: the welcome, then signing in from it takes the welcome away.
+  const fresh = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const p2 = await fresh.newPage();
+  let p2Model = 0;
+  await p2.route(MODEL_FILE, (route) => {
+    p2Model++;
+    return route.abort();
+  });
+  await p2.route(/\/v1\//, (route) => route.abort());
+  await p2.route(/\/v1\/auth\/login$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ challenge: 'c'.repeat(32), expiresInSeconds: 600 }) }));
+  await p2.route(/\/v1\/auth\/verify$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 't', expiresAt: null, user: { id: 'u2', email: 'kim@example.com', name: 'Kim', status: 'approved', role: 'member' } }) }));
+  await p2.goto('./#/listen');
+  await expect(p2.getByTestId('welcome')).toBeVisible();
+  await p2.goto('./#/signin');
+  await p2.getByLabel('Email').fill('kim@example.com');
+  await p2.getByLabel('Password').fill('correct horse battery');
+  await p2.getByRole('button', { name: 'Sign in' }).click();
+  await p2.getByLabel('6-digit code').fill('123456');
+  await p2.getByRole('button', { name: 'Verify' }).click();
+  await expect(p2).toHaveURL(/#\/account$/);
+  await p2.getByRole('link', { name: 'Listen' }).click();
+  await expect(p2.getByTestId('welcome')).toHaveCount(0);
+  await expect(p2.locator('.listen')).toHaveClass(/listen-focus-layout/);
+  expect(p2Model).toBe(0);
+  await fresh.close();
+});
+
 test('a browser that refuses to store Blobs (Safari private tab) still saves an imported recording as bytes, and it plays and re-analyses (DECISIONS.md #82)', async ({ page }) => {
   // Make IndexedDB behave like Safari in a private tab: any put of a value holding a Blob fails.
   await page.addInitScript(() => {

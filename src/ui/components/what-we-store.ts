@@ -26,6 +26,7 @@ export const WHAT_WE_STORE_GROUPS: WhatWeStoreGroup[] = [
       'The 6-digit sign-in codes are kept hashed, for a few minutes.',
       'Password reset links are kept hashed too, for an hour.',
       'It keeps your friends and open invites, and a count of the questions you ask each day.',
+      'If you invite someone who has no account, it keeps only a scrambled (hashed) copy of their address with the invite, for up to 30 days, so the same person is not emailed twice.',
     ],
   },
   {

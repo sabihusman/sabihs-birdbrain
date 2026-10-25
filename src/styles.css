@@ -353,6 +353,9 @@ textarea { color: inherit; }
 .rule { border: 0; border-top: 1px solid var(--line); margin: var(--space-2) 0; }
 .friend-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 10px; border-radius: var(--radius-control); background: var(--surface-2); min-height: 48px; }
 .friend-name { min-width: 0; overflow-wrap: anywhere; }
+/* Create account opened from an invite link (DECISIONS.md #80). */
+.invite-box { padding: 12px; border-radius: var(--radius-control); background: var(--surface-2); }
+.invite-box .switch span { flex: 1; min-width: 0; }
 /* Name on its own line when narrow; the per-friend switch and Remove share the next (DECISIONS.md #79). */
 .friend-row:has(.friend-share) { flex-wrap: wrap; }
 .friend-row:has(.friend-share) .friend-name { flex: 1 1 100%; }
