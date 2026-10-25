@@ -2544,3 +2544,16 @@ other open branches, so this may be renumbered at merge.)
   existing member through a link, wrong password claims nothing, 30-day expiry, nothing stored in
   the clear, bad tokens, deletion); invite tests updated for the new answer; unit tests for the
   route and texts; an e2e test of the link, the box, an expired link and the sender's message.
+
+## 81. Signed in means returning: no welcome layer
+
+- **Problem (Sabih, iPhone):** signed in, but Listen showed the first-visit welcome with "Sign in /
+  Create account" instead of the Focus layout. The welcome looked only at stored settings, the
+  "model wanted" flag and the model cache; a phone that signed in but never tapped "Start
+  identifying" (a private tab, or signing in from the welcome) had none of them.
+- **Fix:** a stored session is a fourth signal that hides the welcome at startup
+  (`readStoredSignals` reads `birdbrain.auth.v1`), and signing in during a visit takes the welcome
+  down at once (`api.on('change')` in `main.ts`). Being signed in is not a request for the model:
+  it still downloads only on Start, the sample clip or an import (DECISIONS.md #69).
+- **Tests:** `tests/first-visit.test.ts`; an e2e test for a stored session and for signing in from
+  a first visit (both end on Listen in Focus with no model request). It fails without the fix.

@@ -1868,3 +1868,53 @@ test('Invite links: Create account says who invited them, asks before sharing ba
   await expect(page.getByText('They don’t have an account yet, so we emailed them a link to create one.')).toBeVisible();
   await context.close();
 });
+
+test('signed in means returning: no welcome at startup or after signing in, Listen in Focus, and still no download (DECISIONS.md #81)', async ({ browser }) => {
+  // 1. A stored session and nothing else (no settings, no model flag, nothing cached).
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  let modelRequests = 0;
+  await page.route(MODEL_FILE, (route) => {
+    modelRequests++;
+    return route.abort();
+  });
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'sam@example.com', name: 'Sam', status: 'approved', role: 'admin' } }));
+      sessionStorage.setItem('seeded', '1');
+    }
+  });
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toHaveClass(/listen-focus-layout/);
+  await expect(page.getByTestId('welcome')).toHaveCount(0);
+  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  expect(modelRequests).toBe(0);
+  await context.close();
+
+  // 2. A true first visit: the welcome, then signing in from it takes the welcome away.
+  const fresh = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const p2 = await fresh.newPage();
+  let p2Model = 0;
+  await p2.route(MODEL_FILE, (route) => {
+    p2Model++;
+    return route.abort();
+  });
+  await p2.route(/\/v1\//, (route) => route.abort());
+  await p2.route(/\/v1\/auth\/login$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ challenge: 'c'.repeat(32), expiresInSeconds: 600 }) }));
+  await p2.route(/\/v1\/auth\/verify$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 't', expiresAt: null, user: { id: 'u2', email: 'kim@example.com', name: 'Kim', status: 'approved', role: 'member' } }) }));
+  await p2.goto('./#/listen');
+  await expect(p2.getByTestId('welcome')).toBeVisible();
+  await p2.goto('./#/signin');
+  await p2.getByLabel('Email').fill('kim@example.com');
+  await p2.getByLabel('Password').fill('correct horse battery');
+  await p2.getByRole('button', { name: 'Sign in' }).click();
+  await p2.getByLabel('6-digit code').fill('123456');
+  await p2.getByRole('button', { name: 'Verify' }).click();
+  await expect(p2).toHaveURL(/#\/account$/);
+  await p2.getByRole('link', { name: 'Listen' }).click();
+  await expect(p2.getByTestId('welcome')).toHaveCount(0);
+  await expect(p2.locator('.listen')).toHaveClass(/listen-focus-layout/);
+  expect(p2Model).toBe(0);
+  await fresh.close();
+});
