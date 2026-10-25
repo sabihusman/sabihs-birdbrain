@@ -2248,3 +2248,28 @@ test('the header title never sits under the status pill, at 320 and 375 px, with
     await context.close();
   }
 });
+
+test('Recordings shows one card per bird that opens to its recordings (DECISIONS.md #97)', async ({ page }) => {
+  await page.goto('./#/recordings');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  for (let i = 0; i < 2; i++) {
+    await page.goto('./#/recordings');
+    await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
+    await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
+    await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
+  }
+  await page.goto('./#/recordings');
+  const groups = page.getByTestId('recording-group');
+  await expect(groups).toHaveCount(1);
+  const redpoll = page.locator('[data-testid="recording-group"][data-species="Acanthis cabaret"]');
+  await expect(redpoll.locator('summary')).toContainText('Lesser Redpoll');
+  await expect(redpoll.locator('summary')).toContainText('2 recordings');
+  await expect(redpoll).not.toHaveAttribute('open', /.*/);
+  await redpoll.locator('summary').click();
+  await expect(redpoll.getByTestId('recording-row')).toHaveCount(2);
+  await expect(redpoll.getByTestId('recording-row').first()).toContainText('birdnet-sample');
+  await expect(redpoll.getByTestId('recording-row').first()).toContainText('Also: Common Redpoll');
+  // A row opens that recording.
+  await redpoll.getByTestId('recording-row').first().click();
+  await expect(page).toHaveURL(/#\/recordings\/.+/);
+});

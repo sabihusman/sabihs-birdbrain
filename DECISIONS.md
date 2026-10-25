@@ -2851,3 +2851,14 @@ other open branches, so this may be renumbered at merge.)
   this session, and at least 30 s after it (overlapping windows of one call would otherwise each count as
   better). The memory is per listening session. Sightings and detections are recorded exactly as before; only
   the saved audio is thinner. Settings › Recording says so.
+
+## 97. Recordings: one card per bird
+
+- **Why (Sabih):** Recordings listed every auto-saved 3 s clip as its own card ("Detection window: Common
+  Grackle" again and again).
+- **Now (`src/species/recording-groups.ts`):** one collapsed card per bird (the most confident bird in each
+  recording) with its photo, best confidence, "N recordings · latest <time>"; tapping opens its recordings,
+  newest first. Auto-saved clips show their time instead of the repeated "Detection window: <bird>" name;
+  your own recordings and imports keep their names. Other birds in a recording are listed as "Also: …".
+  Recordings with no bird found share one "No bird found" card. Cards are ordered by their newest recording;
+  an opened card stays open when a new clip arrives. Nothing is deleted or merged in storage.
