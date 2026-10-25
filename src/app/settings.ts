@@ -38,12 +38,17 @@ export interface Settings {
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
 export const SETTINGS_VERSION = 4;
-/** Default confidence threshold before version 2; a saved 25 % is migrated once to the new default. */
+/** Default confidence threshold before version 2; a saved 25 % is migrated once to the default of the time. */
 export const LEGACY_DEFAULT_THRESHOLD = 0.25;
+/**
+ * The default from version 2 until 2026-10-25, when new phones moved to 70 % (DECISIONS.md #95). Saved settings
+ * always carry their threshold, so phones that saved one keep it; the 25 % migration still lands here.
+ */
+export const PREVIOUS_DEFAULT_THRESHOLD = 0.6;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
-  threshold: 0.6,
+  threshold: 0.7,
   overlapSeconds: DEFAULT_OVERLAP_SECONDS,
   locationMode: 'auto',
   manualLat: null,
@@ -51,7 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   geoThreshold: GEO_FILTER_THRESHOLD,
   useWeek: true,
   autoSaveClips: true,
-  autoSaveMinConfidence: 0.6,
+  autoSaveMinConfidence: 0.7,
   backend: 'auto',
   occlusionResolution: 'medium',
   includeNonBird: false,
@@ -107,7 +112,7 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
 /**
  * One-time migrations of saved settings, keyed by the stored `version`.
  * Version 1 (or none) → 2: a saved threshold equal to the old default (25 %)
- * becomes the new default (60 %); any other value was chosen by the user and
+ * becomes the default of the time (60 %); any other value was chosen by the user and
  * stays. Once stamped with version 2, a threshold of 25 % is a choice too.
  * Version 2 → 3: auto-saving 3-second detection windows is switched on once
  * (new default for everyone); turning it off afterwards is kept.
@@ -116,7 +121,7 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
 export function migrate(parsed: Partial<Settings>): Settings {
   const stored = { ...DEFAULT_SETTINGS, ...parsed };
   const from = typeof parsed.version === 'number' ? parsed.version : 1;
-  if (from < 2 && parsed.threshold === LEGACY_DEFAULT_THRESHOLD) stored.threshold = DEFAULT_SETTINGS.threshold;
+  if (from < 2 && parsed.threshold === LEGACY_DEFAULT_THRESHOLD) stored.threshold = PREVIOUS_DEFAULT_THRESHOLD;
   // Version 3: auto-saving detection windows became the default for everyone, so it is switched on once for
   // settings saved earlier (the old default was off and saved settings cannot tell a choice from the default).
   if (from < 3) stored.autoSaveClips = true;

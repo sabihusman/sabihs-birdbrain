@@ -248,7 +248,7 @@ test('tabs, settings and map render', async ({ page }) => {
   await expect(page.getByTestId('threshold-help')).toContainText('Lower catches faint or distant birds but adds false IDs.');
   await page.goto('./#/listen');
   await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
-  await expect(page.getByTestId('context-chips')).toContainText('Min. 60%');
+  await expect(page.getByTestId('context-chips')).toContainText('Min. 70%');
   await page.goto('./#/map');
   await expect(page.getByTestId('map')).toBeVisible();
   await expect(page.locator('.leaflet-control-attribution')).toContainText('OpenStreetMap');
@@ -739,7 +739,7 @@ test('imports a recording, analyses it and explains an identification', async ({
   // Plus Code folded away, About this bird, and "Sign in to ask" for a free user.
   await expect(page.getByTestId('recording-title')).toHaveText('Lesser Redpoll');
   await expect(page.getByTestId('recording-sci')).toHaveText('Acanthis cabaret');
-  await expect(page.getByTestId('confidence-line')).toHaveText(/^Confidence \d+% · your minimum 60%$/);
+  await expect(page.getByTestId('confidence-line')).toHaveText(/^Confidence \d+% · your minimum 70%$/);
   await expect(page.locator('canvas.timeline')).toHaveCount(0);
   const location = page.getByTestId('sighting-location');
   await expect(location.getByTestId('map-preview')).toBeVisible();
