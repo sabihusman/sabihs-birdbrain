@@ -1,3 +1,4 @@
+import { describeAiServices, refreshAiServices, storedAiServices } from '../../api/ai-services';
 import { disclosure } from './disclosure';
 import { el } from '../dom';
 
@@ -17,7 +18,14 @@ export interface WhatWeStoreGroup {
   items: string[];
 }
 
-export const WHAT_WE_STORE_GROUPS: WhatWeStoreGroup[] = [
+/** Where a question goes, named from the server's list (DECISIONS.md #90); "an AI service" until the app has asked. */
+export function aiServicesItem(services: string[] | null): string {
+  const several = (services?.length ?? 0) > 1;
+  return `The question and the fetched text are then sent to ${describeAiServices(services)}; ${several ? 'none of them ever sees' : 'it never sees'} your name, email or exact location.`;
+}
+
+export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[] {
+  return [
   {
     title: 'On the server',
     items: [
@@ -49,7 +57,7 @@ export const WHAT_WE_STORE_GROUPS: WhatWeStoreGroup[] = [
     items: [
       'The species name, your question and your state or province code go to the server, which looks the species up on Wikipedia and NatureServe Explorer and, with that region code, on eBird.',
       'For questions about birds near you, your position rounded to about 10 km goes to eBird too.',
-      'The question and the fetched text are then sent to Ollama Cloud and, if it is busy or fails, to Google’s Gemini model; neither ever sees your name, email or exact location.',
+      aiServicesItem(services),
       'Answers are kept on the server for seven days so the same question is not asked again, without your name or email.',
     ],
   },
@@ -57,10 +65,13 @@ export const WHAT_WE_STORE_GROUPS: WhatWeStoreGroup[] = [
     title: 'Deleting your account',
     items: ['Deleting your account removes all of it from the server at once.', 'Copies in the nightly server backup are removed within 14 days.'],
   },
-];
+  ];
+}
 
 /** Every fact in one line, for the record and for the test that guards the wording. */
-export const WHAT_WE_STORE_TEXT = WHAT_WE_STORE_GROUPS.flatMap((g) => g.items).join(' ');
+export function whatWeStoreText(services: string[] | null): string {
+  return whatWeStoreGroups(services).flatMap((g) => g.items).join(' ');
+}
 
 /** The one-line promise on the closed row. */
 export const WHAT_WE_STORE_SUMMARY = 'Sightings stay on your phone';
@@ -70,9 +81,26 @@ export const WHAT_WE_STORE_SUMMARY = 'Sightings stay on your phone';
  * Settings and under the sign-up form.
  */
 export function whatWeStoreFold(testId = 'what-we-store'): HTMLDetailsElement {
+  const stored = storedAiServices();
+  const aiText = aiServicesItem(stored);
+  let aiLine: HTMLElement | null = null;
+  const item = (t: string) => {
+    const li = el('li', t === aiText ? { 'data-testid': 'wws-ai' } : null, t);
+    if (t === aiText) aiLine = li;
+    return li;
+  };
   return disclosure(
-    { title: 'What we store', summary: WHAT_WE_STORE_SUMMARY, testId, className: 'what-we-store' },
-    ...WHAT_WE_STORE_GROUPS.map((g) => el('div', { class: 'stack wws-group' }, el('h3', { class: 'wws-title' }, g.title), el('ul', { class: 'wws-list small' }, ...g.items.map((t) => el('li', null, t))))),
+    {
+      title: 'What we store',
+      summary: WHAT_WE_STORE_SUMMARY,
+      testId,
+      className: 'what-we-store',
+      // The server is asked which AI services it uses only when someone opens this, not on every visit.
+      onToggle: (open) => {
+        if (open) void refreshAiServices().then((list) => aiLine && (aiLine.textContent = aiServicesItem(list)));
+      },
+    },
+    ...whatWeStoreGroups(stored).map((g) => el('div', { class: 'stack wws-group' }, el('h3', { class: 'wws-title' }, g.title), el('ul', { class: 'wws-list small' }, ...g.items.map(item)))),
   );
 }
 

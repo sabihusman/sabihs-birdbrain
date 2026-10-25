@@ -2151,3 +2151,27 @@ test('a reset or invite link survives a second drawing of its page (two quick ad
   await expect(page).toHaveURL(/#\/signup$/);
   await context.close();
 });
+
+test('the AI services are named from the server, asked only when shown, and kept for offline (DECISIONS.md #90)', async ({ page }) => {
+  const asked: string[] = [];
+  let reachable = true;
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/ai-services$/, (route) => {
+    asked.push(route.request().url());
+    return reachable ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ services: ['Anthropic Claude', 'Google Gemini'] }) }) : route.abort();
+  });
+  await page.goto('./#/settings');
+  const wws = page.getByTestId('what-we-store');
+  await expect(wws).toBeVisible();
+  // Nothing is asked until the section is opened; before that the line says "an AI service".
+  expect(asked).toHaveLength(0);
+  await wws.getByText('What we store').click();
+  await expect(wws.getByTestId('wws-ai')).toHaveText('The question and the fetched text are then sent to Anthropic Claude, or Google Gemini as backup; none of them ever sees your name, email or exact location.');
+  expect(asked).toHaveLength(1);
+  await page.goto('./#/help');
+  await expect(page.getByTestId('help-ai-services')).toHaveText('Anthropic Claude, or Google Gemini as backup');
+  // Offline after a reload: the stored names are used.
+  reachable = false;
+  await page.reload();
+  await expect(page.getByTestId('help-ai-services')).toHaveText('Anthropic Claude, or Google Gemini as backup');
+});

@@ -122,6 +122,8 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   request). `src/provider-usage.ts` keeps per-provider daily totals
   (`ask_provider_usage`) shown on the admin cost summary. The live `.env`
   sets `OLLAMA_MODEL` and `GEMINI_MODEL`; never hardcode model names.
+  `GET /v1/ai-services` lists the configured services by company name (`PROVIDER_LABELS`); the app's
+  privacy text and How it works name them from it (`src/api/ai-services.ts`, DECISIONS.md #90).
   Tests: `test/fake-ollama.ts`, `test/providers.test.ts`,
   `test/adversarial-ollama.test.ts`, `test/provider-usage.test.ts`.
   `docs/LIVE_HARDENING.md` is the checklist to run against the live server.

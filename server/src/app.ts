@@ -12,6 +12,7 @@ import { existingAccountMail, pendingApprovalMail, signupCodeMail } from './acco
 import { passwordChangedMail } from './admin-users.js';
 import { createResetToken, dropLoginChallenges, resetLink, resetLinkMail, resetTokenUser } from './password-reset.js';
 import type { Config } from './config.js';
+import { aiServiceLabels } from './providers/index.js';
 import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
 import { createAnswerCache, type AnswerCache } from './answer-cache.js';
 import type { AnswerBody } from './ask.js';
@@ -169,6 +170,11 @@ export function createApp(deps: AppDeps) {
   }
 
   app.get('/health', (c) => c.json({ ok: true }));
+
+  // Which AI services a question can go to, in order, for the app's privacy text and How it works. Public and
+  // fixed until the next restart (it follows .env); company names only, never model names. The app keeps its own copy.
+  const aiServices = aiServiceLabels(config);
+  app.get('/v1/ai-services', (c) => c.json({ services: aiServices }));
 
   // ---- helpers --------------------------------------------------------------
 
