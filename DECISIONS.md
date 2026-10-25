@@ -2724,3 +2724,19 @@ other open branches, so this may be renumbered at merge.)
   darkening; the ID clip card says "(outlined)".
 - **Checked:** screenshots of the bundled sample with its own colour (teal) and with a forced pink
   close to the owl's; both outlines are clear. Unit tests in `tests/why-overlay.test.ts`.
+
+## 90. The app names the AI services from the server's list
+
+- **Why (Sabih):** the provider may change (Claude is likely next). The privacy text and How it works named
+  Ollama Cloud and Gemini by hand, and How it works was already wrong (it said Gemini only). Generic wording
+  would hide which company receives questions, which is what the privacy text is for.
+- **Server:** `GET /v1/ai-services` (public, no sign-in) answers `{ services: [...] }`: `AI_PROVIDER_ORDER`
+  without the providers that have no key, as labels from `PROVIDER_LABELS` in
+  `server/src/providers/index.ts` ("Ollama Cloud", "Google Gemini"). Company and service names only, never a
+  model name (those stay in `.env`). A new provider needs a label there.
+- **App (`src/api/ai-services.ts`):** asked only when a page that names the services is shown (opening
+  What we store, or How it works), at most once per page load; a failure lets the next page ask again. The
+  answer is kept in localStorage (`birdbrain.ai-services.v1`) for offline use. Until the app has an answer
+  the text says "an AI service". Wording: one service by name, two as "A, or B as backup".
+- **Not changed:** the admin cost page stays Gemini-specific (it prices Gemini tokens); a new provider PR
+  updates it.

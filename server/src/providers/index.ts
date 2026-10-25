@@ -81,22 +81,36 @@ export interface ChainDeps {
 
 export type ChainConfig = Pick<Config, 'providerOrder' | 'OLLAMA_API_KEY' | 'OLLAMA_MODEL' | 'OLLAMA_TIMEOUT_MS' | 'GEMINI_API_KEY' | 'GEMINI_MODEL' | 'GEMINI_MONTHLY_CAP_USD'>;
 
+/**
+ * The company and service each provider stands for, as members read it in the app's privacy text and
+ * How it works (`GET /v1/ai-services`). Never a model name: those live in `.env` and change with upgrades.
+ */
+export const PROVIDER_LABELS: Record<ProviderName, string> = {
+  ollama: 'Ollama Cloud',
+  gemini: 'Google Gemini',
+};
+
+function hasKey(config: Pick<Config, 'OLLAMA_API_KEY' | 'GEMINI_API_KEY'>, name: ProviderName): boolean {
+  return name === 'ollama' ? Boolean(config.OLLAMA_API_KEY) : Boolean(config.GEMINI_API_KEY);
+}
+
+/** The services a question can go to, in the order they are tried: `AI_PROVIDER_ORDER` without the providers that have no key. */
+export function aiServiceLabels(config: Pick<Config, 'providerOrder' | 'OLLAMA_API_KEY' | 'GEMINI_API_KEY'>): string[] {
+  return config.providerOrder.filter((n) => hasKey(config, n)).map((n) => PROVIDER_LABELS[n]);
+}
+
 /** The providers the configuration enables, in order; a provider without its key is skipped with one startup line. */
 export function configuredProviders(config: ChainConfig, deps: ChainDeps = {}): AnswerProvider[] {
   const log = deps.log ?? ((line: string) => console.info(line));
   const providers: AnswerProvider[] = [];
   for (const name of config.providerOrder) {
+    if (!hasKey(config, name)) {
+      log(`[startup] ${name === 'ollama' ? 'OLLAMA_API_KEY' : 'GEMINI_API_KEY'} not set: ${name === 'ollama' ? 'Ollama' : 'Gemini'} provider skipped`);
+      continue;
+    }
     if (name === 'ollama') {
-      if (!config.OLLAMA_API_KEY) {
-        log('[startup] OLLAMA_API_KEY not set: Ollama provider skipped');
-        continue;
-      }
-      providers.push({ name, generate: createOllamaGenerator({ apiKey: config.OLLAMA_API_KEY, model: config.OLLAMA_MODEL, timeoutMs: config.OLLAMA_TIMEOUT_MS, fetch: deps.fetch }) });
+      providers.push({ name, generate: createOllamaGenerator({ apiKey: config.OLLAMA_API_KEY!, model: config.OLLAMA_MODEL, timeoutMs: config.OLLAMA_TIMEOUT_MS, fetch: deps.fetch }) });
     } else if (name === 'gemini') {
-      if (!config.GEMINI_API_KEY) {
-        log('[startup] GEMINI_API_KEY not set: Gemini provider skipped');
-        continue;
-      }
       providers.push({ name, generate: geminiWithCap(config, deps, log) });
     }
   }

@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { SIGN_UP_PRIVACY_LINE, WHAT_WE_STORE_GROUPS, WHAT_WE_STORE_SUMMARY, WHAT_WE_STORE_TEXT } from '../src/ui/components/what-we-store';
+import { aiServicesItem, SIGN_UP_PRIVACY_LINE, WHAT_WE_STORE_SUMMARY, whatWeStoreGroups, whatWeStoreText } from '../src/ui/components/what-we-store';
+
+/** The server's list today (GET /v1/ai-services). */
+const SERVICES = ['Ollama Cloud', 'Google Gemini'];
+const WHAT_WE_STORE_GROUPS = whatWeStoreGroups(SERVICES);
+const WHAT_WE_STORE_TEXT = whatWeStoreText(SERVICES);
 
 /** The paragraph must name what the code actually stores and sends (server/src/db.ts, app.ts, ask.ts, ebird.ts). */
 describe('what we store', () => {
   it('is one paragraph that covers every stored or sent item and ends with the backups sentence', () => {
     expect(WHAT_WE_STORE_TEXT).not.toContain('\n');
-    for (const needle of ['email address', 'password (hashed', 'display name', 'sessions', '6-digit sign-in codes', 'friends and open invites', 'questions you ask each day', 'sightings, recordings, clips and ticks stay on this phone only', 'scientific name and the day you last spotted it', 'friends see your display name, those species and those dates, and nothing else', 'species name, your question and your state or province code', 'Wikipedia', 'NatureServe Explorer', 'eBird', 'rounded to about 10 km', 'Ollama Cloud', 'Gemini', 'Answers are kept on the server for seven days', 'Deleting your account removes all of it', 'rounded to about 100 m', 'Nominatim', 'centre of each 1 km area']) {
+    for (const needle of ['email address', 'password (hashed', 'display name', 'sessions', '6-digit sign-in codes', 'friends and open invites', 'questions you ask each day', 'sightings, recordings, clips and ticks stay on this phone only', 'scientific name and the day you last spotted it', 'friends see your display name, those species and those dates, and nothing else', 'species name, your question and your state or province code', 'Wikipedia', 'NatureServe Explorer', 'eBird', 'rounded to about 10 km', 'Ollama Cloud, or Google Gemini as backup', 'none of them ever sees your name, email or exact location', 'Answers are kept on the server for seven days', 'Deleting your account removes all of it', 'rounded to about 100 m', 'Nominatim', 'centre of each 1 km area']) {
       expect(WHAT_WE_STORE_TEXT).toContain(needle);
     }
     // Since 2026-10-19 23:00 UTC a root cron job runs backup.sh nightly at 03:15 UTC with BACKUP_RETENTION_DAYS=14 (round-3 report, Backups).
     expect(WHAT_WE_STORE_TEXT.endsWith('Copies in the nightly server backup are removed within 14 days.')).toBe(true);
-    expect(WHAT_WE_STORE_TEXT).toContain('busy or fails');
     // Nothing the server does not do.
     expect(WHAT_WE_STORE_TEXT).not.toMatch(/recordings are uploaded|password is stored|not stored/);
   });
@@ -34,5 +38,14 @@ describe('what we store, regrouped', () => {
     expect(SIGN_UP_PRIVACY_LINE).toBe('Your sightings stay on your phone. We store your email and a few account details.');
     // The phone-only promise must still be a fact in the groups, not only a headline.
     expect(WHAT_WE_STORE_GROUPS.find((g) => g.title === 'Only on this phone')?.items.join(' ')).toContain('never uploaded');
+  });
+});
+
+/** The AI services are named from the server's list, so a provider switch needs no app change (DECISIONS.md #90). */
+describe('what we store, AI services', () => {
+  it('names one, two or no services in plain words', () => {
+    expect(aiServicesItem(['Google Gemini'])).toBe('The question and the fetched text are then sent to Google Gemini; it never sees your name, email or exact location.');
+    expect(aiServicesItem(SERVICES)).toBe('The question and the fetched text are then sent to Ollama Cloud, or Google Gemini as backup; none of them ever sees your name, email or exact location.');
+    expect(aiServicesItem(null)).toBe('The question and the fetched text are then sent to an AI service; it never sees your name, email or exact location.');
   });
 });
