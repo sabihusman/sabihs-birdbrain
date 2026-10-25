@@ -146,7 +146,7 @@ The name is always shown next to the colour.
 - **Map:** OpenStreetMap with markers in species colours, clustering, species
   and date filters, tap a marker to open the species page. Attribution shown;
   tiles are never cached or prefetched.
-- **Settings:** threshold (default 60 %; lower catches faint birds but adds
+- **Settings:** threshold (default 70 % on new phones, 60 % kept where it was saved; lower catches faint birds but adds
   false IDs), overlap, location source and manual coordinates,
   seasonal filter, species-range threshold, auto-save of detection windows
   (its own confidence bar, never below the threshold), compute backend,

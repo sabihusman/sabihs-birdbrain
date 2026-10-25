@@ -2830,3 +2830,14 @@ other open branches, so this may be renumbered at merge.)
   on the phone; the status pill says when the model is ready.
 - **Small phones:** the photo shrinks with the screen height (88–148 px); at 320 × 640 the buttons are
   still one short scroll down.
+
+## 95. Default confidence minimum 70 % for new phones
+
+- **Why (Sabih):** fewer wrong IDs out of the box.
+- **What:** `DEFAULT_SETTINGS.threshold` and the auto-save minimum go from 60 % to 70 %. Saved settings
+  always carry the threshold, so a phone that has saved any setting keeps its value (usually 60 %); only
+  phones with no saved settings start at 70 %. That includes a phone that has used the app but never
+  changed a setting, which also moves to 70 %. The old v1→v2 migration of a saved 25 % still lands on
+  60 % (`PREVIOUS_DEFAULT_THRESHOLD`), as it did when it shipped.
+- **Effect:** live detections between 60 % and 69 % are no longer shown for new users; they appear under
+  "sounds below your minimum". The sample clip (Lesser Redpoll ~95 %, Common Redpoll ~80 %) is unaffected.
