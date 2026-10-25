@@ -2740,3 +2740,31 @@ other open branches, so this may be renumbered at merge.)
   the text says "an AI service". Wording: one service by name, two as "A, or B as backup".
 - **Not changed:** the admin cost page stays Gemini-specific (it prices Gemini tokens); a new provider PR
   updates it.
+
+## 91. Anthropic Claude as an `/v1/ask` provider
+
+- **Why (Sabih):** switch the answering model to Claude Sonnet; he has an API key and chose to move
+  ahead without a separate test round.
+- **How:** a third provider in the existing chain (#49), `anthropic` in `AI_PROVIDER_ORDER`, through
+  Anthropic's official TypeScript SDK (`@anthropic-ai/sdk`, pinned to 0.133.0: the newest release more than
+  two weeks old). `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` come from `.env`; there is no default model, so
+  the code names none (a key without a model is a startup error).
+- **Request:** `messages.create` with the shared system instruction and prompt, `max_tokens` 4000 (room for
+  adaptive thinking; the prompt keeps the answer short), `output_config.effort: "low"` (Anthropic's
+  recommendation for chat-style answers), thinking left at the model's default (adaptive on current models),
+  no sampling parameters, no SDK retry, 20 s timeout.
+- **Outcomes:** `end_turn`/`stop_sequence` answer; `max_tokens` (or context limit) is a cut answer, handled
+  like the others (#43); `refusal` fails with kind `refused` so the next provider answers. SDK errors map to
+  the existing kinds (timeout, network, rate_limit, auth, server incl. 529 overloaded, bad_request) plus
+  `billing` (402).
+- **Not used:** Anthropic's server-side refusal fallback (`fallbacks`, beta): on Sonnet 5.5 it retries only
+  cyber and frontier-LLM declines, which bird questions don't hit, and the chain already falls back on any
+  refusal.
+- **Cost:** no monthly cap like Gemini's (#53); the daily question limits (`ASK_DAILY_PER_USER`,
+  `ASK_DAILY_GLOBAL`) bound spend. The admin cost page adds an "Est. cost" column for Claude: its token totals
+  over 30 days at the list price of `ANTHROPIC_MODEL` from `ANTHROPIC_PRICES` (pricing page read 2026-10-25:
+  Sonnet 5.5 $2 / $10 per million input / output tokens). Every prompt token is priced as uncached, so it errs
+  high; an unlisted model shows "?".
+- **Privacy text:** unchanged code; `GET /v1/ai-services` (#90) names "Anthropic Claude" once it is in the order.
+- **Switching (server `.env`):** `ANTHROPIC_API_KEY=…`, `ANTHROPIC_MODEL=claude-sonnet-5-5`,
+  `AI_PROVIDER_ORDER=anthropic,gemini` (or `anthropic,ollama,gemini`); then the deploy restarts the container.

@@ -124,6 +124,11 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   sets `OLLAMA_MODEL` and `GEMINI_MODEL`; never hardcode model names.
   `GET /v1/ai-services` lists the configured services by company name (`PROVIDER_LABELS`); the app's
   privacy text and How it works name them from it (`src/api/ai-services.ts`, DECISIONS.md #90).
+  `src/providers/anthropic.ts` (DECISIONS.md #91): Claude through `@anthropic-ai/sdk` (pinned),
+  `ANTHROPIC_API_KEY` + `ANTHROPIC_MODEL` (no default) + `ANTHROPIC_TIMEOUT_MS`, name `anthropic` in
+  `AI_PROVIDER_ORDER`; effort low, no SDK retry, refusal = fall back. List prices for the admin
+  estimate in `src/pricing.ts` (`ANTHROPIC_PRICES`, verified date in the comment). Tests:
+  `test/anthropic-provider.test.ts` (fake client, never the real API).
   Tests: `test/fake-ollama.ts`, `test/providers.test.ts`,
   `test/adversarial-ollama.test.ts`, `test/provider-usage.test.ts`.
   `docs/LIVE_HARDENING.md` is the checklist to run against the live server.

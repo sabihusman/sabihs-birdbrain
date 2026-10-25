@@ -4,6 +4,7 @@ import { capAlertMail, createGeminiCapGuard } from '../gemini-cap.js';
 import type { Mailer } from '../mailer.js';
 import type { Config, ProviderName } from '../config.js';
 import type { ProviderUsageStore } from '../provider-usage.js';
+import { createAnthropicGenerator, type AnthropicMessagesClient } from './anthropic.js';
 import { createGeminiProvider } from './gemini.js';
 import { createOllamaGenerator, ProviderError, type FetchLike, type ProviderFailureKind } from './ollama.js';
 
@@ -68,6 +69,8 @@ export function createChain(providers: AnswerProvider[], opts: ChainOptions = {}
 export interface ChainDeps {
   fetch?: FetchLike;
   geminiClient?: GenAiClient;
+  /** Test hook: a fake Anthropic client instead of the SDK. */
+  anthropicClient?: AnthropicMessagesClient;
   log?: (line: string) => void;
   /** Gemini's billed calls and estimated spend (#48); with it the monthly cap (#53) is enforced. */
   costs?: AskCostStore;
@@ -79,7 +82,10 @@ export interface ChainDeps {
   now?: () => Date;
 }
 
-export type ChainConfig = Pick<Config, 'providerOrder' | 'OLLAMA_API_KEY' | 'OLLAMA_MODEL' | 'OLLAMA_TIMEOUT_MS' | 'GEMINI_API_KEY' | 'GEMINI_MODEL' | 'GEMINI_MONTHLY_CAP_USD'>;
+export type ChainConfig = Pick<
+  Config,
+  'providerOrder' | 'OLLAMA_API_KEY' | 'OLLAMA_MODEL' | 'OLLAMA_TIMEOUT_MS' | 'GEMINI_API_KEY' | 'GEMINI_MODEL' | 'GEMINI_MONTHLY_CAP_USD' | 'ANTHROPIC_API_KEY' | 'ANTHROPIC_MODEL' | 'ANTHROPIC_TIMEOUT_MS'
+>;
 
 /**
  * The company and service each provider stands for, as members read it in the app's privacy text and
@@ -88,14 +94,26 @@ export type ChainConfig = Pick<Config, 'providerOrder' | 'OLLAMA_API_KEY' | 'OLL
 export const PROVIDER_LABELS: Record<ProviderName, string> = {
   ollama: 'Ollama Cloud',
   gemini: 'Google Gemini',
+  anthropic: 'Anthropic Claude',
 };
 
-function hasKey(config: Pick<Config, 'OLLAMA_API_KEY' | 'GEMINI_API_KEY'>, name: ProviderName): boolean {
-  return name === 'ollama' ? Boolean(config.OLLAMA_API_KEY) : Boolean(config.GEMINI_API_KEY);
+/** The `.env` variable that holds each provider's key, for the startup line when it is missing. */
+const KEY_VARIABLE: Record<ProviderName, 'OLLAMA_API_KEY' | 'GEMINI_API_KEY' | 'ANTHROPIC_API_KEY'> = {
+  ollama: 'OLLAMA_API_KEY',
+  gemini: 'GEMINI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+};
+
+const SHORT_NAME: Record<ProviderName, string> = { ollama: 'Ollama', gemini: 'Gemini', anthropic: 'Anthropic' };
+
+type KeyConfig = Pick<Config, 'OLLAMA_API_KEY' | 'GEMINI_API_KEY' | 'ANTHROPIC_API_KEY'>;
+
+function hasKey(config: KeyConfig, name: ProviderName): boolean {
+  return Boolean(config[KEY_VARIABLE[name]]);
 }
 
 /** The services a question can go to, in the order they are tried: `AI_PROVIDER_ORDER` without the providers that have no key. */
-export function aiServiceLabels(config: Pick<Config, 'providerOrder' | 'OLLAMA_API_KEY' | 'GEMINI_API_KEY'>): string[] {
+export function aiServiceLabels(config: Pick<Config, 'providerOrder'> & KeyConfig): string[] {
   return config.providerOrder.filter((n) => hasKey(config, n)).map((n) => PROVIDER_LABELS[n]);
 }
 
@@ -105,13 +123,16 @@ export function configuredProviders(config: ChainConfig, deps: ChainDeps = {}): 
   const providers: AnswerProvider[] = [];
   for (const name of config.providerOrder) {
     if (!hasKey(config, name)) {
-      log(`[startup] ${name === 'ollama' ? 'OLLAMA_API_KEY' : 'GEMINI_API_KEY'} not set: ${name === 'ollama' ? 'Ollama' : 'Gemini'} provider skipped`);
+      log(`[startup] ${KEY_VARIABLE[name]} not set: ${SHORT_NAME[name]} provider skipped`);
       continue;
     }
     if (name === 'ollama') {
       providers.push({ name, generate: createOllamaGenerator({ apiKey: config.OLLAMA_API_KEY!, model: config.OLLAMA_MODEL, timeoutMs: config.OLLAMA_TIMEOUT_MS, fetch: deps.fetch }) });
     } else if (name === 'gemini') {
       providers.push({ name, generate: geminiWithCap(config, deps, log) });
+    } else {
+      // loadConfig refuses a key without ANTHROPIC_MODEL, so the model is set here.
+      providers.push({ name, generate: createAnthropicGenerator({ apiKey: config.ANTHROPIC_API_KEY!, model: config.ANTHROPIC_MODEL!, timeoutMs: config.ANTHROPIC_TIMEOUT_MS, client: deps.anthropicClient }) });
     }
   }
   return providers;
@@ -137,6 +158,7 @@ export function createProviderChain(config: ChainConfig, deps: ChainDeps = {}): 
   const log = deps.log ?? ((line: string) => console.info(line));
   const providers = configuredProviders(config, deps);
   if (providers.length === 0) return null;
-  log(`[startup] /v1/ask providers: ${providers.map((p) => `${p.name} (${p.name === 'ollama' ? config.OLLAMA_MODEL : config.GEMINI_MODEL})`).join(' -> ')}`);
+  const modelOf: Record<ProviderName, string | undefined> = { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL, anthropic: config.ANTHROPIC_MODEL };
+  log(`[startup] /v1/ask providers: ${providers.map((p) => `${p.name} (${modelOf[p.name]})`).join(' -> ')}`);
   return createChain(providers, { log, providerUsage: deps.providerUsage });
 }

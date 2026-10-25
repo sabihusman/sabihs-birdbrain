@@ -16,11 +16,17 @@ describe('admin ask costs', () => {
   it('lists providers in configured order with zero rows for the unused one', () => {
     const rows = providerRows({ providerOrder: ['ollama', 'gemini'], models: { ollama: 'gemma4:31b', gemini: 'gemini-3.5-flash-lite' }, providers: [{ provider: 'gemini', requests: 2, promptTokens: 3000, answerTokens: 200, fallbacks: 2 }] });
     expect(rows).toEqual([
-      { provider: 'ollama', model: 'gemma4:31b', requests: 0, fallbacks: 0, promptTokens: 0, answerTokens: 0 },
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite', requests: 2, fallbacks: 2, promptTokens: 3000, answerTokens: 200 },
+      { provider: 'ollama', model: 'gemma4:31b', requests: 0, fallbacks: 0, promptTokens: 0, answerTokens: 0, cost: 'plan' },
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', requests: 2, fallbacks: 2, promptTokens: 3000, answerTokens: 200, cost: 'below' },
     ]);
     expect(providerRows({})).toEqual([]);
     expect(providerRows({ providers: [{ provider: 'ollama', requests: 1, promptTokens: 1, answerTokens: 1, fallbacks: 0 }] })[0]).toMatchObject({ provider: 'ollama', model: '?' });
+  });
+
+  it('shows Claude with its estimated cost, or "?" when its model has no listed price (DECISIONS.md #91)', () => {
+    const totals = [{ provider: 'anthropic' as const, requests: 3, promptTokens: 6000, answerTokens: 1500, fallbacks: 0 }];
+    expect(providerRows({ providerOrder: ['anthropic', 'gemini'], models: { anthropic: 'claude-model' }, providers: totals, estimates: { anthropic: 27000 } })[0]).toEqual({ provider: 'anthropic', model: 'claude-model', requests: 3, fallbacks: 0, promptTokens: 6000, answerTokens: 1500, cost: '$0.0270' });
+    expect(providerRows({ providerOrder: ['anthropic'], models: { anthropic: null }, providers: totals, estimates: { anthropic: null } })[0]).toMatchObject({ model: '?', cost: '?' });
   });
 
   it('the client reads GET /v1/admin/ask-costs with the bearer token', async () => {

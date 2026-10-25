@@ -287,3 +287,18 @@ permanently: no grace period, no undo. Controls:
   user-facing text says "Copies in server backups are removed when those
   backups expire". The retention period on the server must be confirmed
   (see the PR).
+
+## Anthropic (Claude) as a third provider (2026-10-25, DECISIONS.md #91)
+
+`server/src/providers/anthropic.ts` calls the Messages API through the
+official SDK (`@anthropic-ai/sdk`, pinned exactly to 0.133.0, a release more
+than two weeks old at the time). It gets the identical prompt (system
+instruction as `system`, fenced source plus question as the one user message),
+so the output defences in `answerQuestion` apply unchanged. No SDK retry
+(`maxRetries: 0`), a 20 s timeout (`ANTHROPIC_TIMEOUT_MS`), and a `refusal`
+stop is a failure the chain falls back from. `ANTHROPIC_API_KEY` lives only in
+`/opt/birdbrain/.env` and is never logged (a test checks the log lines);
+`ANTHROPIC_MODEL` has no default, and a key without a model stops the server
+at startup. No new outbound host for the app: the server calls
+`api.anthropic.com` (Nginx and the CSP are unaffected; the CSP covers only
+the app's own requests).

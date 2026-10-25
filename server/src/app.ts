@@ -13,6 +13,7 @@ import { passwordChangedMail } from './admin-users.js';
 import { createResetToken, dropLoginChallenges, resetLink, resetLinkMail, resetTokenUser } from './password-reset.js';
 import type { Config } from './config.js';
 import { aiServiceLabels } from './providers/index.js';
+import { anthropicCostMicros } from './pricing.js';
 import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
 import { createAnswerCache, type AnswerCache } from './answer-cache.js';
 import type { AnswerBody } from './ask.js';
@@ -609,8 +610,15 @@ export function createApp(deps: AppDeps) {
       month: costs.monthStatus(Math.round(config.GEMINI_MONTHLY_CAP_USD * 1_000_000)),
       // Which provider answered (DECISIONS.md #49): one row per provider over the same window, with the configured model names.
       providerOrder: config.providerOrder,
-      models: { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL },
+      models: { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL, anthropic: config.ANTHROPIC_MODEL ?? null },
       providers: providerUsage.totals(PROVIDER_SUMMARY_DAYS),
+      // Estimated Claude spend over the same window from its token totals and list price (DECISIONS.md #91); null without a price.
+      estimates: {
+        anthropic: (() => {
+          const t = providerUsage.totals(PROVIDER_SUMMARY_DAYS).find((x) => x.provider === 'anthropic');
+          return t ? anthropicCostMicros(config.ANTHROPIC_MODEL, t.promptTokens, t.answerTokens) : 0;
+        })(),
+      },
     });
   });
 

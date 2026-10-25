@@ -47,8 +47,10 @@ export interface AskCostDay {
 }
 
 /** One provider's totals over the admin window: which service answered, how often it was reached by fallback, its tokens. */
+export type AskProviderName = 'ollama' | 'gemini' | 'anthropic';
+
 export interface AskProviderTotals {
-  provider: 'ollama' | 'gemini';
+  provider: AskProviderName;
   requests: number;
   promptTokens: number;
   answerTokens: number;
@@ -68,9 +70,11 @@ export interface AskCostSummary {
   model: string;
   days: AskCostDay[];
   month?: AskCostMonth;
-  providerOrder?: Array<'ollama' | 'gemini'>;
-  models?: { ollama: string; gemini: string };
+  providerOrder?: AskProviderName[];
+  models?: Partial<Record<AskProviderName, string | null>>;
   providers?: AskProviderTotals[];
+  /** Estimated Claude spend over the window, micro-dollars; null when its model has no listed price (DECISIONS.md #91). */
+  estimates?: { anthropic?: number | null };
 }
 
 /** What goes to the server with a question (shaped on the device by src/geo/region.ts). */
