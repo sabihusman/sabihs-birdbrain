@@ -2080,3 +2080,29 @@ test('after the first model download the app asks once to keep storage, says why
   await expect(page.getByTestId('persist-explained')).toContainText('the browser may delete them on its own when the phone runs low on space');
   await context.close();
 });
+
+test('a reset or invite link survives a second drawing of its page (two quick address changes) (DECISIONS.md #86)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/auth\/invite-info$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ fromName: 'Alex', expiresAt: Date.now() + 86_400_000 }) }));
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toBeVisible();
+  // Both changes in one go queue two hashchange events; the second drawing reads the cleaned address.
+  await page.evaluate(() => {
+    location.hash = '#/signin';
+    location.hash = '#/reset-password?token=tok_twice_0123456789abcdef';
+  });
+  await expect(page.getByTestId('reset-page')).toBeVisible();
+  await expect(page.getByLabel('New password (8 or more characters)')).toBeVisible();
+  await expect(page.getByTestId('reset-no-token')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/reset-password$/);
+  await page.evaluate(() => {
+    location.hash = '#/signin';
+    location.hash = '#/signup?invite=inv_twice_0123456789abcdef';
+  });
+  await expect(page.getByTestId('signup-invite')).toContainText('Alex invited you.');
+  await expect(page).toHaveURL(/#\/signup$/);
+  await context.close();
+});
