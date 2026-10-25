@@ -2226,3 +2226,25 @@ test('a bird matched by sound but not usual here is counted, can be kept, and is
   await expect(page.getByTestId('species-list').locator(`[href*="${encodeURIComponent(kept)}"]`).first()).toBeVisible();
   await browser.close();
 });
+
+test('the header title never sits under the status pill, at 320 and 375 px, with the longest statuses', async ({ browser }) => {
+  for (const width of [320, 375]) {
+    const context = await browser.newContext({ viewport: { width, height: 700 }, serviceWorkers: 'block' });
+    const page = await context.newPage();
+    await page.addInitScript(returningVisitor);
+    await page.route(/\/models\/birdnet-v2\.4\/(?!labels\.json)/, (route) => route.abort());
+    await page.goto('./#/species');
+    for (const text of ['Model not loaded', 'Model ready · webgl', 'Something went wrong', 'Browser not supported', 'Loading model 100%']) {
+      const m = await page.evaluate((t) => {
+        const pill = document.querySelector('[data-testid="model-status"]') as HTMLElement;
+        (pill.querySelector('.model-pill-text') ?? pill).textContent = t;
+        const h1 = document.querySelector('.app-header h1') as HTMLElement;
+        return { titleRight: h1.getBoundingClientRect().right, pillLeft: pill.getBoundingClientRect().left, titleFits: h1.scrollWidth <= h1.clientWidth + 1, sw: document.documentElement.scrollWidth };
+      }, text);
+      expect(m.titleRight, `${text} at ${width}px`).toBeLessThanOrEqual(m.pillLeft + 0.5);
+      expect(m.titleFits, `title fits at ${width}px with "${text}"`).toBe(true);
+      expect(m.sw, `no horizontal scroll at ${width}px`).toBeLessThanOrEqual(width);
+    }
+    await context.close();
+  }
+});
