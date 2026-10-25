@@ -1,7 +1,9 @@
 import { decodeWav, toMono } from '../../audio/wav';
 import type { Species } from '../../model/labels';
 import { SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../../model/constants';
+import type { OcclusionResolution } from '../../app/settings';
 import { OCCLUSION_GRIDS } from '../../model/occlusion';
+import { chosenButtonText, planWhy, whyPlanNote } from '../why-plan';
 import { cursorSec, describeWindows, outlineSpans, seekSecAt, WINDOW_MEANING } from '../../species/clip-layout';
 import { clipWindows, whyWindowFor } from '../../species/clips';
 import { speciesColor } from '../../species/colors';
@@ -69,19 +71,27 @@ export function clipCard(ctx: ViewContext, species: Species, clip: ClipRecord): 
 
   const why = whyWindowFor(clip);
   const whyBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'clip-why-run' }, `Why this ID? (${why.known ? `window at ${fmtDuration(why.offsetSec)}` : 'clip centre'})`);
+  /** Coarse on a phone without WebGL, with the chosen level as a second button (DECISIONS.md #85). */
+  const currentPlan = () => planWhy(controller.settings.get().occlusionResolution, controller.inference.getStatus().backend, controller.inference.perPassMs);
+  const chosenBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'clip-why-run-chosen' }, '');
   const renderWhy = () => {
-    const grid = OCCLUSION_GRIDS[controller.settings.get().occlusionResolution];
-    whyBox.replaceChildren(whyBtn, el('div', { class: 'small muted' }, `Runs the occlusion analysis (${grid.timeSteps * grid.freqBands + 1} model passes) on the ${why.known ? 'most confident identifying window' : 'centre 3 s of the clip (windows not recorded)'} and shades the parts the confidence depends on. Nothing runs until you tap.`));
+    const plan = currentPlan();
+    chosenBtn.textContent = chosenButtonText(plan);
+    whyBox.replaceChildren(
+      el('div', { class: 'row' }, whyBtn, plan.reduced ? chosenBtn : null),
+      el('div', { class: 'small muted', 'data-testid': 'clip-why-note' }, `Runs the occlusion analysis (${whyPlanNote(plan)}) on the ${why.known ? 'most confident identifying window' : 'centre 3 s of the clip (windows not recorded)'} and shades the parts the confidence depends on. Nothing runs until you tap.`),
+    );
   };
-  whyBtn.addEventListener('click', () => void runWhy());
+  whyBtn.addEventListener('click', () => void runWhy(currentPlan().resolution));
+  chosenBtn.addEventListener('click', () => void runWhy(currentPlan().chosen));
 
-  const runWhy = async () => {
+  const runWhy = async (resolution: OcclusionResolution) => {
     if (!samples) return;
     if (controller.inference.getStatus().state !== 'ready') {
       ctx.notify({ kind: 'warn', text: 'The model is still loading.' });
       return;
     }
-    const grid = OCCLUSION_GRIDS[controller.settings.get().occlusionResolution];
+    const grid = OCCLUSION_GRIDS[resolution];
     const start = Math.round(why.offsetSec * SAMPLE_RATE);
     const window = new Float32Array(WINDOW_SAMPLES);
     window.set(samples.subarray(start, Math.min(samples.length, start + WINDOW_SAMPLES)));

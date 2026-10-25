@@ -1,7 +1,9 @@
 import { WINDOW_SAMPLES, WINDOW_SECONDS, SAMPLE_RATE } from '../../model/constants';
 import { MODEL_DOWNLOAD_ERROR } from '../../model/model-source';
 import type { Species } from '../../model/labels';
+import type { OcclusionResolution } from '../../app/settings';
 import { OCCLUSION_GRIDS } from '../../model/occlusion';
+import { chosenButtonText, estimateText, planWhy, RESOLUTION_NAME, whyPlanNote } from '../why-plan';
 import { selectDetections, type Score } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
 import { deleteDetectionsForRecording, deleteRecording, getRecording, listDetectionsForRecording, listRecordings, newId, putRecording, recordDetections } from '../../storage/db';
@@ -99,6 +101,8 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     const confidenceBox = el('div', { class: 'confidence-text', 'data-testid': 'confidence-text' }, el('p', { class: 'small muted' }, 'Not analysed yet.'));
     const detectionsBox = el('div', { class: 'stack', 'data-testid': 'recording-detections' });
     const whyBox = el('div', { class: 'stack' });
+    /** The detail level the Why buttons use; set per render from the phone's plan (DECISIONS.md #85). */
+    let whyResolution: OcclusionResolution = controller.settings.get().occlusionResolution;
     const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10, 256);
 
     // Sighting card title: the top bird's common name with its scientific name beneath;
@@ -207,7 +211,17 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         if (!cancelCurrent) setTopSpecies(null);
         return;
       }
-      whyBox.replaceChildren();
+      // Coarse on a phone without WebGL, with a switch to the chosen level (DECISIONS.md #85).
+      const plan = planWhy(controller.settings.get().occlusionResolution, controller.inference.getStatus().backend, controller.inference.perPassMs);
+      const whyNote = el('p', { class: 'small muted', 'data-testid': 'why-note' }, whyPlanNote(plan));
+      const useChosen = el('button', { class: 'btn small', type: 'button', 'data-testid': 'why-use-chosen' }, chosenButtonText(plan));
+      whyResolution = plan.resolution;
+      useChosen.addEventListener('click', () => {
+        whyResolution = plan.chosen;
+        whyNote.textContent = `${RESOLUTION_NAME[plan.chosen]} detail, ${plan.chosenPasses} model passes${estimateText(plan.chosenPasses, plan.perPassMs) ? `, ${estimateText(plan.chosenPasses, plan.perPassMs)}` : ''}. Tap a bird below.`;
+        useChosen.remove();
+      });
+      whyBox.replaceChildren(whyNote, plan.reduced ? useChosen : '');
       const ranked = Array.from(perSpecies.entries()).sort((a, b) => b[1].best - a[1].best);
       const top = controller.species[ranked[0][0]] ?? null;
       setTopSpecies(top);
@@ -346,7 +360,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     const runWhy = async (index: number, offsetSec: number, btn: HTMLButtonElement) => {
       if (controller.inference.getStatus().state !== 'ready') return;
       const sp = controller.species[index];
-      const grid = OCCLUSION_GRIDS[controller.settings.get().occlusionResolution];
+      const grid = OCCLUSION_GRIDS[whyResolution];
       const start = Math.round(offsetSec * SAMPLE_RATE);
       const window = new Float32Array(WINDOW_SAMPLES);
       window.set(audio.subarray(start, Math.min(audio.length, start + WINDOW_SAMPLES)));
