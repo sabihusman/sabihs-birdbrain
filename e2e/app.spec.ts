@@ -1948,7 +1948,8 @@ test('a browser that refuses to store Blobs (Safari private tab) still saves an 
         const open = indexedDB.open('sabihs-birdbrain');
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
-          const req = open.result.transaction('recordings').objectStore('recordings').getAll();
+          // Audio lives in its own store since DECISIONS.md #87.
+          const req = open.result.transaction('audio').objectStore('audio').getAll();
           req.onsuccess = () => {
             const r = req.result[0] as { blob?: Blob; audioBytes?: ArrayBuffer; audioType?: string };
             resolve({ hasBlob: r.blob instanceof Blob, bytes: r.audioBytes?.byteLength ?? 0, type: r.audioType ?? '' });

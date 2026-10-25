@@ -1,6 +1,6 @@
 import { searchSpecies, type Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
-import { listSightingsForSpecies, getRecording } from '../../storage/db';
+import { listSightingsForSpecies, getRecordingMeta } from '../../storage/db';
 import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
@@ -209,7 +209,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const recIds = Array.from(new Set(dets.map((d) => d.recordingId).filter((x): x is string => !!x)));
     const recList = el('div', { class: 'list' });
     for (const id of recIds.slice(0, 20)) {
-      const rec = await getRecording(id).catch(() => undefined);
+      const rec = await getRecordingMeta(id).catch(() => undefined);
       if (rec) recList.appendChild(el('a', { class: 'list-item', href: hrefFor({ name: 'recording', id }) }, el('div', { class: 'title' }, rec.name), el('div', { class: 'small muted' }, fmtDateTime(rec.createdAt))));
     }
     const mapBox = el('div', { class: 'map mini' });

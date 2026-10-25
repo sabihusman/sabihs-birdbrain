@@ -27,6 +27,9 @@ export interface RecordingRecord {
   analyzedAt: number | null;
 }
 
+/** A recording's details without its audio, as lists return them (DECISIONS.md #87). */
+export type RecordingMeta = Omit<RecordingRecord, 'blob'>;
+
 export type DetectionSource = 'live' | 'recording' | 'import';
 
 export interface DetectionRecord {
@@ -124,3 +127,5 @@ export interface ClipRecord {
   windows?: ClipWindow[];
 }
 
+/** A clip's details without its audio (DECISIONS.md #87). */
+export type ClipMeta = Omit<ClipRecord, 'blob'>;

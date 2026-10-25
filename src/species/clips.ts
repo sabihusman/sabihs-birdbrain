@@ -1,6 +1,6 @@
 import { encodeWav } from '../audio/wav';
 import { SAMPLE_RATE, WINDOW_SECONDS } from '../model/constants';
-import { getClip, putClip } from '../storage/db';
+import { getClipMeta, putClip } from '../storage/db';
 import type { ClipRecord, ClipWindow, DetectionSource } from '../storage/types';
 
 /** Longest clip kept per species, seconds. */
@@ -145,7 +145,7 @@ export function sliceClip(audio: Float32Array, range: Span, sampleRate = SAMPLE_
  */
 export async function saveClipIfBetter(candidate: ClipCandidate, audio: Float32Array): Promise<ClipRecord | null> {
   if (audio.length === 0) return null;
-  const existing = await getClip(candidate.scientific);
+  const existing = await getClipMeta(candidate.scientific);
   if (!shouldReplaceClip(existing, candidate)) return null;
   const clip: ClipRecord = {
     scientific: candidate.scientific,

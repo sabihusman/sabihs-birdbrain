@@ -75,6 +75,7 @@ describe('audio storage when Safari refuses Blobs (DECISIONS.md #82)', () => {
     expect(r.blob).toBeInstanceOf(Blob);
     expect(r.blob.size).toBe(7);
     expect((await getClip('Turdus migratorius'))!.blob.type).toBe('audio/wav');
-    expect((await listClips()).find((c) => c.scientific === 'Turdus migratorius')!.blob.size).toBe(7);
+    // Lists carry details only (DECISIONS.md #87); a row from before keeps its audio and still plays.
+    expect('blob' in (await listClips()).find((c) => c.scientific === 'Turdus migratorius')!).toBe(false);
   });
 });
