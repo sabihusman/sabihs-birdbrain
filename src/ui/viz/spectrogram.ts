@@ -5,6 +5,7 @@ import { fitCanvas } from '../dom';
 import { AdaptiveDbRange, columnDb, maxOf } from './autoscale';
 import { cssToken } from '../../theme/theme';
 import { INFERNO } from './colormap';
+import { whyOutlineEdges, whyShares, whyVeilAlpha } from './why-overlay';
 import { computeStaticSpectrogram, frameX, hzToY, SPEC_FFT, SPEC_MAX_BIN, SPEC_MAG_SCALE, timeToX, xToTime } from './static-spectrogram';
 
 export { SPEC_FFT, SPEC_MAG_SCALE, SPEC_MAX_HZ } from './static-spectrogram';
@@ -231,24 +232,41 @@ export class SpectrogramView {
     const xFor = (sec: number) => this.xFor(sec, w);
     const yForHz = (hz: number) => hzToY(hz, h);
 
-    // Heatmap (occlusion) in the species colour, alpha by importance.
+    // "Why this ID" (occlusion): darken each part by how little it mattered, then outline the parts that
+    // mattered most in the species colour on a dark edge, so it reads on any colour (why-overlay.ts).
     if (this.heatmap) {
       const hm = this.heatmap;
-      let max = 0;
-      for (let i = 0; i < hm.map.length; i++) max = Math.max(max, hm.map[i]);
-      const [r, g, b] = hm.color.rgb;
+      const shares = whyShares(hm.map);
+      const xAt = (t: number) => xFor(hm.startSec + ((hm.endSec - hm.startSec) * t) / hm.timeSteps);
+      const yAt = (f: number) => yForHz(hm.bandEdgesHz[f]);
       for (let t = 0; t < hm.timeSteps; t++) {
-        const x0 = xFor(hm.startSec + ((hm.endSec - hm.startSec) * t) / hm.timeSteps);
-        const x1 = xFor(hm.startSec + ((hm.endSec - hm.startSec) * (t + 1)) / hm.timeSteps);
+        const x0 = xAt(t);
+        const x1 = xAt(t + 1);
         for (let f = 0; f < hm.freqBands; f++) {
-          const v = hm.map[t * hm.freqBands + f];
-          if (max <= 0 || v <= 0) continue;
-          const a = Math.min(0.85, (v / max) * 0.85);
-          octx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
-          const y1 = yForHz(hm.bandEdgesHz[f]);
-          const y0 = yForHz(hm.bandEdgesHz[f + 1]);
+          const a = whyVeilAlpha(shares[t * hm.freqBands + f]);
+          if (a <= 0) continue;
+          octx.fillStyle = `rgba(0, 0, 4, ${a})`;
+          const y1 = yAt(f);
+          const y0 = yAt(f + 1);
           octx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
         }
+      }
+      const edges = whyOutlineEdges(shares, hm.timeSteps, hm.freqBands);
+      if (edges.length) {
+        octx.beginPath();
+        for (const e of edges) {
+          octx.moveTo(xAt(e.t0), yAt(e.f0));
+          octx.lineTo(xAt(e.t1), yAt(e.f1));
+        }
+        const [r, g, b] = hm.color.rgb;
+        octx.lineCap = 'square';
+        octx.strokeStyle = 'rgba(0, 0, 4, 0.9)';
+        octx.lineWidth = 5;
+        octx.stroke();
+        octx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
+        octx.lineWidth = 2.5;
+        octx.stroke();
+        octx.lineCap = 'butt';
       }
     }
 
@@ -265,8 +283,11 @@ export class SpectrogramView {
       const strip = 6;
       m.colors.forEach((c, i) => {
         const [r, g, b] = c.rgb;
-        octx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.18)`;
-        octx.fillRect(x0, 0, x1 - x0, h);
+        // No species wash while a "Why this ID" result is shown: it tinted the whole window in the colour the outline uses.
+        if (!this.heatmap) {
+          octx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.18)`;
+          octx.fillRect(x0, 0, x1 - x0, h);
+        }
         octx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.95)`;
         octx.fillRect(x0, i * strip, x1 - x0, strip - 1);
       });
