@@ -2607,6 +2607,26 @@ other open branches, so this may be renumbered at merge.)
   bird, no introduction after a reload, again on a new day, 320 px in both themes); the layouts
   test updated for the hidden button.
 
+## 84. Ask once to keep storage, right after the first model download, and say why
+
+- **Source:** audit item 1b (Sabih chose it, and asked for the reasons and benefits to be explained).
+- **Why:** the 78 MB model (Cache API) and the sightings, recordings and clips (IndexedDB) live only
+  on the phone. In "best-effort" storage a browser may evict a site's data under storage pressure,
+  and Safari may also clear a site not used for a while; persistent storage exempts it (MDN,
+  "Storage quotas and eviction criteria"; WebKit, "Updates to Storage Policy"). Before this, only a
+  manual "Request persistent storage" button in Settings asked.
+- **When:** once, right after the first successful model download (not from the cache), never on
+  page load and never again after an answer (web.dev, "Persistent storage"). The flag is
+  `birdbrain.persist-asked.v1`. Storage that is already persistent is recorded without asking.
+- **Words:** just before asking, a notice says "Asking your browser to keep the bird model and your
+  sightings on this phone, so they are not deleted when space runs low and the 78 MB download is not
+  needed again." Chrome and Safari decide without a prompt; Firefox shows one, so the notice explains
+  it first. Settings › Storage explains what the browser may delete without it and what it changes,
+  and its status line now reads "on" or "off" in those terms.
+- **Tests:** `tests/persist-storage.test.ts` (asks once, says why first, never again after a refusal,
+  already-persistent, unsupported); an e2e test of the first download, no second request after a
+  reload, and the Settings text.
+
 ## 85. "Why this ID" uses Coarse on phones without WebGL, with the chosen level one tap away
 
 - **Source:** audit item 2B (Sabih chose it).
