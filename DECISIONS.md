@@ -2558,6 +2558,29 @@ other open branches, so this may be renumbered at merge.)
 - **Tests:** `tests/first-visit.test.ts`; an e2e test for a stored session and for signing in from
   a first visit (both end on Listen in Focus with no model request). It fails without the fix.
 
+## 82. Audio is stored as bytes where Safari refuses Blobs; a failed save is not "Analysis failed"
+
+- **Problem (Sabih, iPhone, Safari private tab):** while listening, "Analysis failed: Error
+  preparing Blob/File data to be stored in object store" and "Could not save the species clip:
+  …". That is WebKit refusing to put a Blob into IndexedDB in a private tab (WebKit bug 268037,
+  marked fixed, and earlier ones such as 188438 and 198278). The analysis had worked; saving
+  the auto-saved clip threw inside the same `try`, so the notice blamed the analysis and the
+  window's detections were not saved either.
+- **Fallback:** `src/storage/blob-fallback.ts`. `putRecording` and `putClip` try the Blob first;
+  if the store refuses it (a Blob/File message or `DataCloneError`, never a full disk), the same
+  row is stored with `audioBytes` (an ArrayBuffer) and `audioType` instead. Every read
+  (`getRecording`, `listRecordings`, `getClip`, `listClips`) turns those bytes back into a Blob,
+  so nothing else changes. Browsers that store Blobs keep doing so, because IndexedDB can keep
+  a Blob on disk while bytes are read into memory with the row.
+- **Separate errors:** the live path reports an inference failure as "Analysis failed" and a
+  storage failure as "Could not save sightings on this phone…" (or "…the audio clip…"), once per
+  listening session, with a note that a private tab can cause it. A clip that cannot be saved no
+  longer stops the sighting from being saved.
+- **Not verified on Safari itself:** Chromium does not have the bug, so the e2e test makes
+  `IDBObjectStore.put` throw Safari's error for any value holding a Blob; with the fallback an
+  imported recording is saved as bytes, plays after a reload and re-analyses, and without the
+  fallback the import fails. A private tab still keeps nothing after it is closed.
+
 ## 83. Focus: controls pinned above the tab bar, earlier birds by tap, the big Start page once per session
 
 - **Problem (Sabih, iPhone):** in Focus the listening card sat at the top, out of reach of a thumb;
