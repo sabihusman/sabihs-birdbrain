@@ -2842,6 +2842,16 @@ other open branches, so this may be renumbered at merge.)
 - **Effect:** live detections between 60 % and 69 % are no longer shown for new users; they appear under
   "sounds below your minimum". The sample clip (Lesser Redpoll ~95 %, Common Redpoll ~80 %) is unaffected.
 
+## 96. Auto-saved clips: a new one only when more confident
+
+- **Why (Sabih):** a common grackle calling for a few minutes filled Recordings with a "Detection window"
+  every 30 s at 74–84 %.
+- **Now (`src/app/autoclip.ts`):** a bird's first detection at or above the auto-save minimum is saved as
+  before; after that, a new clip of the same bird is saved only when it is more confident than its last clip
+  this session, and at least 30 s after it (overlapping windows of one call would otherwise each count as
+  better). The memory is per listening session. Sightings and detections are recorded exactly as before; only
+  the saved audio is thinner. Settings › Recording says so.
+
 ## 97. Recordings: one card per bird
 
 - **Why (Sabih):** Recordings listed every auto-saved 3 s clip as its own card ("Detection window: Common
