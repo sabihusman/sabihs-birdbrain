@@ -195,7 +195,7 @@ export function settingsView(ctx: ViewContext): View {
           ['medium', 'Medium (8×6 grid, 49 runs)'],
           ['fine', 'Fine (12×8 grid, 97 runs)'],
         ],
-        'Finer uses more CPU and battery; Coarse uses less.',
+        'Finer uses more CPU and battery; Coarse uses less. On a phone without graphics acceleration (WebAssembly or plain JavaScript), “Why this ID” starts with Coarse and offers this level as a second button with its time.',
       ),
     ),
     el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, el('p', { class: 'small muted', 'data-testid': 'persist-explained' }, PERSIST_EXPLAINED), el('div', { class: 'row' }, persistBtn)),

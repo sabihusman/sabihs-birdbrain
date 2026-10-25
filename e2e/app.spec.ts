@@ -677,6 +677,17 @@ test('WebAssembly backend fallback loads the model and runs inference', async ({
   await expect(status).toContainText('Model ready · wasm', { timeout: 240_000 });
   await page.getByTestId('demo').click();
   await expect(page.getByTestId('results')).toContainText('Redpoll', { timeout: 180_000 });
+  // "Why this ID" on this backend: Coarse by default, with an estimate and the chosen level as a choice (DECISIONS.md #85).
+  await page.goto('./#/recordings');
+  await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
+  await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
+  await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 180_000 });
+  const note = page.getByTestId('why-note');
+  await expect(note).toContainText(/^Coarse detail, 25 model passes, (a few seconds|about \d+ (s|min))\. This phone runs the model without graphics acceleration/);
+  await expect(page.getByTestId('why-use-chosen')).toHaveText(/^Run at Medium \(49 passes(, (a few seconds|about \d+ (s|min)))?\)$/);
+  await page.getByRole('button', { name: /^Why Lesser Redpoll\?$/ }).click();
+  await expect(page.getByText(/Model pass \d+ of 25…/)).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Cancel' }).click();
 });
 
 test('imports a recording, analyses it and explains an identification', async ({ page }) => {
@@ -2079,5 +2090,31 @@ test('after the first model download the app asks once to keep storage, says why
   // Settings says why it matters.
   await page.goto('./#/settings');
   await expect(page.getByTestId('persist-explained')).toContainText('the browser may delete them on its own when the phone runs low on space');
+  await context.close();
+});
+
+test('a reset or invite link survives a second drawing of its page (two quick address changes) (DECISIONS.md #86)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/auth\/invite-info$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ fromName: 'Alex', expiresAt: Date.now() + 86_400_000 }) }));
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toBeVisible();
+  // Both changes in one go queue two hashchange events; the second drawing reads the cleaned address.
+  await page.evaluate(() => {
+    location.hash = '#/signin';
+    location.hash = '#/reset-password?token=tok_twice_0123456789abcdef';
+  });
+  await expect(page.getByTestId('reset-page')).toBeVisible();
+  await expect(page.getByLabel('New password (8 or more characters)')).toBeVisible();
+  await expect(page.getByTestId('reset-no-token')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/reset-password$/);
+  await page.evaluate(() => {
+    location.hash = '#/signin';
+    location.hash = '#/signup?invite=inv_twice_0123456789abcdef';
+  });
+  await expect(page.getByTestId('signup-invite')).toContainText('Alex invited you.');
+  await expect(page).toHaveURL(/#\/signup$/);
   await context.close();
 });

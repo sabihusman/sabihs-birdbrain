@@ -67,6 +67,14 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
     return this.status;
   }
 
+  /** Duration of the latest single-window pass on this phone, for time estimates (DECISIONS.md #85). */
+  lastPassMs: number | null = null;
+
+  /** Best guess of one pass: the latest analysed window, else the warm-up pass after loading. */
+  get perPassMs(): number | null {
+    return this.lastPassMs ?? (this.status.warmupMs > 0 ? this.status.warmupMs : null);
+  }
+
   get busy(): boolean {
     return this.analyzing;
   }
@@ -109,6 +117,7 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
         return;
       case 'result': {
         this.analyzing = false;
+        this.lastPassMs = msg.inferMs;
         const p = this.pending.get(msg.id);
         this.pending.delete(msg.id);
         p?.resolve({ scores: msg.scores, inferMs: msg.inferMs, geoApplied: msg.geoApplied } satisfies AnalyzeResult);
