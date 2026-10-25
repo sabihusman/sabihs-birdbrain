@@ -13,6 +13,7 @@ import { resultCard } from '../components/result-card';
 import { birdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
 import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
+import { focusIntroDone, markFocusIntroDone } from '../focus-intro';
 import { el, fmtDuration, pct } from '../dom';
 import { hrefFor } from '../router';
 import { describeModelProgress } from '../model-progress';
@@ -159,10 +160,11 @@ export function listenView(ctx: ViewContext): View {
   const dockTimer = el('span', { class: 'dock-time' }, ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00'));
   const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn);
   const focusLatest = el('div', { class: 'focus-latest', 'data-testid': 'focus-latest' });
-  const moreBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'more-birds', 'aria-expanded': 'false' }, '▲ 0 more birds · swipe up or tap');
-  // In Focus mode the result list lives in the sheet; elsewhere it stays in the results block (a node has one parent).
-  const moreSheet = el('div', { class: 'more-sheet', 'data-testid': 'more-sheet', role: 'dialog', 'aria-label': 'Earlier birds', hidden: true }, el('div', { class: 'row between' }, el('h2', null, 'Earlier birds'), el('button', { class: 'btn small', type: 'button', 'data-testid': 'more-close' }, 'Close')));
-  const focusBlock = el('div', { class: 'focus-block' }, focusLatest, moreBtn, moreSheet);
+  // Earlier birds open right under the highlighted one with a tap (DECISIONS.md #83; the swipe-up sheet is gone).
+  const moreList = el('div', { class: 'focus-more', id: 'focus-more', 'data-testid': 'focus-more', hidden: true });
+  const moreBtn = el('button', { class: 'btn block more-birds', type: 'button', 'data-testid': 'more-birds', 'aria-expanded': 'false', 'aria-controls': 'focus-more' }, '');
+  // In Focus mode the result list lives under the button; elsewhere it stays in the results block (a node has one parent).
+  const focusBlock = el('div', { class: 'focus-block' }, focusLatest, moreBtn, moreList);
   /** BirdNET is credited where it identifies (DECISIONS.md #66): the last line in flow in every layout. */
   const credit = birdnetCredit();
   const root = el('div', { class: 'listen' });
@@ -194,11 +196,15 @@ export function listenView(ctx: ViewContext): View {
     panel.remove();
     resultsList.remove();
     recentBody.remove();
+    dock.remove();
+    // Focus moves the conditions note out of the panel; every other layout keeps it above Stop and Record.
+    if (conditionsLine.parentElement !== panel) panel.insertBefore(conditionsLine, panel.lastElementChild);
     if (next === 'focus') {
-      focusBlock.prepend(panel);
-      moreSheet.appendChild(resultsList);
+      // The conditions note reads above the bird; the panel with Stop and Record is pinned above the tab bar.
+      focusBlock.prepend(conditionsLine);
+      moreList.appendChild(resultsList);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, focusBlock, credit);
+      root.replaceChildren(readyBlock, focusBlock, credit, panel, dock);
     } else if (next === 'dock') {
       resultsBlock.prepend(resultsList);
       recentInline.appendChild(recentBody);
@@ -224,6 +230,22 @@ export function listenView(ctx: ViewContext): View {
 
   const setHidden = (node: HTMLElement, hidden: boolean) => {
     node.style.display = hidden ? 'none' : '';
+  };
+
+  /** How many earlier birds sit under the highlighted one, and whether that list is open. */
+  let earlierCount = 0;
+  let earlierOpen = false;
+  const renderMoreBtn = () => {
+    moreBtn.textContent = earlierOpen ? 'Hide earlier birds' : `Earlier birds (${earlierCount})`;
+    moreBtn.setAttribute('aria-expanded', String(earlierOpen));
+    setHidden(moreBtn, earlierCount === 0);
+    moreList.hidden = !earlierOpen || earlierCount === 0;
+  };
+  /** The highlighted spot before any bird: what to do next, in plain words. */
+  const renderFocusLatestEmpty = (listening: boolean) => {
+    if (hits.length > 0) return;
+    const text = listening ? 'Listening… the latest bird appears here.' : 'No birds yet. Tap Start listening below.';
+    if (focusLatest.textContent !== text) focusLatest.replaceChildren(el('p', { class: 'muted focus-empty' }, text));
   };
 
   const renderState = () => {
@@ -267,8 +289,22 @@ export function listenView(ctx: ViewContext): View {
     setHidden(dock, layout !== 'dock');
     setHidden(focusBlock, layout !== 'focus' || !listening);
     if (layout === 'focus') {
-      setHidden(lastBirdLine, listening || lastBirdLine.textContent === '');
-      setHidden(readyBlock, listening);
+      // The big Start page is an introduction, once per session and day (DECISIONS.md #83). After
+      // it, the bird stays on screen and the controls sit above the tab bar, listening or not.
+      const intro = !listening && !focusIntroDone();
+      root.classList.toggle('focus-intro', intro);
+      // States that need words (loading, mic blocked, an error) still show the state block.
+      setHidden(readyBlock, listening || (!intro && (canStart || plainReady)));
+      setHidden(startBtn, !intro || listening || !canStart);
+      setHidden(focusBlock, intro);
+      setHidden(lastBirdLine, !intro || lastBirdLine.textContent === '');
+      setHidden(dock, intro || listening);
+      setHidden(dockStartBtn, listening || !canStart);
+      setHidden(dockStopBtn, true);
+      setHidden(dockTimer, true);
+      (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.status === 'idle' ? 'Ready' : st.pill;
+      dock.dataset.status = st.status;
+      if (!intro) renderFocusLatestEmpty(listening);
     }
     if (layout === 'dock') {
       setHidden(recentInline, listening);
@@ -318,10 +354,9 @@ export function listenView(ctx: ViewContext): View {
           const card = cardFor(latest, true);
           disposers.push(card.dispose);
           focusLatest.appendChild(card.el);
-        } else focusLatest.appendChild(el('p', { class: 'muted' }, 'Listening… the latest bird appears here.'));
-        const n = Math.max(0, items.length - 1);
-        moreBtn.textContent = `▲ ${n} more bird${n === 1 ? '' : 's'} · swipe up or tap`;
-        moreBtn.disabled = n === 0;
+        } else renderFocusLatestEmpty(controller.listening);
+        earlierCount = Math.max(0, items.length - 1);
+        renderMoreBtn();
       }
       if (showLow) {
         for (const x of lastResult.scores) {
@@ -404,6 +439,7 @@ export function listenView(ctx: ViewContext): View {
       spectrogram.reset();
       timeline.reset();
       status.textContent = controller.inference.getStatus().state === 'ready' ? 'Starting microphone…' : 'Loading the bird model, then starting the microphone…';
+      markFocusIntroDone(); // the Focus introduction has done its job for this session (DECISIONS.md #83)
       await controller.startListening();
       renderConditions(null);
       status.textContent = `Listening at ${controller.engine.contextSampleRate ?? '?'} Hz${controller.engine.contextSampleRate !== 48000 ? ' (resampling to 48 kHz)' : ''}`;
@@ -462,26 +498,9 @@ export function listenView(ctx: ViewContext): View {
     showLow = !showLow;
     renderResults();
   });
-  const openMore = (open: boolean) => {
-    moreSheet.hidden = !open;
-    moreBtn.setAttribute('aria-expanded', String(open));
-    if (open) (moreSheet.querySelector('[data-testid="more-close"]') as HTMLElement | null)?.focus();
-    else moreBtn.focus();
-  };
-  moreBtn.addEventListener('click', () => openMore(true));
-  (moreSheet.querySelector('[data-testid="more-close"]') as HTMLElement).addEventListener('click', () => openMore(false));
-  moreSheet.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') openMore(false);
-  });
-  // Swipe up on the latest card opens the sheet (touch only; the button covers everyone else).
-  let touchY: number | null = null;
-  focusBlock.addEventListener('touchstart', (e) => {
-    touchY = e.touches[0]?.clientY ?? null;
-  });
-  focusBlock.addEventListener('touchend', (e) => {
-    const y = e.changedTouches[0]?.clientY ?? null;
-    if (touchY != null && y != null && touchY - y > 60 && !moreBtn.disabled) openMore(true);
-    touchY = null;
+  moreBtn.addEventListener('click', () => {
+    earlierOpen = !earlierOpen;
+    renderMoreBtn();
   });
 
   // ---- subscriptions ---------------------------------------------------------
@@ -546,8 +565,16 @@ export function listenView(ctx: ViewContext): View {
     });
   }
 
+  // Focus pins the panel or the start bar above the tab bar; keep that much room at the end of the page.
+  const updateBarSpace = () => root.style.setProperty('--focus-bar-h', `${Math.max(panel.offsetHeight, dock.offsetHeight)}px`);
+  const barObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateBarSpace);
+  barObserver?.observe(panel);
+  barObserver?.observe(dock);
+  subs.push(() => barObserver?.disconnect());
+
   // Initial state
   {
+    renderMoreBtn();
     renderModelProgress(controller.inference.getStatus());
     renderChips();
     renderConditions(controller.getConditions());
