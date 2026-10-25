@@ -2809,3 +2809,24 @@ other open branches, so this may be renumbered at merge.)
   and imports were never location-filtered and are unchanged.
 - **Tests:** `tests/sound-only.test.ts`, the CSV test, and an e2e that plays the sample redpoll as the
   microphone with the location set to Sydney: counted, kept, marked, ticked as spotted.
+
+## 94. Welcome screen from the mockup: photo, three lines, Sign in and Create account
+
+- **Input:** a welcome-screen mockup reviewed with Sabih. Its premise ("no welcome on the live site") was
+  wrong: a fresh browser on 2026-10-25 showed the welcome card and downloaded nothing. What was new was
+  decided item by item.
+- **Taken:** two buttons, **Sign in** and **Create account**, straight to `#/signin` / `#/signup`
+  (was one button to Settings › Account); a bundled photo (song thrush, Wikimedia Commons, Dion Art,
+  CC BY-SA 4.0, credited and linked under it; 25 KB, precached, so nothing is fetched before the visitor
+  chooses); the mockup's title, pitch, three icon lines and small print, with the 78 MB download kept in
+  the privacy line.
+- **Not taken:** "Keep me signed in" (sessions stay as they are); web fonts (system fonts, no Google
+  request); the mockup's photo file (no source or licence could be confirmed for it, so the Commons lead
+  image of the song thrush article is used instead).
+- **Kept on purpose:** the button says **Start identifying**, not the mockup's "Start listening": it
+  downloads the model and opens Listen, and listening starts with the next tap there (iOS only lets audio
+  start from a tap).
+- **Removed:** the "Ready to work offline." notice. On a first visit it appeared before the bird model was
+  on the phone; the status pill says when the model is ready.
+- **Small phones:** the photo shrinks with the screen height (88–148 px); at 320 × 640 the buttons are
+  still one short scroll down.

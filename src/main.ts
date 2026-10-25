@@ -37,7 +37,7 @@ async function boot(): Promise<void> {
   });
   mountApp(document.getElementById('app')!, controller, api);
   void api.refresh();
-  registerPwa({ notify: (notice) => controller.emit('notice', notice), onUpdateAvailable: (apply) => showUpdateBanner(apply) });
+  registerPwa({ onUpdateAvailable: (apply) => showUpdateBanner(apply) });
   void controller.init();
 }
 

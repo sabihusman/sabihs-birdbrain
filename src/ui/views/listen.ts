@@ -180,7 +180,10 @@ export function listenView(ctx: ViewContext): View {
   const welcome = welcomeCard({
     onStart: () => controller.startIdentifying(),
     onSignIn: () => {
-      location.hash = hrefFor({ name: 'settings', section: 'account' });
+      location.hash = hrefFor({ name: 'signin' });
+    },
+    onSignUp: () => {
+      location.hash = hrefFor({ name: 'signup' });
     },
   });
 

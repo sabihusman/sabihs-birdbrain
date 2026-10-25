@@ -54,7 +54,7 @@ export default defineConfig({
         // App shell: code, styles, icons, the AudioWorklet module, WASM backend and the label list
         // (needed for the offline species browser). Model shards are cached at runtime on first
         // load instead of being precached, so the first run does not download them twice.
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,wasm}', `models/${MODEL_VERSION}/labels.json`],
+        globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,webmanifest,wasm}', `models/${MODEL_VERSION}/labels.json`],
         // The weights are not in dist/ any more (they come from the API host); samples and
         // any stray model file are cached at runtime instead of being precached.
         // og-image.png is only fetched by link-preview crawlers, never by the app, so it stays out of the precache.
