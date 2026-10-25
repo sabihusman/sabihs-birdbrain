@@ -39,6 +39,57 @@ export async function requestPersistentStorage(): Promise<boolean | null> {
   }
 }
 
+/** localStorage key: the one automatic request was made (DECISIONS.md #84). */
+export const PERSIST_ASKED_KEY = 'birdbrain.persist-asked.v1';
+
+/** Shown when the app asks, so a browser that prompts (Firefox) is not a surprise. */
+export const PERSIST_REASON = 'Asking your browser to keep the bird model and your sightings on this phone, so they are not deleted when space runs low and the 78 MB download is not needed again.';
+
+/** The Settings explanation: why the app asks and what it changes. */
+export const PERSIST_EXPLAINED =
+  'Why this matters: the bird model (about 78 MB) and your sightings, recordings and clips are kept on this phone. Without persistent storage, the browser may delete them on its own when the phone runs low on space, and Safari may also clear a site that has not been opened for a while. You would then lose sightings that were never exported, and the model would download again. With it, the browser keeps them until you delete them. Chrome and Safari decide by themselves without asking you; Firefox shows a prompt. Nothing leaves your phone either way.';
+
+export type PersistOutcome = 'granted' | 'denied' | 'already' | 'asked-before' | 'unsupported';
+
+type StorageManagerLike = Pick<StorageManager, 'persist' | 'persisted'>;
+
+/**
+ * Ask once, after the first model download (DECISIONS.md #84): web.dev advises against asking on
+ * page load or asking again after a refusal. Already-persistent storage is only recorded. `onAsk`
+ * runs just before the browser decides (and, in Firefox, prompts), to say why.
+ */
+export async function askToKeepStorageOnce(
+  storage: Storage | null,
+  manager: StorageManagerLike | undefined = typeof navigator === 'undefined' ? undefined : navigator.storage,
+  onAsk: () => void = () => undefined,
+): Promise<PersistOutcome> {
+  try {
+    if (storage?.getItem(PERSIST_ASKED_KEY)) return 'asked-before';
+  } catch {
+    return 'unsupported';
+  }
+  if (!manager?.persist) return 'unsupported';
+  const remember = () => {
+    try {
+      storage?.setItem(PERSIST_ASKED_KEY, String(Date.now()));
+    } catch {
+      /* without storage it may ask again on a later download, which is harmless */
+    }
+  };
+  try {
+    if (manager.persisted && (await manager.persisted())) {
+      remember();
+      return 'already';
+    }
+    onAsk();
+    const granted = await manager.persist();
+    remember();
+    return granted ? 'granted' : 'denied';
+  } catch {
+    return 'unsupported';
+  }
+}
+
 export function formatBytes(bytes: number | null): string {
   if (bytes == null) return 'unknown';
   if (bytes < 1024) return `${bytes} B`;

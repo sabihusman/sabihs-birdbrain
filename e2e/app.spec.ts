@@ -2055,3 +2055,29 @@ test('Focus: the big Start page once per session and day; Stop/Record and Start 
   await page.getByTestId('stop').click();
   await context.close();
 });
+
+test('after the first model download the app asks once to keep storage, says why, and Settings explains it (DECISIONS.md #84)', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  const page = await context.newPage();
+  // Count the requests and let the test decide the answer; the browser's own choice is not under test.
+  await page.addInitScript(() => {
+    const w = window as unknown as { persistCalls: number };
+    w.persistCalls = 0;
+    Object.defineProperty(navigator.storage, 'persisted', { value: async () => false });
+    Object.defineProperty(navigator.storage, 'persist', { value: async () => ((w.persistCalls += 1), true) });
+  });
+  await page.goto('./#/listen');
+  await page.getByTestId('welcome-start').click();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.getByText('Asking your browser to keep the bird model and your sightings on this phone')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { persistCalls: number }).persistCalls)).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('birdbrain.persist-asked.v1'))).not.toBeNull();
+  // A later load does not ask again.
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  expect(await page.evaluate(() => (window as unknown as { persistCalls: number }).persistCalls)).toBe(0);
+  // Settings says why it matters.
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('persist-explained')).toContainText('the browser may delete them on its own when the phone runs low on space');
+  await context.close();
+});
