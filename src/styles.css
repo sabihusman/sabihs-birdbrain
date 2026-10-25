@@ -299,6 +299,11 @@ textarea { color: inherit; }
 .result-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .result-name { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-semibold); font-size: var(--text-md); overflow-wrap: anywhere; }
 .result-sci { font-style: italic; color: var(--muted); font-size: var(--text-xs); }
+/* A sighting kept against the location filter (DECISIONS.md #93). */
+.sound-only-note { display: block; color: var(--muted); font-size: var(--text-xs); margin-top: 2px; }
+.not-usual-list { display: flex; flex-direction: column; gap: 6px; }
+.not-usual-row { display: flex; flex-direction: column; gap: 4px; }
+.not-usual-row .btn { align-self: flex-start; }
 .result-meta { font-size: var(--text-sm); color: var(--muted); }
 .result-conf { color: var(--text); font-weight: var(--weight-semibold); }
 .result-card.large { flex-direction: column; align-items: stretch; padding: var(--space-3); }

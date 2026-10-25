@@ -52,6 +52,8 @@ export interface DetectionRecord {
   sessionId: string;
   /** The sighting this window belongs to (absent on rows written before DB version 3; filled by the migration). */
   sightingId?: string;
+  /** Kept by the user although the location model does not expect the bird here (DECISIONS.md #93). */
+  soundOnly?: boolean;
 }
 
 /**
@@ -79,6 +81,8 @@ export interface SightingRecord {
   source: DetectionSource;
   sessionId: string;
   peakDetectionId: string;
+  /** At least one of its windows was kept against the location filter: verified by sound only (DECISIONS.md #93). */
+  soundOnly?: boolean;
 }
 
 export interface WikiCacheEntry {

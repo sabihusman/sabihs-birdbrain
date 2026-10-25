@@ -42,6 +42,7 @@ export function sightingFromDetection(d: DetectionRecord, id = newId()): Sightin
     source: d.source,
     sessionId: d.sessionId,
     peakDetectionId: d.id,
+    ...(d.soundOnly ? { soundOnly: true } : {}),
   };
 }
 
@@ -50,6 +51,7 @@ export function applyDetection(s: SightingRecord, d: DetectionRecord): SightingR
   s.firstTime = Math.min(s.firstTime, d.time);
   s.lastTime = Math.max(s.lastTime, d.time);
   s.hits += 1;
+  if (d.soundOnly) s.soundOnly = true;
   const located = d.lat != null && d.lon != null;
   if (d.confidence > s.peakConfidence) {
     s.peakConfidence = d.confidence;

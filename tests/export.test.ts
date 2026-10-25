@@ -55,8 +55,14 @@ describe('CSV export', () => {
     const lines = csv.trimEnd().split('\r\n');
     expect(lines[0]).toBe(SIGHTING_CSV_COLUMNS.join(','));
     expect(lines.length).toBe(3);
-    expect(lines[1]).toBe("a,2026-05-01T06:30:00.000Z,2026-05-01T06:30:45.000Z,Astur cooperii,Cooper's Hawk,0.8765,4,42.44,-76.5,12,rec1,3,live");
-    expect(lines[2]).toBe('b,2026-05-01T06:31:00.000Z,2026-05-01T06:31:00.000Z,"Weird, ""quoted""","Name, with comma",0.5000,1,,,,,,import');
+    expect(lines[1]).toBe("a,2026-05-01T06:30:00.000Z,2026-05-01T06:30:45.000Z,Astur cooperii,Cooper's Hawk,0.8765,4,42.44,-76.5,12,rec1,3,live,");
+    expect(lines[2]).toBe('b,2026-05-01T06:31:00.000Z,2026-05-01T06:31:00.000Z,"Weird, ""quoted""","Name, with comma",0.5000,1,,,,,,import,');
+  });
+
+  it('marks a sighting kept against the location filter as "sound only" (DECISIONS.md #93)', () => {
+    expect(SIGHTING_CSV_COLUMNS.at(-1)).toBe('location_check');
+    const lines = sightingsToCsv([{ ...sightings[0], soundOnly: true }]).trimEnd().split('\r\n');
+    expect(lines[1].endsWith(',live,sound only')).toBe(true);
   });
 });
 

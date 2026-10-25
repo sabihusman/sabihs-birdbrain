@@ -2786,3 +2786,26 @@ other open branches, so this may be renumbered at merge.)
 - **Kept on purpose:** the species name on the Why this ID result (more than one bird can be explained
   on one recording).
 - **Rule for new text:** docs/DESIGN_GUIDE.md §7 "Length".
+
+## 93. Birds hidden by the location filter are counted, and can be kept as "sound only" sightings
+
+- **Problem (found answering Sabih's question about the range threshold):** while listening live, a bird the
+  sound model matched above the confidence minimum but the location model did not expect here (score below
+  the species range threshold for this week) vanished: not in the results, not in Recent sightings, not
+  saved, and not in the "below your minimum" list either (that list only holds sounds under the minimum).
+- **Now (Sabih chose this mix):** Listen counts such birds for the session behind one line, "N birds not
+  usual here · show" (under the results; in Focus under the earlier birds). Each shows its best confidence,
+  "Not usual here (location filter)" and a **Keep this sighting** button. The main list is unchanged and the
+  defaults (current week on, threshold 0.03) stay.
+- **Keep:** saves the bird's best window as a normal sighting (time, confidence, position at that window;
+  no audio clip), `soundOnly: true` on the detection and its sighting, and treats the species as a sighting
+  for the rest of the session (later windows are saved too, also marked). Kept sightings show "Verified by
+  sound only, not location: this bird isn’t usually here." on Listen cards, Recent sightings, the sighting
+  history and the ID card; "· sound only" on the map card; `location_check = sound only` in CSV and GeoJSON.
+- **Not kept:** nothing is saved and nothing reaches Recent sightings (Sabih: a hidden bird is not a
+  sighting unless confirmed).
+- **Code:** `src/species/sound-only.ts` (wording), `AppController.getNotUsual()` / `keepNotUsual()` and the
+  `not-usual` event, `soundOnly` on `DetectionRecord` / `SightingRecord` (no schema change). Saved recordings
+  and imports were never location-filtered and are unchanged.
+- **Tests:** `tests/sound-only.test.ts`, the CSV test, and an e2e that plays the sample redpoll as the
+  microphone with the location set to Sydney: counted, kept, marked, ticked as spotted.

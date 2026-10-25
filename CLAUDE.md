@@ -198,6 +198,9 @@ See DECISIONS.md for the full list. The ones that bite:
   ~1-3 s per window on recent iPhones is the expectation, unverified).
 - Windows that arrive while inference is busy are skipped (counted in the UI),
   so slow devices degrade gracefully.
+- Live listening applies the location filter; a bird matched above the minimum but
+  "not usual here" is counted on Listen and can be kept as a sound-only sighting
+  (`src/species/sound-only.ts`, `keepNotUsual`, DECISIONS.md #93).
 - iOS stops web audio in the background and may clear site storage; the app
   keeps the screen awake with the Wake Lock API while listening and says so.
 - The occlusion "Why this ID" is 25–97 model passes; keep it on saved

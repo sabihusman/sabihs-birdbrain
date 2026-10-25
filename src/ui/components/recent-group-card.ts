@@ -1,3 +1,4 @@
+import { SOUND_ONLY_NOTE } from '../../species/sound-only';
 import type { Species } from '../../model/labels';
 import { isMember } from '../../app/access';
 import { speciesColor } from '../../species/colors';
@@ -54,6 +55,7 @@ export function recentGroupCard(ctx: ViewContext, g: SpeciesGroup<Species>, opts
         el('span', { class: 'muted', 'aria-hidden': 'true' }, ' · '),
         el('span', { class: 'recent-last tabular' }, el('span', { class: 'muted' }, 'last '), lastLabel),
       ),
+      g.soundOnly ? el('span', { class: 'sound-only-note', 'data-testid': 'sound-only-note' }, SOUND_ONLY_NOTE) : null,
     ),
     el('span', { class: 'recent-chevron', 'aria-hidden': 'true' }, '›'),
   );

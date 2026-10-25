@@ -1,3 +1,4 @@
+import { SOUND_ONLY_NOTE } from '../../species/sound-only';
 import type { Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
 import { heardLabel } from '../../species/recent';
@@ -23,6 +24,8 @@ export interface ResultCardOptions {
    * one and is labelled so, and "Heard N times" is shown.
    */
   heardTimes?: number;
+  /** Kept against the location filter: shows the sound-only note (DECISIONS.md #93). */
+  soundOnly?: boolean;
 }
 
 /**
@@ -56,6 +59,7 @@ export function resultCard(ctx: ViewContext, species: Species, opts: ResultCardO
     el('span', { class: 'result-name' }, el('span', { class: 'swatch', style: `background:${color.css}`, 'aria-hidden': 'true' }), el('span', { class: 'result-common' }, species.common)),
     el('span', { class: 'result-sci' }, species.scientific),
     el('span', { class: 'result-meta' }, conf, heard ? ' · ' : null, heard, ' · ', when, opts.conditions ? el('span', { class: 'muted' }, ` · ${opts.conditions}`) : null),
+    opts.soundOnly ? el('span', { class: 'sound-only-note', 'data-testid': 'sound-only-note' }, SOUND_ONLY_NOTE) : null,
   );
   const link = el('a', { class: `result-card${opts.large ? ' large' : ''}`, href: speciesHref(species.scientific), 'data-testid': 'result-card' }, thumb, img, body);
   const root = el('div', { class: 'result-wrap' }, link);

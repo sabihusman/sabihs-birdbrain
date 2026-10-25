@@ -1,3 +1,4 @@
+import { SOUND_ONLY_NOTE } from '../../species/sound-only';
 import type { Species } from '../../model/labels';
 import { getClip, listSightingsForSpecies } from '../../storage/db';
 import type { ClipRecord, SightingRecord } from '../../storage/types';
@@ -61,7 +62,7 @@ export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLEle
         if (latest) {
           const preview = mapPreview(latest.lat!, latest.lon!, { color: speciesColor(species.scientific).css, label: species.common });
           disposers.push(preview.dispose);
-          parts.push(el('div', { class: 'stack' }, el('div', { class: 'small muted' }, `Most recent sighting · ${fmtDateTime(latest.lastTime)} · peak ${pct(latest.peakConfidence)} · ${latest.hits} window${latest.hits === 1 ? '' : 's'}`), preview.el, locationBlock(latest.lat!, latest.lon!, { accuracy: latest.accuracy })));
+          parts.push(el('div', { class: 'stack' }, el('div', { class: 'small muted' }, `Most recent sighting · ${fmtDateTime(latest.lastTime)} · peak ${pct(latest.peakConfidence)} · ${latest.hits} window${latest.hits === 1 ? '' : 's'}`), latest.soundOnly ? el('div', { class: 'sound-only-note', 'data-testid': 'sound-only-note' }, SOUND_ONLY_NOTE) : null, preview.el, locationBlock(latest.lat!, latest.lon!, { accuracy: latest.accuracy })));
         } else {
           parts.push(el('p', { class: 'small muted' }, dets.length ? `${dets.length} sighting${dets.length === 1 ? '' : 's'}, none with a position yet.` : 'No sightings of this species yet.'));
         }

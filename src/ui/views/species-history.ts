@@ -1,3 +1,4 @@
+import { SOUND_ONLY_NOTE } from '../../species/sound-only';
 import type { Species } from '../../model/labels';
 import { getClip, listSightingsForSpecies } from '../../storage/db';
 import type { SightingRecord } from '../../storage/types';
@@ -93,7 +94,7 @@ function historyBody(ctx: ViewContext, sp: Species): { el: HTMLElement; dispose:
     for (const s of sightings.slice().reverse()) {
       const where = s.lat != null && s.lon != null ? locationBlock(s.lat, s.lon, { accuracy: s.accuracy, fixTime: s.fixTime ?? null, time: s.firstTime, compact: true }) : el('div', { class: 'small muted' }, 'No position recorded');
       const link = s.recordingId ? el('a', { class: 'small', href: hrefFor({ name: 'recording', id: s.recordingId }) }, 'Open recording') : null;
-      list.appendChild(el('div', { class: 'list-item' }, el('div', { class: 'row between' }, el('div', { class: 'title' }, fmtDateTime(s.firstTime)), el('div', null, `${pct(s.peakConfidence)} · ${s.source}`)), el('div', { class: 'small muted' }, describeSighting(s)), where, link));
+      list.appendChild(el('div', { class: 'list-item' }, el('div', { class: 'row between' }, el('div', { class: 'title' }, fmtDateTime(s.firstTime)), el('div', null, `${pct(s.peakConfidence)} · ${s.source}`)), el('div', { class: 'small muted' }, describeSighting(s)), s.soundOnly ? el('div', { class: 'sound-only-note', 'data-testid': 'sound-only-note' }, SOUND_ONLY_NOTE) : null, where, link));
     }
 
     mapCard.style.display = located.length ? '' : 'none';

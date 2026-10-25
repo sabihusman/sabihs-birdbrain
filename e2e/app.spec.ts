@@ -2177,3 +2177,41 @@ test('the AI services are named from the server, asked only when shown, and kept
   await page.reload();
   await expect(page.getByTestId('help-ai-services')).toHaveText('Anthropic Claude, or Google Gemini as backup');
 });
+
+test('a bird matched by sound but not usual here is counted, can be kept, and is marked "sound only" (DECISIONS.md #93)', async ({ playwright }) => {
+  // The sample redpoll recording plays as the microphone; the location is Sydney, where redpolls do not occur,
+  // so the location filter hides the match instead of showing it.
+  const browser = await playwright.chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
+  });
+  const context = await browser.newContext({ ...devices['iPhone 13'], permissions: ['microphone'], baseURL: test.info().project.use.baseURL });
+  await context.addInitScript(() => {
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'manual', manualLat: -33.87, manualLon: 151.21, useWeek: true }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+  });
+  const page = await context.newPage();
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.getByTestId('start-stop').click();
+  const toggle = page.getByTestId('not-usual-toggle');
+  await expect(toggle).toHaveText(/^\d+ birds? not usual here · show$/, { timeout: 90_000 });
+  // Not shown as a detection: no card for it in the results.
+  await expect(page.getByTestId('results').getByTestId('result-card')).toHaveCount(0);
+  await toggle.click();
+  const row = page.getByTestId('not-usual-row').first();
+  await expect(row).toContainText('Not usual here (location filter)');
+  await expect(row).toContainText(/\d+%/);
+  const kept = (await row.getAttribute('data-species'))!;
+  await row.getByTestId('keep-sighting').click();
+  await expect(page.getByText(/kept\. Verified by sound only, not location: this bird isn’t usually here\./)).toBeVisible();
+  // Now a sighting like any other, with the note.
+  const card = page.getByTestId('results').getByTestId('result-card').first();
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId('sound-only-note')).toHaveText('Verified by sound only, not location: this bird isn’t usually here.');
+  await page.getByTestId('stop').click();
+  // Saved: the Species tab ticks it as spotted.
+  await page.goto('./#/species');
+  await page.getByTestId('spotted-filter').click();
+  await expect(page.getByTestId('species-list').locator(`[href*="${encodeURIComponent(kept)}"]`).first()).toBeVisible();
+  await browser.close();
+});
