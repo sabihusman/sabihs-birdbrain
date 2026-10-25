@@ -95,7 +95,9 @@ export function showUpdateBanner(apply: () => Promise<void>): void {
 }
 
 export function mountApp(root: HTMLElement, controller: AppController, api: ApiClient): void {
-  const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status' }, 'Loading model…');
+  // The text sits in its own span so a long status ends in "…" on a narrow phone instead of running under the title.
+  const pillText = el('span', { class: 'model-pill-text' }, 'Loading model…');
+  const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status' }, pillText);
   const themeToggle = el('button', { class: 'theme-toggle', type: 'button', 'data-testid': 'theme-toggle' });
   const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
   const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
@@ -112,7 +114,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     renderToggle();
   });
   renderToggle();
-  const header = el('header', { class: 'app-header' }, el('img', { src: `${controller.baseUrl}icons/icon-192.png`, alt: '' }), el('h1', null, 'Sabih’s Birdbrain'), modelPill, themeToggle);
+  const header = el('header', { class: 'app-header' }, el('img', { class: 'app-logo', src: `${controller.baseUrl}icons/icon-192.png`, alt: '' }), el('h1', null, 'Sabih’s Birdbrain'), modelPill, themeToggle);
   const notices = el('div', { class: 'notices', 'aria-live': 'polite' });
   const main = el('main', { class: 'view' });
   const tabs = el('nav', { class: 'tabs', 'aria-label': 'Main' });
@@ -136,7 +138,8 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   const renderPill = () => {
     const st = listenStatus(controller);
     const model = controller.inference.getStatus();
-    modelPill.textContent = st.status === 'ready' && model.backend ? `${st.pill} · ${model.backend}` : st.pill;
+    pillText.textContent = st.status === 'ready' && model.backend ? `${st.pill} · ${model.backend}` : st.pill;
+    modelPill.title = pillText.textContent;
     modelPill.className = `model-pill ${st.status} tone-${st.tone}`;
   };
   controller.on('model', renderPill);
