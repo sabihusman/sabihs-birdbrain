@@ -24,6 +24,8 @@ import { mapPreview } from '../components/map-preview';
 import { bestByConfidence, clipFocus, clipRange, sliceClip, windowsInClip } from '../../species/clips';
 import { confidenceLine, windowLines } from '../confidence-text';
 import { cssToken } from '../../theme/theme';
+import { groupRecordingsByBird } from '../../species/recording-groups';
+import { AUTO_SAVE_RECORDING_PREFIX } from '../../app/controller';
 
 export function recordingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -52,6 +54,8 @@ export function recordingsView(ctx: ViewContext): View {
     }
   });
 
+  /** Groups the visitor opened, kept open when the list redraws (a new clip arrives while it is shown). */
+  const openGroups = new Set<string>();
   const render = async () => {
     const recs = await listRecordings().catch(() => []);
     list.replaceChildren();
@@ -59,12 +63,29 @@ export function recordingsView(ctx: ViewContext): View {
       list.appendChild(el('p', { class: 'muted' }, 'No recordings yet. Tap Record while listening, or import a file.'));
       return;
     }
-    for (const r of recs) {
-      const chips = r.summary.slice(0, 3).map((s) => {
-        const sp = controller.speciesByScientific(s.scientific);
-        return sp ? speciesChip(sp, { confidence: s.maxConfidence, link: false }) : null;
+    // One card per bird, opening to its recordings (DECISIONS.md #97), instead of one card per 3 s clip.
+    for (const g of groupRecordingsByBird(recs)) {
+      const key = g.scientific ?? '';
+      const sp = g.scientific ? controller.speciesByScientific(g.scientific) : undefined;
+      const count = `${g.recordings.length} recording${g.recordings.length === 1 ? '' : 's'} · latest ${fmtDateTime(g.latest)}`;
+      const head = sp
+        ? speciesChip(sp, { confidence: g.best, link: false, subtitle: count })
+        : el('div', { class: 'chip' }, el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, 'No bird found'), el('span', { class: 'chip-sub' }, count)));
+      const rows = g.recordings.map((r) => {
+        // Auto-saved clips are all named "Detection window: <bird>", which the card already says; show the time instead.
+        const title = r.name.startsWith(`${AUTO_SAVE_RECORDING_PREFIX}:`) ? fmtDateTime(r.createdAt) : r.name;
+        const also = r.summary.slice(1, 3).map((s) => `${s.common} ${pct(s.maxConfidence)}`);
+        return el(
+          'a',
+          { class: 'list-item recording-row', href: hrefFor({ name: 'recording', id: r.id }), 'data-testid': 'recording-row' },
+          el('div', { class: 'title' }, title),
+          el('div', { class: 'small muted' }, `${title === r.name ? `${fmtDateTime(r.createdAt)} · ` : ''}${fmtDuration(r.durationSec)} · ${formatBytes(r.bytes)} · ${r.source}${r.summary[0] ? ` · ${pct(r.summary[0].maxConfidence)}` : ''}`),
+          also.length ? el('div', { class: 'small muted' }, `Also: ${also.join(', ')}`) : null,
+        );
       });
-      list.appendChild(el('a', { class: 'list-item', href: hrefFor({ name: 'recording', id: r.id }) }, el('div', { class: 'title' }, r.name), el('div', { class: 'small muted' }, `${fmtDateTime(r.createdAt)} · ${fmtDuration(r.durationSec)} · ${formatBytes(r.bytes)} · ${r.source}`), el('div', { class: 'chip-list', style: 'margin-top:6px' }, ...chips)));
+      const group = el('details', { class: 'fold recording-group', 'data-testid': 'recording-group', 'data-species': key, open: openGroups.has(key) }, el('summary', null, head), el('div', { class: 'stack' }, ...rows));
+      group.addEventListener('toggle', () => (group.open ? openGroups.add(key) : openGroups.delete(key)));
+      list.appendChild(group);
     }
   };
   void render();

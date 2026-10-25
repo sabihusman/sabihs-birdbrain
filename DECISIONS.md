@@ -2841,3 +2841,14 @@ other open branches, so this may be renumbered at merge.)
   60 % (`PREVIOUS_DEFAULT_THRESHOLD`), as it did when it shipped.
 - **Effect:** live detections between 60 % and 69 % are no longer shown for new users; they appear under
   "sounds below your minimum". The sample clip (Lesser Redpoll ~95 %, Common Redpoll ~80 %) is unaffected.
+
+## 97. Recordings: one card per bird
+
+- **Why (Sabih):** Recordings listed every auto-saved 3 s clip as its own card ("Detection window: Common
+  Grackle" again and again).
+- **Now (`src/species/recording-groups.ts`):** one collapsed card per bird (the most confident bird in each
+  recording) with its photo, best confidence, "N recordings · latest <time>"; tapping opens its recordings,
+  newest first. Auto-saved clips show their time instead of the repeated "Detection window: <bird>" name;
+  your own recordings and imports keep their names. Other birds in a recording are listed as "Also: …".
+  Recordings with no bird found share one "No bird found" card. Cards are ordered by their newest recording;
+  an opened card stays open when a new clip arrives. Nothing is deleted or merged in storage.
