@@ -1243,7 +1243,9 @@ test('Listen layouts: the picker switches at once, each Ready state differs, and
     if (layout === 'dock') await expect(page.getByTestId('dock')).toContainText('Listening');
     if (layout === 'focus') {
       await expect(page.getByTestId('focus-latest')).toBeVisible();
-      await expect(page.getByTestId('more-birds')).toBeVisible();
+      // "Earlier birds (N)" shows only when there are earlier birds (DECISIONS.md #83); none have been heard here.
+      await expect(page.getByTestId('more-birds')).toBeAttached();
+      await expect(page.getByTestId('listen-panel')).toBeVisible();
     }
     if (layout === 'consolidated') await expect(page.getByTestId('listen-panel')).toBeVisible();
   }
@@ -1917,4 +1919,90 @@ test('signed in means returning: no welcome at startup or after signing in, List
   await expect(p2.locator('.listen')).toHaveClass(/listen-focus-layout/);
   expect(p2Model).toBe(0);
   await fresh.close();
+});
+
+test('Focus: the big Start page once per session and day; Stop/Record and Start pinned above the tab bar; earlier birds by tap; Stop keeps the birds (DECISIONS.md #83)', async ({ browser }) => {
+  const shots = process.env.FOCUS_SHOTS;
+  const context = await browser.newContext({ ...devices['iPhone 13'], permissions: ['microphone'] });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'focus' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+  });
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  const listen = page.locator('.listen');
+  // First time in this session: the introduction with the big button.
+  await expect(listen).toHaveClass(/focus-intro/);
+  await expect(page.getByTestId('start-stop')).toBeVisible();
+  await expect(page.getByTestId('dock')).toBeHidden();
+  // Some birds from the sample clip, so there is something to keep.
+  await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
+  await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
+
+  const tabsTop = async () => (await page.locator('nav.tabs, .tabs').first().boundingBox())!.y;
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
+  await expect(listen).not.toHaveClass(/focus-intro/);
+  // Stop and Record sit just above the tab bar.
+  const panel = page.getByTestId('listen-panel');
+  await expect(panel).toBeVisible();
+  const pb = (await panel.boundingBox())!;
+  expect(Math.abs(pb.y + pb.height - (await tabsTop()))).toBeLessThanOrEqual(2);
+  await expect(page.getByTestId('focus-latest').getByTestId('result-card')).toBeVisible();
+  // The latest bird is not hidden behind the bar.
+  const card = (await page.getByTestId('focus-latest').boundingBox())!;
+  expect(card.y).toBeLessThan(pb.y);
+  if (shots) await page.screenshot({ path: `${shots}/focus-listening.png` });
+
+  // Earlier birds: a button right under the highlighted bird; no sheet, no swipe.
+  await expect(page.getByTestId('more-sheet')).toHaveCount(0);
+  const more = page.getByTestId('more-birds');
+  if (await more.isVisible()) {
+    await expect(more).toHaveText(/^Earlier birds \(\d+\)$/);
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await more.click();
+    await expect(page.getByTestId('focus-more')).toBeVisible();
+    await expect(more).toHaveText('Hide earlier birds');
+    await more.click();
+    await expect(page.getByTestId('focus-more')).toBeHidden();
+  }
+
+  // Stop: the birds stay, the big page does not come back, Start sits above the tab bar.
+  await page.getByTestId('stop').click();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready');
+  await expect(page.getByTestId('focus-latest').getByTestId('result-card')).toBeVisible();
+  await expect(page.getByTestId('start-stop')).toBeHidden();
+  const dockStart = page.getByTestId('dock-start');
+  await expect(dockStart).toBeVisible();
+  const db = (await page.getByTestId('dock').boundingBox())!;
+  expect(Math.abs(db.y + db.height - (await tabsTop()))).toBeLessThanOrEqual(2);
+  expect((await dockStart.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  if (shots) await page.screenshot({ path: `${shots}/focus-stopped.png` });
+
+  // Same session after a reload: still no introduction.
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(listen).not.toHaveClass(/focus-intro/);
+  await expect(page.getByTestId('focus-latest')).toContainText('No birds yet. Tap Start listening below.');
+  await expect(dockStart).toBeVisible();
+  // A new day in the same session: the introduction again.
+  await page.evaluate(() => sessionStorage.setItem('birdbrain.focus-intro.v1', '2000-01-01'));
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(listen).toHaveClass(/focus-intro/);
+  await expect(page.getByTestId('start-stop')).toBeVisible();
+
+  // 320 px, both themes, after the introduction: nothing wider than the screen.
+  await page.evaluate(() => sessionStorage.removeItem('birdbrain.focus-intro.v1'));
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
+  for (const theme of ['dark', 'light']) {
+    if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) !== theme) await page.getByTestId('theme-toggle').click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `${theme} at 320 px`).toBeLessThanOrEqual(320);
+    if (shots) await page.screenshot({ path: `${shots}/focus-320-${theme}.png` });
+  }
+  await page.getByTestId('stop').click();
+  await context.close();
 });
