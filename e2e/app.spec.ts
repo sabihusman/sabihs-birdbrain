@@ -734,6 +734,22 @@ test('imports a recording, analyses it and explains an identification', async ({
   await why.click();
   // The result sits in the Spectrogram card and explains what the shading means (DECISIONS.md #62).
   await expect(page.getByTestId('spectrogram-card').getByTestId('why-explanation')).toContainText('How to read it', { timeout: 240_000 });
+  // Drawn as darkening plus an outline in the bird's colour (DECISIONS.md #89): the overlay holds fully opaque
+  // pixels of the species colour (the old fill never went above 85%) and see-through near-black (the darkening).
+  const swatch = await page.getByTestId('recording-detections').locator('.chip').filter({ hasText: 'Lesser Redpoll' }).locator('.swatch').evaluate((e) => getComputedStyle(e).backgroundColor);
+  const overlayPixels = await page.getByTestId('spectrogram-card').locator('canvas.overlay').evaluate((c: HTMLCanvasElement, css: string) => {
+    const [r, g, b] = (css.match(/\d+/g) ?? []).map(Number);
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let outline = 0;
+    let veil = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 255 && Math.abs(d[i] - r) <= 3 && Math.abs(d[i + 1] - g) <= 3 && Math.abs(d[i + 2] - b) <= 3) outline++;
+      else if (d[i + 3] > 20 && d[i + 3] < 200 && d[i] + d[i + 1] + d[i + 2] < 30) veil++;
+    }
+    return { outline, veil };
+  }, swatch);
+  expect(overlayPixels.outline, 'outline in the species colour').toBeGreaterThan(100);
+  expect(overlayPixels.veil, 'darkened parts').toBeGreaterThan(1000);
 
   // Free user: the member-only ID card is replaced by a sign-in note.
   await page.goto('./#/species/Acanthis%20cabaret');
