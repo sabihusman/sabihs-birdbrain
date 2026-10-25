@@ -50,8 +50,8 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   const welcome = page.getByTestId('welcome');
   await expect(welcome).toBeVisible();
   await expect(welcome).toContainText('Birdbrain listens and tells you which birds are singing.');
-  await expect(welcome).toContainText('it downloads a 78 MB bird model. Use Wi-Fi if you can.');
-  await expect(welcome).toContainText('An account is optional.');
+  await expect(welcome).toContainText('First use downloads 78 MB (Wi-Fi best).');
+  await expect(welcome).toContainText('Accounts are optional');
   await expect(page.getByTestId('welcome-start')).toHaveText('Start identifying');
   await expect(page.getByTestId('welcome-signin')).toHaveText('Sign in / Create account');
   await expect(page.getByTestId('start-stop')).toHaveCount(0); // the layer stands in for the whole screen
@@ -128,7 +128,7 @@ test('the model loads only when needed: every tab and Account work with model re
   await expect(signin).toContainText('Enter the 6-digit code sent to new@example.com');
   // Species (bundled list), Map and Recordings all render without the model.
   await page.goto('./#/species');
-  await expect(page.getByTestId('local-note')).toContainText('needs the bird model');
+  await expect(page.getByTestId('local-note')).toContainText('All species until your first identification loads the model.');
   await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
   await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
   await page.goto('./#/map');
@@ -433,7 +433,7 @@ test('Map tab: no filter card; Birds and Places (1 km areas) cards under the map
   await offCtx.setOffline(true);
   await off.goto('./#/map');
   await off.getByRole('tab', { name: 'Places' }).click();
-  await expect(off.getByTestId('map-places-status')).toContainText('Place names need a connection.');
+  await expect(off.getByTestId('map-places-status')).toContainText('Place names need a connection; Birds still works.');
   await expect(off.getByTestId('map-place-card')).toHaveCount(3);
   expect(offCalls).toBe(0);
   await offCtx.close();
@@ -683,7 +683,7 @@ test('WebAssembly backend fallback loads the model and runs inference', async ({
   await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
   await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 180_000 });
   const note = page.getByTestId('why-note');
-  await expect(note).toContainText(/^Coarse detail, 25 model passes, (a few seconds|about \d+ (s|min))\. This phone runs the model without graphics acceleration/);
+  await expect(note).toContainText(/^Coarse detail, 25 model passes, (a few seconds|about \d+ (s|min))\. Less detail on this phone \(no graphics acceleration\)/);
   await expect(page.getByTestId('why-use-chosen')).toHaveText(/^Run at Medium \(49 passes(, (a few seconds|about \d+ (s|min)))?\)$/);
   await page.getByRole('button', { name: /^Why Lesser Redpoll\?$/ }).click();
   await expect(page.getByText(/Model pass \d+ of 25…/)).toBeVisible({ timeout: 60_000 });
@@ -776,7 +776,7 @@ test('imports a recording, analyses it and explains an identification', async ({
   await page.goto('./#/species');
   // The manual position set above narrows the list to local species; show all so the search can find the redpoll.
   // The switch says in plain words what the local list holds (any time of year, passing migrants too).
-  await expect(page.getByTestId('show-all-hint')).toHaveText('Off: only birds that live near you or pass through at some time of year. On: every species the app knows, worldwide.');
+  await expect(page.getByTestId('show-all-hint')).toHaveText('Off: birds found near you at any time of year. On: every species, worldwide.');
   await page.getByTestId('show-all-species').check();
   await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
   const redpollRow = page.getByTestId('spotted-row').filter({ hasText: 'Lesser Redpoll' });
@@ -835,13 +835,13 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   // ID clip: spectrogram drawn from the stored audio, the identifying window listed with its confidence, the wording, and tap-to-run "Why this ID".
   await expect(card.getByTestId('clip-spectrogram')).toBeVisible();
   await expect(card.getByTestId('clip-windows')).toContainText(/Identified in 1 window of 3 s: 0:00–0:03 \(\d+%\)/);
-  await expect(card.getByTestId('clip-meaning')).toContainText('BirdNET marks when a species is heard, not which of the overlapping sounds it is.');
+  await expect(card.getByTestId('clip-meaning')).toContainText('Other birds may be audible too: BirdNET can’t tell overlapping sounds apart.');
   await expect(card.getByTestId('clip-why-result')).toHaveCount(0); // nothing ran on its own
   // Tapping the spectrogram seeks; it must not open the history (the card is a link).
   await card.locator('.viz canvas.overlay').click({ position: { x: 40, y: 40 } });
   await expect(page).toHaveURL(/#\/species\/Acanthis%20cabaret$/);
   await card.getByTestId('clip-why-run').click();
-  await expect(card.getByTestId('clip-why-result')).toContainText(/Lesser Redpoll: baseline \d+% on this window/, { timeout: 240_000 });
+  await expect(card.getByTestId('clip-why-result')).toContainText(/^\d+% on \d:\d\d–\d:\d\d\. Muting the outlined part drops it by \d+%/, { timeout: 240_000 });
 
   // Tap the card's own text (the spectrogram at the card's centre seeks instead; the header row sits under the sticky app header after the tick's scroll).
   await card.getByText('none with a position yet').click();
@@ -862,7 +862,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(wws).toContainText('Sightings stay on your phone');
   await wws.getByText('What we store').click();
   await expect(wws).toContainText('Only on this phone');
-  await expect(wws).toContainText('Copies in the nightly server backup are removed within 14 days.');
+  await expect(wws).toContainText('and from nightly backups within 14 days.');
   // My account: grouped rows, sharing and friends open (not folded), deleting on its own screen (DECISIONS.md #43, #57, #79).
   await page.getByTestId('my-account-link').click();
   await expect(page).toHaveURL(/#\/account$/);
@@ -1210,9 +1210,9 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   await page.goto('./#/listen');
   await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
   await expect(page.getByTestId('pipeline-list')).toBeVisible();
-  await expect(page.getByTestId('pipeline-list')).toContainText('An EfficientNet-style network scores all 6,522 classes');
+  await expect(page.getByTestId('pipeline-list')).toContainText('A neural network scores all 6,522 classes');
   // The limits note sits after the list, inside the same section.
-  await expect(page.getByTestId('pipeline')).toContainText('It does not separate overlapping calls or count individuals.');
+  await expect(page.getByTestId('pipeline')).toContainText('It can’t separate overlapping calls or count birds.');
   await expect(page.getByTestId('pipeline').getByRole('link', { name: 'More about limits' })).toBeVisible();
   await noScroll('pipeline open at 320px');
   // The summary is a real tap target and keeps the focus ring.
@@ -1316,7 +1316,7 @@ test('mic blocked state explains the iPhone steps and offers Try again and impor
   await expect(page.locator('.listen')).toHaveAttribute('data-status', 'mic-blocked', { timeout: 30_000 });
   await expect(page.getByTestId('try-again')).toBeVisible();
   await expect(page.getByTestId('model-status')).toContainText('Mic blocked');
-  await expect(page.getByTestId('mic-steps')).toContainText('Settings → Safari → Microphone');
+  await expect(page.getByTestId('mic-steps')).toContainText('Tap “aA” in the address bar › Website Settings › Microphone.');
   await expect(page.getByTestId('mic-steps')).toContainText('import a recording');
   await context.close();
 });
@@ -1439,7 +1439,7 @@ test('User management: admin-only button in Settings, confirmations, plain resul
 
   // Reset asks first; a failed mail is said plainly.
   await robin.getByTestId('user-reset').dispatchEvent('click');
-  await expect(robin.getByTestId('confirm-panel')).toContainText('a link to choose a new password');
+  await expect(robin.getByTestId('confirm-panel')).toContainText('a reset link?');
   await robin.getByTestId('confirm-reset').dispatchEvent('click');
   await expect(page.getByTestId('admin-result')).toHaveText('The reset link could not be emailed. Nothing was changed. Try again.');
 
@@ -1699,15 +1699,15 @@ test('Sign in and Create account are separate pages; Create account ends on "Wai
   await signup.getByRole('button', { name: 'Verify' }).click();
   const pending = signup.getByTestId('signup-pending');
   await expect(pending.getByRole('heading', { name: 'Waiting for approval' })).toBeVisible();
-  await expect(pending).toContainText('you will get an email when yours is approved');
-  await expect(pending).toContainText('Until then, listening and identifying birds work as before.');
+  await expect(pending).toContainText('Account created. You’ll get an email when Sabih approves it.');
+  await expect(pending).toContainText('Everything else works meanwhile.');
   expect(posted).toEqual([posted[0], 'verify 000000', 'verify 246810']);
 
   // Signed in now: both pages say so instead of showing a form, and the Account card shows the wait too.
   await page.goto('./#/signin');
   await expect(page.getByTestId('auth-signed-in')).toContainText('You are signed in as robin@example.com.');
   await page.goto('./#/settings');
-  await expect(page.getByTestId('account-status')).toContainText('Awaiting approval by Sabih');
+  await expect(page.getByTestId('account-status')).toContainText('Waiting for Sabih’s approval');
 
   // 320 px, both themes: neither page is wider than the screen.
   await page.evaluate(() => localStorage.removeItem('birdbrain.auth.v1'));
@@ -1750,7 +1750,7 @@ test('Forgot password and the reset page: an emailed link, the new password type
   const forgot = page.getByTestId('forgot-page');
   await forgot.getByLabel('Email').fill('sam@example.com');
   await forgot.getByRole('button', { name: 'Email me a reset link' }).click();
-  await expect(forgot.getByTestId('forgot-sent')).toContainText('If an account uses that address, we emailed it a link');
+  await expect(forgot.getByTestId('forgot-sent')).toContainText('If that address has an account, a reset link is on its way');
   expect(posted).toEqual(['forgot {"email":"sam@example.com"}']);
 
   // The emailed link: the token leaves the address bar at once.
@@ -1766,7 +1766,7 @@ test('Forgot password and the reset page: an emailed link, the new password type
   expect(posted).toHaveLength(1);
   await reset.getByLabel('New password again').fill('a brand new password');
   await reset.getByRole('button', { name: 'Save new password' }).click();
-  await expect(reset.getByTestId('reset-done')).toContainText('Your password is changed. You were signed out on every device');
+  await expect(reset.getByTestId('reset-done')).toContainText('Password changed and you’re signed out everywhere.');
   expect(posted[1]).toBe('reset tok_live_0123456789abcdef a brand new password');
   await reset.getByRole('link', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/#\/signin$/);
@@ -1776,13 +1776,13 @@ test('Forgot password and the reset page: an emailed link, the new password type
   await page.getByLabel('New password (8 or more characters)').fill('another new password');
   await page.getByLabel('New password again').fill('another new password');
   await page.getByRole('button', { name: 'Save new password' }).click();
-  await expect(page.getByTestId('auth-message')).toHaveText('This link has expired or was already used. Ask for a new one.');
+  await expect(page.getByTestId('auth-message')).toHaveText('Link expired or already used. Ask for a new one.');
   await expect(page.getByRole('link', { name: 'Ask for a new link' })).toHaveAttribute('href', '#/forgot-password');
 
   // No token at all.
   await page.goto('./#/reset-password');
   await page.reload();
-  await expect(page.getByTestId('reset-no-token')).toContainText('This link is incomplete.');
+  await expect(page.getByTestId('reset-no-token')).toContainText('Incomplete link.');
 
   // 320 px, both themes.
   await page.setViewportSize({ width: 320, height: 640 });
@@ -1836,7 +1836,7 @@ test('My account: friends open with a "Share with" switch each and Remove; Setti
 
   // Turning it off for Robin: one request, a plain notice.
   await robin.getByTestId('friend-share').uncheck();
-  await expect(page.getByText('Robin no longer sees your species list. You still see theirs if they share it.')).toBeVisible();
+  await expect(page.getByText('Robin no longer sees your list (you still see theirs).')).toBeVisible();
   expect(posted).toEqual(['/v1/friends/f1/share {"on":false}']);
   await expect(robin.getByTestId('friend-share')).not.toBeChecked();
   // A failed change puts the switch back and says so.
@@ -1883,7 +1883,7 @@ test('Invite links: Create account says who invited them, asks before sharing ba
   const signup = page.getByTestId('signup-page');
   await expect(signup.getByTestId('signup-invite')).toContainText('Alex invited you. Once Sabih approves your account, you and Alex become friends');
   await expect(page).toHaveURL(/#\/signup$/);
-  const box = signup.getByRole('checkbox', { name: 'Also share which birds I’ve spotted, and the day I last spotted each one, with Alex' });
+  const box = signup.getByRole('checkbox', { name: 'Share my birds (and the last day I saw each) with Alex' });
   await expect(box).not.toBeChecked();
   await box.check();
   await signup.getByLabel('Email').fill('robin@example.com');
@@ -2115,7 +2115,7 @@ test('after the first model download the app asks once to keep storage, says why
   await page.goto('./#/listen');
   await page.getByTestId('welcome-start').click();
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-  await expect(page.getByText('Asking your browser to keep the bird model and your sightings on this phone')).toBeVisible();
+  await expect(page.getByText('Asking your browser to keep the model and sightings, so low space can’t delete them.')).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as unknown as { persistCalls: number }).persistCalls)).toBe(1);
   expect(await page.evaluate(() => localStorage.getItem('birdbrain.persist-asked.v1'))).not.toBeNull();
   // A later load does not ask again.
@@ -2124,7 +2124,7 @@ test('after the first model download the app asks once to keep storage, says why
   expect(await page.evaluate(() => (window as unknown as { persistCalls: number }).persistCalls)).toBe(0);
   // Settings says why it matters.
   await page.goto('./#/settings');
-  await expect(page.getByTestId('persist-explained')).toContainText('the browser may delete them on its own when the phone runs low on space');
+  await expect(page.getByTestId('persist-explained')).toContainText('the browser may delete them when space is low');
   await context.close();
 });
 
@@ -2168,7 +2168,7 @@ test('the AI services are named from the server, asked only when shown, and kept
   // Nothing is asked until the section is opened; before that the line says "an AI service".
   expect(asked).toHaveLength(0);
   await wws.getByText('What we store').click();
-  await expect(wws.getByTestId('wws-ai')).toHaveText('The question and the fetched text are then sent to Anthropic Claude, or Google Gemini as backup; none of them ever sees your name, email or exact location.');
+  await expect(wws.getByTestId('wws-ai')).toHaveText('The question and those sources go to Anthropic Claude, or Google Gemini as backup; none of them sees your name, email or exact location.');
   expect(asked).toHaveLength(1);
   await page.goto('./#/help');
   await expect(page.getByTestId('help-ai-services')).toHaveText('Anthropic Claude, or Google Gemini as backup');
