@@ -314,11 +314,11 @@ export class AppController extends Emitter<ControllerEvents> {
   /** Local list at the current range threshold, from the cached year-round geo scores. */
   getLocalSpecies(): LocalSpeciesState {
     const loc = this.location.get();
-    if (!loc.location) return { indices: null, note: loc.mode === 'off' ? 'Showing all species: the location filter is off (Settings › Location).' : `Showing all species: no location is available (${loc.message || loc.status}).` };
+    if (!loc.location) return { indices: null, note: loc.mode === 'off' ? 'All species: location filter off (Settings › Location).' : `All species: no location (${loc.message || loc.status}).` };
     const entry = this.localCache.current;
     if (!entry || this.localCache.needsRecompute(loc.location.lat, loc.location.lon)) {
       const model = this.inference.getStatus().state;
-      const note = model === 'ready' ? 'Showing all species while the local list is being computed…' : model === 'idle' ? 'Showing all species: the local list needs the bird model, which loads the first time you identify a bird.' : 'Showing all species until the model has loaded.';
+      const note = model === 'ready' ? 'All species until your local list is ready…' : model === 'idle' ? 'All species until your first identification loads the model.' : 'All species until the model loads.';
       return { indices: null, note };
     }
     return { indices: localIndices(entry.maxProbs, this.settings.get().geoThreshold), note: null };
@@ -503,8 +503,8 @@ export class AppController extends Emitter<ControllerEvents> {
   private warnSaveFailed(what: 'sighting' | 'clip', e: unknown): void {
     if (this.saveWarned.has(what)) return;
     this.saveWarned.add(what);
-    const text = what === 'sighting' ? 'Could not save sightings on this phone, so they will not be in Recordings or Species' : 'Could not save the audio clip on this phone';
-    this.emit('notice', { kind: 'warn', text: `${text}: ${(e as Error).message}. Identifying still works. A private browser tab can cause this.` });
+    const text = what === 'sighting' ? 'Couldn’t save sightings' : 'Couldn’t save the audio clip';
+    this.emit('notice', { kind: 'warn', text: `${text} (${(e as Error).message}). Identifying still works; a private tab can cause this.` });
   }
 
   private async persistDetections(result: WindowResult, windowAudio: Float32Array | null): Promise<void> {

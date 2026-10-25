@@ -22,11 +22,11 @@ describe('scopeSpeciesList', () => {
     const me = scopeSpeciesList({ ...base, spottedOnly: true });
     expect(names(me)).toEqual(['B b', 'C c']);
     expect(me.line).toBe('2 species spotted by you · 4 total');
-    expect(me.note).toMatch(/you have a sighting of/);
+    expect(me.note).toBe('Every species you’ve spotted, anywhere.');
     const fr = scopeSpeciesList({ ...base, friendsOnly: true });
     expect(names(fr)).toEqual(['C c', 'D d']);
     expect(fr.line).toBe('2 species spotted by your friends · 4 total');
-    expect(fr.note).toMatch(/Friends share only the bird and the day/);
+    expect(fr.note).toBe('Every species a friend has shared, anywhere. They share only the bird and the last day seen.');
     const both = scopeSpeciesList({ ...base, spottedOnly: true, friendsOnly: true });
     expect(names(both)).toEqual(['B b', 'C c', 'D d']);
     expect(both.line).toBe('3 species spotted by you or your friends · 4 total');
@@ -40,7 +40,7 @@ describe('scopeSpeciesList', () => {
     expect(out.friendsCount).toBe('');
     const none = scopeSpeciesList({ ...base, friendsOnly: true, friendSpecies: new Set(), friendCount: 0 });
     expect(names(none)).toEqual([]);
-    expect(none.note).toMatch(/No friend has shared a list yet/);
+    expect(none.note).toBe('No friend has shared yet. Add friends in Settings › Account.');
   });
 
   it('keeps the location note and shows nothing while the list is still loading', () => {

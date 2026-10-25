@@ -122,7 +122,7 @@ describe('ApiClient: account and friends', () => {
     await api.deleteAccount('secret', 'DELETE');
     expect(api.signedIn).toBe(false);
     expect(storage.getItem(SESSION_KEY)).toBeNull();
-    expect(describeApiError(new ApiError(400, 'admin_account'))).toMatch(/approves other members/);
+    expect(describeApiError(new ApiError(400, 'admin_account'))).toBe('The admin account can’t be deleted here.');
     expect(describeApiError(new ApiError(400, 'wrong_password'))).toMatch(/password/);
     expect(describeApiError(new ApiError(400, 'confirm_mismatch'))).toMatch(/DELETE/);
     expect(describeApiError(new ApiError(404, 'not_found'))).toMatch(/invite/);

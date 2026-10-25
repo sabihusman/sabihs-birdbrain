@@ -19,9 +19,9 @@ export const BROWSER_UNSUPPORTED_HINT = 'It works in current Safari, Chrome, Fir
 export const BROWSER_UNSUPPORTED_TEXT = `${BROWSER_UNSUPPORTED_TITLE} ${BROWSER_UNSUPPORTED_HINT}`;
 
 /** Plain words for a download that failed because the phone is offline. */
-export const NO_CONNECTION_TEXT = 'No connection. The bird model downloads once, about 78 MB, so connect to Wi-Fi and try again.';
+export const NO_CONNECTION_TEXT = 'No connection. Connect (Wi-Fi best) for the one-time 78 MB download.';
 /** Plain words for a download the browser refused to store. */
-export const NO_STORAGE_TEXT = 'Not enough storage. The bird model needs about 78 MB free on this phone. Clear some space and try again.';
+export const NO_STORAGE_TEXT = 'Not enough space. Free about 78 MB and try again.';
 
 type Globals = Record<string, unknown>;
 

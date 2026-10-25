@@ -57,7 +57,7 @@ export class PipelineView {
       // stages happening (DECISIONS.md #59).
       opts.lead ?? null,
       el('ol', { class: 'pipeline-list', 'data-testid': 'pipeline-list' }, ...items),
-      el('p', { class: 'small muted' }, 'BirdNET marks when each species is present in a 3-second window. It does not separate overlapping calls or count individuals. ', el('a', { href: '#/help' }, 'More about limits')),
+      el('p', { class: 'small muted' }, 'BirdNET says which species are in each 3 s window. It can’t separate overlapping calls or count birds. ', el('a', { href: '#/help' }, 'More about limits')),
     );
     this.paint();
   }

@@ -23,7 +23,7 @@ function byNewestMeFirst(a: Row, b: Row): number {
 export function spottedByBlock(ctx: ViewContext, species: Species, findIdCard: () => HTMLElement | null): { el: HTMLElement; dispose: () => void } {
   const { controller, friends } = ctx;
   const list = el('div', { class: 'stack', 'data-testid': 'spotted-by-list' }, el('p', { class: 'muted' }, 'Loading…'));
-  const root = el('section', { class: 'card', 'data-testid': 'spotted-by' }, el('h2', null, 'Spotted by'), list, el('p', { class: 'small muted' }, 'Each person appears once with the day they last spotted this bird. Friends share only the bird and that day.'));
+  const root = el('section', { class: 'card', 'data-testid': 'spotted-by' }, el('h2', null, 'Spotted by'), list, el('p', { class: 'small muted' }, 'The last day each person spotted it. Friends share only that.'));
 
   const render = async () => {
     let mine: string | null = null;

@@ -41,9 +41,9 @@ describe('ID clip layout: outlines, cursor, wording', () => {
   it('describes the windows, and says when they were not recorded', () => {
     expect(describeWindows([{ offsetSec: 3.5, confidence: 0.73 }])).toBe('Identified in 1 window of 3 s: 0:04–0:07 (73%).');
     expect(describeWindows([{ offsetSec: 0, confidence: 0.5 }, { offsetSec: 61.2, confidence: 0.9 }])).toBe('Identified in 2 windows of 3 s: 0:00–0:03 (50%), 1:01–1:04 (90%).');
-    expect(describeWindows(null)).toMatch(/not recorded/);
+    expect(describeWindows(null)).toBe('Saved by an older version: matching windows unknown.');
     expect(describeWindows([])).toMatch(/No identifying window/);
-    expect(WINDOW_MEANING).toContain('when a species is heard, not which');
+    expect(WINDOW_MEANING).toBe('Other birds may be audible too: BirdNET can’t tell overlapping sounds apart.');
   });
 });
 

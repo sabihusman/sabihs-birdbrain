@@ -183,6 +183,8 @@ running (DECISIONS.md #59).
 
 **Voice.** Plain, short and friendly. Say what happened and what to do next. No jargon in the main flow; technical terms live in "How it works" and Settings.
 
+**Length (DECISIONS.md #92).** Hints, notes and messages say each fact once, in as few words as carry it: one line on a phone where possible, two at most. No reasons the reader doesn't need, no restating what the title or the screen already shows, "this phone" not "this device". Fragments are fine ("Saved on this phone only."). The exceptions are the bird text from Wikipedia and the AI answers, where the length is wanted, and the privacy list, which keeps every fact (in short form).
+
 ## 8. Accessibility checklist
 
 - WCAG AA contrast for all text, icons and status colours in both themes.

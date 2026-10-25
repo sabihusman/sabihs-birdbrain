@@ -46,10 +46,10 @@ export function aboutBird(species: Species): { el: HTMLElement; dispose: () => v
         summaryBox.replaceChildren(el('p', null, 'Wikipedia has several pages with this name.'), el('p', null, el('a', { href: result.pageUrl, target: '_blank', rel: 'noopener' }, 'Open the disambiguation page'), ' · ', el('a', { href: result.searchUrl, target: '_blank', rel: 'noopener' }, 'Search Wikipedia')));
         break;
       case 'not-found':
-        summaryBox.replaceChildren(el('p', null, 'No Wikipedia summary found for this species under either name.'), el('p', null, el('a', { href: result.searchUrl, target: '_blank', rel: 'noopener' }, 'Search Wikipedia')));
+        summaryBox.replaceChildren(el('p', null, 'No Wikipedia page found.'), el('p', null, el('a', { href: result.searchUrl, target: '_blank', rel: 'noopener' }, 'Search Wikipedia')));
         break;
       case 'offline':
-        summaryBox.replaceChildren(el('p', null, 'You are offline and this species has not been viewed before, so there is no cached summary.'), retry);
+        summaryBox.replaceChildren(el('p', null, 'Offline, and this page isn’t saved yet.'), retry);
         break;
       case 'error':
         summaryBox.replaceChildren(el('p', null, `Wikipedia request failed: ${result.message}`), retry);
@@ -70,7 +70,7 @@ export function aboutBird(species: Species): { el: HTMLElement; dispose: () => v
     switch (result.status) {
       case 'ok': {
         if (result.sections.length === 0) {
-          sectionsBox.replaceChildren(el('p', { class: 'small muted' }, 'The Wikipedia article has no Description, Song, Habitat or Diet section to show here.'));
+          sectionsBox.replaceChildren(el('p', { class: 'small muted' }, 'No Description, Song, Habitat or Diet section on Wikipedia.'));
           break;
         }
         sectionsBox.replaceChildren(
@@ -80,18 +80,18 @@ export function aboutBird(species: Species): { el: HTMLElement; dispose: () => v
               { class: 'section-fold', 'data-testid': `wiki-section-${s.kind}` },
               el('summary', null, SECTION_LABELS[s.kind]),
               ...s.text.split(/\n{2,}/).map((para) => el('p', null, para)),
-              el('p', { class: 'small' }, el('a', { href: s.url, target: '_blank', rel: 'noopener' }, s.truncated ? `Read the full “${s.heading}” section on Wikipedia` : `“${s.heading}” on Wikipedia`)),
+              el('p', { class: 'small' }, el('a', { href: s.url, target: '_blank', rel: 'noopener' }, s.truncated ? `Full “${s.heading}” section on Wikipedia` : `“${s.heading}” on Wikipedia`)),
             ),
           ),
-          el('p', { class: 'small muted', style: 'margin-bottom:0' }, 'Short excerpts from the article, cached on this device · text CC BY-SA 4.0'),
+          el('p', { class: 'small muted', style: 'margin-bottom:0' }, 'Wikipedia excerpts, saved on this phone · CC BY-SA 4.0'),
         );
         break;
       }
       case 'not-found':
-        sectionsBox.replaceChildren(el('p', { class: 'small muted' }, 'No Wikipedia article sections found for this species.'));
+        sectionsBox.replaceChildren(el('p', { class: 'small muted' }, 'No article sections found.'));
         break;
       case 'offline':
-        sectionsBox.replaceChildren(el('p', { class: 'small muted' }, 'Article sections are not cached for this species yet; they load when you are back online.'), retry);
+        sectionsBox.replaceChildren(el('p', { class: 'small muted' }, 'Sections load when you’re back online.'), retry);
         break;
       case 'error':
         sectionsBox.replaceChildren(el('p', { class: 'small muted' }, `Could not load the article sections: ${result.message}`), retry);

@@ -30,14 +30,14 @@ let howItWorksOpen = false;
 const LOW_FLOOR = 0.1;
 
 export const STATE_TEXT: Record<ListenStatus, { title: string; hint: string }> = {
-  idle: { title: 'Model not loaded', hint: `The bird model downloads once, the first time you start. About ${MODEL_SIZE_MB} MB; use Wi-Fi if you can.` },
-  loading: { title: 'Loading the model', hint: `One-time download, about ${MODEL_SIZE_MB} MB. Use Wi-Fi if you can.` },
+  idle: { title: 'Model not loaded', hint: `One-time ${MODEL_SIZE_MB} MB download on first start. Wi-Fi best.` },
+  loading: { title: 'Loading the model', hint: `One-time ${MODEL_SIZE_MB} MB download.` },
   ready: { title: 'Ready', hint: 'Point the bottom of your phone toward the sound.' },
   listening: { title: 'Listening', hint: 'Results appear below as birds are heard.' },
-  paused: { title: 'Paused', hint: 'Listening paused while the app was in the background. Tap to resume.' },
+  paused: { title: 'Paused', hint: 'Paused in the background. Tap to resume.' },
   'mic-blocked': { title: 'Mic blocked', hint: 'The browser is not allowing the microphone.' },
   error: { title: 'Something went wrong', hint: 'Try again.' },
-  offline: { title: 'Offline', hint: 'Listening works; AI questions and the map are unavailable.' },
+  offline: { title: 'Offline', hint: 'Listening works. No AI questions or map.' },
   unsupported: { title: BROWSER_UNSUPPORTED_TITLE, hint: BROWSER_UNSUPPORTED_HINT },
 };
 
@@ -85,7 +85,7 @@ export function listenView(ctx: ViewContext): View {
   const micSteps = el(
     'div',
     { class: 'stack mic-steps', 'data-testid': 'mic-steps', 'data-browser': help.browser },
-    el('p', null, 'Birdbrain needs the microphone to hear birds. Nothing is recorded or uploaded unless you save it.'),
+    el('p', null, 'Needed to hear birds. Audio is kept only if you save it, and never uploaded.'),
     ...help.steps.map((s) => el('p', null, s)),
     el('p', { class: 'small muted' }, 'You can still ', el('a', { href: '#/recordings' }, 'import a recording'), '.'),
   );
@@ -119,11 +119,11 @@ export function listenView(ctx: ViewContext): View {
   // Results
   const resultsList = el('div', { class: 'result-list', 'data-testid': 'results' });
   const lowLine = el('button', { class: 'btn small text', type: 'button', 'data-testid': 'low-toggle', style: 'display:none' }, '');
-  const resultsEmpty = el('p', { class: 'muted', 'data-testid': 'results-empty' }, 'Nothing heard above your minimum yet. Birds are easiest to hear at dawn.');
+  const resultsEmpty = el('p', { class: 'muted', 'data-testid': 'results-empty' }, 'Nothing above your minimum yet. Dawn is best.');
   const recentList = el('div', { class: 'recent-list', 'data-testid': 'recent' });
-  const recentEmpty = el('p', { class: 'small muted', 'data-testid': 'recent-empty' }, 'Birds heard this session appear here, one card per species.');
+  const recentEmpty = el('p', { class: 'small muted', 'data-testid': 'recent-empty' }, 'Birds you hear appear here, one card each.');
   const recentSummary = el('span', { class: 'small muted recent-summary', 'data-testid': 'recent-summary' });
-  const recentNote = el('p', { class: 'small muted' }, `Repeat hits of a bird within ${LUMP_GAP_SECONDS} s count as one. Tap a card for the details. Kept on this device only. `, el('a', { href: '#/map' }, 'Map'));
+  const recentNote = el('p', { class: 'small muted' }, `Repeats within ${LUMP_GAP_SECONDS} s count once. Tap a card for details. On this phone only. `, el('a', { href: '#/map' }, 'Map'));
   /** The cards themselves, moved between the collapsed row and the page by applyLayout(). */
   const recentBody = el('div', { class: 'stack recent-body' }, recentEmpty, recentList, recentNote);
   const recentDetails = el('details', { class: 'fold', 'data-testid': 'recent-fold' }, el('summary', null, el('span', { class: 'fold-title' }, 'Recent sightings'), recentSummary), recentBody);
@@ -139,11 +139,11 @@ export function listenView(ctx: ViewContext): View {
   const timelineCanvas = el('canvas', { class: 'timeline', 'aria-label': 'Per-species confidence over time' });
   const legend = el('div', { class: 'legend' });
   const waveform = new WaveformView(waveCanvas);
-  const waveLabel = el('div', { class: 'viz-label', 'data-testid': 'waveform-label' }, 'Waveform (last 3 s), auto-scaled to the loudest recent sample');
+  const waveLabel = el('div', { class: 'viz-label', 'data-testid': 'waveform-label' }, 'Waveform, last 3 s (auto-scaled)');
   const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10);
   const timeline = new TimelineView(timelineCanvas, legend, () => controller.species);
   timeline.setThreshold(settings.get().threshold);
-  const liveViews = el('div', { class: 'stack' }, waveCanvas, waveLabel, specBox, el('div', { class: 'viz-label' }, 'Spectrogram, our own FFT: an approximation of the two mel spectrograms BirdNET builds internally. Colours follow the loudest recent sound. Dashed box: current 3 s analysis window.'), timelineCanvas, legend, el('div', { class: 'viz-label' }, 'Confidence per species over recent windows (dashed line = your minimum).'));
+  const liveViews = el('div', { class: 'stack' }, waveCanvas, waveLabel, specBox, el('div', { class: 'viz-label' }, 'Spectrogram (auto-scaled), close to what BirdNET sees. Dashed box: the 3 s being analysed.'), timelineCanvas, legend, el('div', { class: 'viz-label' }, 'Confidence per bird over time. Dashed line: your minimum.'));
   // One row on the Listen screen, as in the layout spec: the chips in its summary, the live
   // views and the steps inside. The old separate "How it works" row is gone.
   const pipeline = new PipelineView({ open: howItWorksOpen, onToggle: (open) => (howItWorksOpen = open), lead: liveViews });
@@ -423,7 +423,7 @@ export function listenView(ctx: ViewContext): View {
       spectrogram.draw();
       timeline.draw();
       dirty = false;
-      const label = `Waveform (last 3 s), auto-scaled to the loudest recent sample: gain ×${waveform.gain}`;
+      const label = `Waveform, last 3 s (auto-scaled): gain ×${waveform.gain}`;
       if (waveLabel.textContent !== label) waveLabel.textContent = label;
     }
     raf = requestAnimationFrame(loop);
@@ -438,7 +438,7 @@ export function listenView(ctx: ViewContext): View {
       waveform.reset();
       spectrogram.reset();
       timeline.reset();
-      status.textContent = controller.inference.getStatus().state === 'ready' ? 'Starting microphone…' : 'Loading the bird model, then starting the microphone…';
+      status.textContent = controller.inference.getStatus().state === 'ready' ? 'Starting microphone…' : 'Loading the model, then the mic…';
       markFocusIntroDone(); // the Focus introduction has done its job for this session (DECISIONS.md #83)
       await controller.startListening();
       renderConditions(null);
@@ -482,7 +482,7 @@ export function listenView(ctx: ViewContext): View {
   });
   demoBtn.addEventListener('click', async () => {
     demoBtn.disabled = true;
-    status.textContent = controller.inference.getStatus().state === 'ready' ? 'Analysing the bundled BirdNET sample clip…' : 'Loading the bird model, then analysing the sample clip…';
+    status.textContent = controller.inference.getStatus().state === 'ready' ? 'Analysing the sample clip…' : 'Loading the model, then the sample…';
     waveform.reset();
     spectrogram.reset();
     try {
@@ -538,7 +538,7 @@ export function listenView(ctx: ViewContext): View {
       renderState();
     }),
     controller.on('wakelock', (w) => {
-      wakeLine.textContent = w === 'active' ? 'Screen stays on' : w === 'unsupported' ? 'Keep the screen on yourself: this browser cannot' : w === 'failed' ? 'Could not keep the screen on' : '';
+      wakeLine.textContent = w === 'active' ? 'Screen stays on' : w === 'unsupported' ? 'Keep the screen on yourself' : w === 'failed' ? 'Could not keep the screen on' : '';
     }),
     controller.on('location', () => {
       renderChips();

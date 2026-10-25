@@ -16,35 +16,34 @@ export const ACCOUNT_HREF = '#/settings/account';
 export const MY_ACCOUNT_HREF = '#/account';
 
 export const AUTH_TEXT = {
-  signUpIntro: 'An account is optional. It adds Ask about this bird and sharing your species list with friends. Sabih approves each new account by hand.',
+  signUpIntro: 'Optional. Adds Ask about this bird and sharing with friends. Sabih approves each account.',
   pendingTitle: 'Waiting for approval',
-  pending: 'Your account is created. Sabih approves each new account by hand, and you will get an email when yours is approved. We also emailed you this note.',
-  pendingMeanwhile: 'Until then, listening and identifying birds work as before.',
+  pending: 'Account created. You’ll get an email when Sabih approves it.',
+  pendingMeanwhile: 'Everything else works meanwhile.',
   readyTitle: 'Your account is ready',
-  signUpCodeWrong: 'That code is wrong or has expired. Go back and create the account again to get a new code.',
-  forgotIntro: 'Enter the email you signed up with. We will email you a link to choose a new password.',
-  forgotSent: 'If an account uses that address, we emailed it a link to choose a new password. The link works once, for 60 minutes. Check your spam folder if it does not arrive.',
-  inviteExpired: 'This invite link has expired or was already used. You can still create an account; ask your friend to invite you again afterwards.',
-  resetIntro: 'Choose a new password for your account. Type it twice so we know it is right.',
-  resetDone: 'Your password is changed. You were signed out on every device, so sign in again with the new password.',
-  resetNoToken: 'This link is incomplete. Open the link from the email again, or ask for a new one.',
+  signUpCodeWrong: 'Wrong or expired code. Go back for a new one.',
+  forgotIntro: 'We’ll email you a link to set a new password.',
+  forgotSent: 'If that address has an account, a reset link is on its way (one use, 60 min). Check spam.',
+  inviteExpired: 'This invite has expired or was used. You can still sign up and ask for a new one.',
+  resetIntro: 'Type your new password twice.',
+  resetDone: 'Password changed and you’re signed out everywhere. Sign in with the new one.',
+  resetNoToken: 'Incomplete link. Open the email link again or ask for a new one.',
 } as const;
 
 /** The line above the Create account form when it was opened from an invite link (DECISIONS.md #80). */
 export function inviteIntro(fromName: string): string {
-  return `${fromName} invited you. Once Sabih approves your account, you and ${fromName} become friends, and you see which birds ${fromName} has spotted and the day they last spotted each one.`;
+  return `${fromName} invited you. Once Sabih approves you, you’ll be friends and see ${fromName}’s birds.`;
 }
 
 /** The consent box for sharing back; unticked until the person ticks it. */
 export function shareBackLabel(fromName: string): string {
-  return `Also share which birds I’ve spotted, and the day I last spotted each one, with ${fromName}`;
+  return `Share my birds (and the last day I saw each) with ${fromName}`;
 }
 
-/** "We emailed a 6-digit code to x. It expires in 10 minutes." */
+/** "Enter the 6-digit code sent to x. It expires in 10 min." */
 export function codeSentText(email: string, expiresInSeconds: number, purpose: 'sign-in' | 'sign-up'): string {
   const minutes = Math.max(1, Math.round(expiresInSeconds / 60));
-  const why = purpose === 'sign-up' ? ' Enter it to finish creating your account.' : '';
-  return `We emailed a 6-digit code to ${email}.${why} It expires in ${minutes} minute${minutes === 1 ? '' : 's'}.`;
+  return `Enter the 6-digit code sent to ${email}${purpose === 'sign-up' ? ' to finish' : ''}. It expires in ${minutes} min.`;
 }
 
 /**

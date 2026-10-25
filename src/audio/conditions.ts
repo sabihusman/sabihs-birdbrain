@@ -36,12 +36,12 @@ export interface ConditionsAssessment extends ConditionsMetrics {
 
 export function assessConditions(m: ConditionsMetrics): ConditionsAssessment {
   if (m.rmsDb < QUIET_DBFS) {
-    return { ...m, label: 'too-quiet', title: 'Too quiet', advice: 'Very little sound is reaching the microphone. Check that nothing covers it, or move closer to the birds.' };
+    return { ...m, label: 'too-quiet', title: 'Too quiet', advice: 'Very quiet. Check the mic isn’t covered, or move closer.' };
   }
   if (m.lowFreqRatio >= WINDY_LOW_RATIO) {
-    return { ...m, label: 'windy', title: 'Windy', advice: 'Low rumble dominates (wind, handling or traffic). Shield the microphone or turn away from the wind; the low-cut filter helps the model but not the recording.' };
+    return { ...m, label: 'windy', title: 'Windy', advice: 'Rumble from wind, handling or traffic. Shield the mic or turn from the wind.' };
   }
-  return { ...m, label: 'good', title: 'Good', advice: 'Levels and spectrum look fine for identification.' };
+  return { ...m, label: 'good', title: 'Good', advice: 'Sound looks good.' };
 }
 
 /** Compute the metrics for one block of raw samples. */

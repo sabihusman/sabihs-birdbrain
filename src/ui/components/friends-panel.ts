@@ -13,9 +13,9 @@ import { switchRow, textRow } from './rows';
  */
 /** One line under the sharing switch. */
 export function shareStatusText(enabled: boolean, lastError: string | null): string {
-  if (!enabled) return 'Sharing is off. Nothing about your sightings is on the server.';
-  if (lastError) return `Sharing is on, but the last upload failed: ${lastError}. Trying again shortly; your next sighting also retries.`;
-  return 'Sharing is on. Your list is updated after each new sighting.';
+  if (!enabled) return 'Sharing is off. Nothing is on the server.';
+  if (lastError) return `Sharing is on, but the last upload failed (${lastError}). Retrying soon.`;
+  return 'Sharing is on. Updated after each sighting.';
 }
 
 /**
@@ -25,13 +25,13 @@ export function shareStatusText(enabled: boolean, lastError: string | null): str
  */
 export function inviteShareNote(sharingOn: boolean): string {
   return sharingOn
-    ? 'Sending an invite also shares your species list with them once you are friends. You can stop it with the switch next to their name.'
-    : 'Your species list is not shared with anyone. Turn on “Share my species list” above if you want new friends to see it.';
+    ? 'Once you’re friends they see your list; their switch stops it.'
+    : 'Your list isn’t shared. Turn on sharing above for friends to see it.';
 }
 
 /** What a per-friend switch did, in plain words (DECISIONS.md #79). */
 export function friendShareNotice(name: string, on: boolean): string {
-  return on ? `${name} can see your species list again.` : `${name} no longer sees your species list. You still see theirs if they share it.`;
+  return on ? `${name} can see your species list again.` : `${name} no longer sees your list (you still see theirs).`;
 }
 
 export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () => void; sharingChanged: () => void } {
@@ -105,7 +105,7 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
         void run(async () => {
           remove.disabled = true;
           await api.removeFriend(f.id);
-          notify({ kind: 'info', text: `${f.name} removed. Neither of you sees the other’s list any more.` });
+          notify({ kind: 'info', text: `${f.name} removed. You no longer see each other’s lists.` });
           await load();
           void cache.refresh();
         }),
@@ -137,7 +137,7 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
   const shareNote = el('p', { class: 'small muted', 'data-testid': 'invite-share-note' }, inviteShareNote(ctx.sharing.enabled));
   const email = el('input', { type: 'email', autocomplete: 'off', placeholder: 'Friend’s email', required: true, 'aria-label': 'Friend’s email', 'data-testid': 'invite-email' });
   const send = el('button', { class: 'btn small', type: 'submit', 'data-testid': 'invite-send' }, 'Send invite');
-  const inviteForm = el('form', { class: 'stack' }, el('h3', null, 'Add a friend'), el('div', { class: 'row' }, el('div', { class: 'field', style: 'flex:1;margin:0' }, email), send), shareNote, el('p', { class: 'small muted' }, 'A member gets an email and accepts on their My account page. Someone without an account gets a link to create one, and you become friends once Sabih approves it. Friends see your display name, never your email. Up to 10 invites a day; invites expire after 30 days.'));
+  const inviteForm = el('form', { class: 'stack' }, el('h3', null, 'Add a friend'), el('div', { class: 'row' }, el('div', { class: 'field', style: 'flex:1;margin:0' }, email), send), shareNote, el('p', { class: 'small muted' }, 'Members accept on My account. Others get a sign-up link; you’re friends once Sabih approves them. Friends see your name, never your email. 10 invites a day, valid 30 days.'));
   inviteForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!inviteForm.reportValidity()) return;
@@ -155,7 +155,7 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
 
   root.append(
     el('p', { class: 'small muted', 'data-testid': 'share-consent' }, SHARING_CONSENT_TEXT),
-    el('p', { class: 'small muted' }, 'Friends can share which birds they have spotted; the Species tab shows “Spotted by” next to a bird a friend has shared. Nothing is shared until you turn on “Share my species list”. The switch next to each friend stops or restarts your list going to that friend only.'),
+    el('p', { class: 'small muted' }, 'Friends’ birds show as “Spotted by” on Species. Nothing of yours is shared until you turn on sharing; each friend’s switch controls just them.'),
     invitesBox,
     friendsBox,
     inviteForm,

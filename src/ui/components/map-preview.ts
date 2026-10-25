@@ -39,7 +39,7 @@ export function mapPreview(lat: number, lon: number, opts: { color: string; labe
   };
 
   const showPlaceholder = () => {
-    root.replaceChildren(el('div', { class: 'map-placeholder', 'data-testid': 'map-placeholder' }, 'Map preview needs a connection. The coordinates and Plus Code below work offline.'));
+    root.replaceChildren(el('div', { class: 'map-placeholder', 'data-testid': 'map-placeholder' }, 'Map needs a connection; the details below work offline.'));
   };
 
   const onOnline = () => {

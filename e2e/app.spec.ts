@@ -125,7 +125,7 @@ test('the model loads only when needed: every tab and Account work with model re
   await signin.getByLabel('Email').fill('new@example.com');
   await signin.getByLabel('Password').fill('correct horse battery staple');
   await signin.getByRole('button', { name: 'Sign in' }).click();
-  await expect(signin).toContainText('We emailed a 6-digit code to new@example.com');
+  await expect(signin).toContainText('Enter the 6-digit code sent to new@example.com');
   // Species (bundled list), Map and Recordings all render without the model.
   await page.goto('./#/species');
   await expect(page.getByTestId('local-note')).toContainText('needs the bird model');
@@ -750,7 +750,7 @@ test('imports a recording, analyses it and explains an identification', async ({
   const why = page.getByRole('button', { name: /^Why Lesser Redpoll/ });
   await why.click();
   // The result sits in the Spectrogram card and explains what the shading means (DECISIONS.md #62).
-  await expect(page.getByTestId('spectrogram-card').getByTestId('why-explanation')).toContainText('How to read it', { timeout: 240_000 });
+  await expect(page.getByTestId('spectrogram-card').getByTestId('why-explanation')).toContainText('Outlined: what the ID relied on most', { timeout: 240_000 });
   // Drawn as darkening plus an outline in the bird's colour (DECISIONS.md #89): the overlay holds fully opaque
   // pixels of the species colour (the old fill never went above 85%) and see-through near-black (the darkening).
   const swatch = await page.getByTestId('recording-detections').locator('.chip').filter({ hasText: 'Lesser Redpoll' }).locator('.swatch').evaluate((e) => getComputedStyle(e).backgroundColor);
@@ -1670,7 +1670,7 @@ test('Sign in and Create account are separate pages; Create account ends on "Wai
   await expect(page).toHaveURL(/#\/signup$/);
   const signup = page.getByTestId('signup-page');
   await expect(signup.getByRole('heading', { name: 'Create account' })).toBeVisible();
-  await expect(signup).toContainText('Sabih approves each new account by hand.');
+  await expect(signup).toContainText('Sabih approves each account.');
   // The two pages link to each other.
   await signup.getByRole('link', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/#\/signin$/);
@@ -1690,7 +1690,7 @@ test('Sign in and Create account are separate pages; Create account ends on "Wai
   // Same passwords: the code step, a wrong code stays there, the right one ends on "Waiting for approval".
   await signup.getByLabel('Password again').fill('correct horse battery');
   await signup.getByRole('button', { name: 'Create account' }).click();
-  await expect(signup.getByTestId('code-sent')).toHaveText('We emailed a 6-digit code to robin@example.com. Enter it to finish creating your account. It expires in 10 minutes.');
+  await expect(signup.getByTestId('code-sent')).toHaveText('Enter the 6-digit code sent to robin@example.com to finish. It expires in 10 min.');
   expect(JSON.parse(posted[0].slice('signup '.length))).toEqual({ email: 'robin@example.com', password: 'correct horse battery', name: 'Robin' });
   await signup.getByLabel('6-digit code').fill('000000');
   await signup.getByRole('button', { name: 'Verify' }).click();
@@ -1910,7 +1910,7 @@ test('Invite links: Create account says who invited them, asks before sharing ba
   await page.route(/\/v1\/friends\/invite$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, message: 'They don’t have an account yet, so we emailed them a link to create one. You become friends once Sabih approves it.', newAccount: true }) }));
   await page.goto('./#/account');
   await page.reload();
-  await expect(page.getByTestId('invite-share-note')).toHaveText('Your species list is not shared with anyone. Turn on “Share my species list” above if you want new friends to see it.');
+  await expect(page.getByTestId('invite-share-note')).toHaveText('Your list isn’t shared. Turn on sharing above for friends to see it.');
   await page.getByTestId('invite-email').fill('kim@example.com');
   await page.getByTestId('invite-send').click();
   await expect(page.getByText('They don’t have an account yet, so we emailed them a link to create one.')).toBeVisible();

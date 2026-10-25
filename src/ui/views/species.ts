@@ -37,7 +37,7 @@ export function speciesListView(ctx: ViewContext): View {
     settings.update({ speciesShowAll: showAll.checked });
     search();
   });
-  const toggle = el('label', { class: 'switch' }, el('span', null, 'Show all species', el('div', { class: 'small muted', 'data-testid': 'show-all-hint' }, 'Off: only birds that live near you or pass through at some time of year. On: every species the app knows, worldwide.')), showAll);
+  const toggle = el('label', { class: 'switch' }, el('span', null, 'Show all species', el('div', { class: 'small muted', 'data-testid': 'show-all-hint' }, 'Off: birds found near you at any time of year. On: every species, worldwide.')), showAll);
   // "Spotted by me": species with at least one sighting on this device (DECISIONS.md #41).
   const spottedCount = el('span', { class: 'filter-chip-count' }, '');
   const spottedChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': String(settings.get().speciesSpottedOnly), 'data-testid': 'spotted-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'), 'Spotted by me', spottedCount);
@@ -140,7 +140,7 @@ export function speciesListView(ctx: ViewContext): View {
   refreshSpotted();
   void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline: the list is bundled with the app and the local list is computed on this device. Wikipedia pages are cached after the first visit. Identification on Listen is not affected by this list. A tick marks a species you have a sighting of; it stays on this device.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {
@@ -171,7 +171,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const spottedBy = ctx.friends.available ? spottedByBlock(ctx, sp, () => idCard.el.querySelector<HTMLElement>('[data-testid="species-id-card"]')) : null;
     if (spottedBy) disposers.push(spottedBy.dispose);
     root.replaceChildren(
-      el('section', { class: 'card' }, el('div', { class: 'row' }, el('span', { class: 'swatch', style: `background:${color.css};width:22px;height:22px`, 'aria-hidden': 'true' }), el('div', null, el('h2', { style: 'margin:0' }, sp.common), el('div', { class: 'muted', style: 'font-style:italic' }, sp.scientific))), el('p', { class: 'small muted' }, 'Colour used for this species everywhere in the app.')),
+      el('section', { class: 'card' }, el('div', { class: 'row' }, el('span', { class: 'swatch', style: `background:${color.css};width:22px;height:22px`, 'aria-hidden': 'true' }), el('div', null, el('h2', { style: 'margin:0' }, sp.common), el('div', { class: 'muted', style: 'font-style:italic' }, sp.scientific))), el('p', { class: 'small muted' }, 'Its colour throughout the app.')),
       ...(spottedBy ? [spottedBy.el] : []),
       idCard.el,
       about.el,
@@ -198,7 +198,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
       return;
     }
     if (dets.length === 0) {
-      box.replaceChildren(el('p', { class: 'muted' }, 'You have not detected this species yet.'));
+      box.replaceChildren(el('p', { class: 'muted' }, 'You haven’t spotted it yet.'));
       return;
     }
     const first = dets[0];

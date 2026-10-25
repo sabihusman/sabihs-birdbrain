@@ -25,7 +25,7 @@ export function adminView(ctx: ViewContext): View {
     }
     root.replaceChildren(
       el('div', { class: 'row' }, el('a', { class: 'btn small', href: '#/admin/users', 'data-testid': 'to-user-management' }, '‹ User management')),
-      el('section', { class: 'card' }, el('h2', null, 'Ask costs'), el('p', { class: 'small muted' }, 'Which service answered over the last 30 days, with Claude’s estimated cost from its tokens and list price, then the estimated Gemini spend per UTC day. Ollama Cloud usage counts against its plan allowance, not a price. Cache hits cost nothing.'), providerTable, capLine, costStatus, costTable),
+      el('section', { class: 'card' }, el('h2', null, 'Ask costs'), el('p', { class: 'small muted' }, 'Last 30 days: which service answered (Claude with its estimated cost), then estimated Gemini cost per UTC day. Ollama uses its plan allowance; cache hits are free.'), providerTable, capLine, costStatus, costTable),
     );
     costStatus.textContent = 'Loading…';
     try {
@@ -98,15 +98,15 @@ export const ACTION_LABEL: Record<UserAction, string> = { approve: 'Approve', re
 export function confirmText(action: UserAction, email: string): string {
   switch (action) {
     case 'approve':
-      return `Approve ${email}? They get member features the next time they sign in, and an email saying so.`;
+      return `Approve ${email}? They’re emailed and get member features at next sign-in.`;
     case 'reject':
       return `Reject ${email}? They are signed out and cannot use member features.`;
     case 'disable':
-      return `Disable ${email}? They are signed out everywhere and cannot sign in until you approve them again.`;
+      return `Disable ${email}? Signs them out until you approve them again.`;
     case 'reset':
-      return `Email ${email} a link to choose a new password? Their password stays the same until they use the link. You will not see the new one.`;
+      return `Email ${email} a reset link? Their password stays until they use it.`;
     case 'delete':
-      return `Delete ${email} for good? Their sign-in, sessions, friends, invites and shared species list are removed at once. There is no undo. Type their email to confirm.`;
+      return `Delete ${email} and all their server data? No undo. Type their email to confirm.`;
   }
 }
 
@@ -164,7 +164,7 @@ export function userManagementView(ctx: ViewContext): View {
     }
     root.replaceChildren(
       el('div', { class: 'row' }, el('a', { class: 'btn small', href: '#/settings', 'data-testid': 'to-settings' }, '‹ Settings')),
-      el('section', { class: 'card' }, el('h2', null, 'User management'), el('p', { class: 'small muted' }, 'New accounts wait here until you approve them. Rejecting or disabling signs them out everywhere.'), count),
+      el('section', { class: 'card' }, el('h2', null, 'User management'), el('p', { class: 'small muted' }, 'New accounts wait here for approval. Reject or disable signs them out.'), count),
       notice,
       list,
       el('section', { class: 'card' }, rowGroup(null, linkRow('Ask costs', '#/admin', { hint: 'Which service answered and what it cost', testId: 'admin-costs-link' }))),

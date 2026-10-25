@@ -11,8 +11,8 @@ export const MODEL_SIZE_MB = Math.round(MODEL_TOTAL_BYTES / 1048576);
 export const WELCOME_TEXT = {
   title: 'Welcome',
   what: 'Birdbrain listens and tells you which birds are singing.',
-  onDevice: `It runs on your phone, so your audio never leaves it. The first time, it downloads a ${MODEL_SIZE_MB} MB bird model. Use Wi-Fi if you can.`,
-  account: 'An account is optional. It adds Ask about this bird and sharing with friends, and I approve each new one.',
+  onDevice: `It runs on your phone; audio never leaves it. First use downloads ${MODEL_SIZE_MB} MB (Wi-Fi best).`,
+  account: 'Accounts are optional: they add Ask about this bird and friends. I approve each one.',
   tabs: 'Species, Map and Recordings work without the download.',
   start: 'Start identifying',
   signIn: 'Sign in / Create account',

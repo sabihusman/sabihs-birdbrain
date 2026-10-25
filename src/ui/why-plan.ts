@@ -50,7 +50,7 @@ export function estimateText(passes: number, perPassMs: number | null): string {
 export function whyPlanNote(plan: WhyPlan): string {
   const est = estimateText(plan.passes, plan.perPassMs);
   const runs = `${RESOLUTION_NAME[plan.resolution]} detail, ${plan.passes} model passes${est ? `, ${est}` : ''}`;
-  return plan.reduced ? `${runs}. This phone runs the model without graphics acceleration, so “Why this ID” uses less detail to save time and battery.` : `${runs}.`;
+  return plan.reduced ? `${runs}. Less detail on this phone (no graphics acceleration) to save time and battery.` : `${runs}.`;
 }
 
 /** The second button on a slow phone, e.g. "Run at Medium (49 passes, about 2 min)". */

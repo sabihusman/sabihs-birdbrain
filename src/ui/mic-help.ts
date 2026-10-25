@@ -33,11 +33,11 @@ export function micHelp(ua: string): MicHelp {
     case 'safari-ios':
       return {
         browser,
-        steps: ['Settings → Safari → Microphone → Ask or Allow (on iOS 18 and later: Settings › Apps › Safari › Microphone), or tap “aA” in the address bar → Website Settings.', 'Home-screen app: Settings › Apps › Birdbrain › Microphone.', 'Then tap Try again.'],
+        steps: ['Tap “aA” in the address bar › Website Settings › Microphone. Or Settings › Apps › Safari › Microphone (older iOS: Settings › Safari).', 'Home-screen app: Settings › Apps › Birdbrain › Microphone.', 'Then tap Try again.'],
       };
     case 'other-ios':
       return { browser, steps: ['Settings › Apps › [your browser] › Microphone, then reload and tap Allow.'] };
     default:
-      return { browser, steps: ['Allow the microphone for this site in your browser’s site settings (usually the lock or tune icon next to the address), then tap Try again.'] };
+      return { browser, steps: ['Allow the mic in site settings (icon left of the address), then tap Try again.'] };
   }
 }

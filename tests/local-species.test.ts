@@ -50,6 +50,6 @@ describe('local species: what the Species tab shows', () => {
     expect(r.localCount).toBeNull();
     expect(r.note).toMatch(/no location/);
     expect(describeLocalCount(r)).toBe('4 species');
-    expect(filterLocal(ALL, null, false, null).note).toMatch(/no location is available/);
+    expect(filterLocal(ALL, null, false, null).note).toBe('All species: no location to narrow the list.');
   });
 });

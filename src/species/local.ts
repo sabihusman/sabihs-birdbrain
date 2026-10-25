@@ -131,7 +131,7 @@ export interface LocalFilterResult {
  */
 export function filterLocal(all: Species[], local: Set<number> | null, showAll: boolean, locationNote: string | null): LocalFilterResult {
   const total = all.length;
-  if (!local) return { shown: all, localCount: null, total, note: locationNote ?? 'Showing all species: no location is available, so the list cannot be narrowed to your area.' };
+  if (!local) return { shown: all, localCount: null, total, note: locationNote ?? 'All species: no location to narrow the list.' };
   const localList = all.filter((s) => local.has(s.index));
   if (showAll) return { shown: all, localCount: localList.length, total, note: null };
   return { shown: localList, localCount: localList.length, total, note: null };

@@ -244,7 +244,7 @@ export function mapView(ctx: ViewContext): View {
     statusLine,
     list,
     credit,
-    el('p', { class: 'small muted' }, 'Each dot is a sighting in its bird’s colour. Tap a dot or a bird card to show that bird’s photo on the map, then tap the photo for details. Tiles come from OpenStreetMap and are not cached for offline use.'),
+    el('p', { class: 'small muted' }, 'Dots are sightings in each bird’s colour. Tap a dot or card for its photo, then the photo for details. Needs a connection.'),
   );
 
   let map: L.Map | null = null;
@@ -451,7 +451,7 @@ export function mapView(ctx: ViewContext): View {
     setStatus(null);
     credit.hidden = true;
     if (located.length === 0) {
-      countLine.textContent = 'No sightings with a location yet. Birds you identify with location on show up here.';
+      countLine.textContent = 'No sightings with a location yet. Turn location on to add them.';
       list.replaceChildren();
       return;
     }
@@ -467,14 +467,14 @@ export function mapView(ctx: ViewContext): View {
     credit.hidden = false;
     if (located.length === 0) {
       setStatus(null);
-      countLine.textContent = 'No sightings with a location yet. Birds you identify with location on show up here.';
+      countLine.textContent = 'No sightings with a location yet. Turn location on to add them.';
       list.replaceChildren();
       return;
     }
     // Only navigator.onLine === false is "offline"; a failed request while online is "busy".
     const anyNamed = areas.some((a) => names.get(a.key));
-    if (namesStatus === 'offline' && !anyNamed) setStatus('Place names need a connection. Your birds are still on the map and under Birds.');
-    else if (namesStatus === 'offline') setStatus('Offline: showing the place names saved on this phone.');
+    if (namesStatus === 'offline' && !anyNamed) setStatus('Place names need a connection; Birds still works.');
+    else if (namesStatus === 'offline') setStatus('Offline: showing saved place names.');
     else if (namesStatus === 'busy') setStatus('Place names are busy, try again later.', true);
     else setStatus(null);
     const sel = selection?.kind === 'place' ? areaFor(selection.key) : null;

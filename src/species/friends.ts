@@ -70,7 +70,7 @@ export const REFRESH_BACKOFF_MS = [2_000, 8_000, 30_000] as const;
 
 /** What to tell a member when the list could not be refreshed. */
 export function describeRefreshFailure(message: string): string {
-  return /\b429\b|rate/i.test(message) ? 'The server was busy; friends’ birds may be out of date. Trying again…' : `Couldn’t refresh friends’ birds: ${message}`;
+  return /\b429\b|rate/i.test(message) ? 'Friends’ birds may be out of date. Retrying…' : `Couldn’t refresh friends’ birds: ${message}`;
 }
 
 export class FriendsCache extends Emitter<{ change: Map<string, SpottedBy[]> }> {

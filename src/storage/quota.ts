@@ -43,11 +43,11 @@ export async function requestPersistentStorage(): Promise<boolean | null> {
 export const PERSIST_ASKED_KEY = 'birdbrain.persist-asked.v1';
 
 /** Shown when the app asks, so a browser that prompts (Firefox) is not a surprise. */
-export const PERSIST_REASON = 'Asking your browser to keep the bird model and your sightings on this phone, so they are not deleted when space runs low and the 78 MB download is not needed again.';
+export const PERSIST_REASON = 'Asking your browser to keep the model and sightings, so low space can’t delete them.';
 
 /** The Settings explanation: why the app asks and what it changes. */
 export const PERSIST_EXPLAINED =
-  'Why this matters: the bird model (about 78 MB) and your sightings, recordings and clips are kept on this phone. Without persistent storage, the browser may delete them on its own when the phone runs low on space, and Safari may also clear a site that has not been opened for a while. You would then lose sightings that were never exported, and the model would download again. With it, the browser keeps them until you delete them. Chrome and Safari decide by themselves without asking you; Firefox shows a prompt. Nothing leaves your phone either way.';
+  'Why: the model (78 MB) and your sightings live on this phone. Without this, the browser may delete them when space is low, and Safari clears sites left unused; anything not exported is lost. Chrome and Safari decide without asking; Firefox asks. Nothing leaves your phone.';
 
 export type PersistOutcome = 'granted' | 'denied' | 'already' | 'asked-before' | 'unsupported';
 
