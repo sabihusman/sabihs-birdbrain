@@ -49,11 +49,20 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   await page.goto('./');
   const welcome = page.getByTestId('welcome');
   await expect(welcome).toBeVisible();
+  // The welcome from the mockup (DECISIONS.md #94): photo with its credit, title, pitch, three lines, two account buttons.
+  await expect(welcome.getByRole('heading', { name: 'Who’s singing out there?' })).toBeVisible();
+  await expect(welcome.getByRole('img', { name: 'A song thrush standing on a mossy stump' })).toBeVisible();
+  expect(await welcome.getByRole('img').evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0), 'the bundled photo loads').toBe(true);
+  await expect(welcome.getByRole('link', { name: 'Song thrush: Dion Art, CC BY-SA 4.0' })).toHaveAttribute('href', /commons\.wikimedia\.org\/wiki\/File:/);
   await expect(welcome).toContainText('Birdbrain listens and tells you which birds are singing.');
-  await expect(welcome).toContainText('First use downloads 78 MB (Wi-Fi best).');
-  await expect(welcome).toContainText('Accounts are optional');
+  await expect(welcome).toContainText('once the 78 MB bird model is downloaded.');
+  await expect(welcome).toContainText('An account is optional.');
+  await expect(welcome).toContainText('New accounts are approved by Sabih');
   await expect(page.getByTestId('welcome-start')).toHaveText('Start identifying');
-  await expect(page.getByTestId('welcome-signin')).toHaveText('Sign in / Create account');
+  await expect(page.getByTestId('welcome-signin')).toHaveText('Sign in');
+  await expect(page.getByTestId('welcome-signup')).toHaveText('Create account');
+  // No "Ready to work offline." on a first visit: the model is not on the phone yet.
+  await expect(page.getByText('Ready to work offline.')).toHaveCount(0);
   await expect(page.getByTestId('start-stop')).toHaveCount(0); // the layer stands in for the whole screen
   await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
   // The one filled button is Start identifying; the welcome fits the phone width.
@@ -67,12 +76,14 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   await expect(page.getByTestId('species-list')).toContainText('Lesser Redpoll');
   await page.getByRole('link', { name: 'Listen' }).click();
   await expect(welcome).toBeVisible();
-  // Sign in / Create account: Settings opens on the Account card, still with no download.
+  // Sign in and Create account each open their own page, still with no download.
   await page.getByTestId('welcome-signin').click();
-  await expect(page).toHaveURL(/#\/settings\/account$/);
-  await expect(page.getByTestId('account')).toBeVisible();
-  await expect(page.getByTestId('account').getByRole('link', { name: 'Sign in' })).toBeVisible();
-  await expect(page.getByTestId('account').getByRole('link', { name: 'Create account' })).toBeVisible();
+  await expect(page).toHaveURL(/#\/signin$/);
+  await expect(page.getByTestId('signin-email')).toBeVisible();
+  await page.goto('./#/listen');
+  await page.getByTestId('welcome-signup').click();
+  await expect(page).toHaveURL(/#\/signup$/);
+  await expect(page.getByTestId('signup-email')).toBeVisible();
   expect(modelRequests, 'nothing downloaded before Start identifying').toBe(0);
   // Back on Listen the layer is still up (no settings were changed), and Start identifying takes it down.
   await page.goto('./#/listen');
@@ -976,7 +987,7 @@ test('no horizontal scrolling and the primary control visible at 320, 375, 390 a
     await expect(page.getByTestId('welcome')).toBeVisible();
     const w = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     expect(w.sw, `welcome at ${width}px`).toBeLessThanOrEqual(w.iw);
-    for (const id of ['welcome-start', 'welcome-signin']) {
+    for (const id of ['welcome-start', 'welcome-signin', 'welcome-signup']) {
       const b = await page.getByTestId(id).boundingBox();
       expect(b!.x + b!.width, `${id} inside ${width}px`).toBeLessThanOrEqual(width);
       expect(b!.height, `${id} is a 44 px target`).toBeGreaterThanOrEqual(44);

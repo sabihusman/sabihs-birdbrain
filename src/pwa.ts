@@ -1,8 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
-import type { Notice } from './app/controller';
 
 export interface PwaHooks {
-  notify: (n: Notice) => void;
   /** A new version is waiting; call `apply()` to activate it and reload. Never called with a reload while listening: the UI decides when. */
   onUpdateAvailable: (apply: () => Promise<void>) => void;
 }
@@ -15,8 +13,7 @@ export function registerPwa(hooks: PwaHooks): void {
     onNeedRefresh() {
       hooks.onUpdateAvailable(() => update(true));
     },
-    onOfflineReady() {
-      hooks.notify({ kind: 'info', text: 'Ready to work offline.' });
-    },
+    // No "Ready to work offline." notice (DECISIONS.md #94): on a first visit it appeared before the 78 MB
+    // bird model was on the phone, so it promised more than it meant. The status pill says when the model is ready.
   });
 }
