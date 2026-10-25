@@ -18,6 +18,7 @@ import { getClipMeta, newId, putRecording, recordDetections } from '../storage/d
 import type { ClipRecord, DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
 import { LocationManager, type LocationState } from './location';
 import { PositionWatch, positionStamp, type PositionStamp } from './position-watch';
+import { shouldAutoSaveClip, type LastAutoClip } from './autoclip';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
 import { isModelCached, markModelWanted, safeLocalStorage } from './first-visit';
@@ -146,7 +147,8 @@ export class AppController extends Emitter<ControllerEvents> {
   private timer: number | null = null;
   private recorder: Recorder | null = null;
   private wakeLock: WakeLockSentinel | null = null;
-  private lastAutoClip = new Map<string, number>();
+  /** Each bird's last auto-saved clip this session: a new one only when more confident (DECISIONS.md #96). */
+  private lastAutoClip = new Map<string, LastAutoClip>();
   private geoCount = 0;
   private modelReady = false;
   private modelFailure: ModelFailure | null = null;
@@ -421,6 +423,7 @@ export class AppController extends Emitter<ControllerEvents> {
     this.saveWarned.clear();
     this.notUsual.clear();
     this.keptAgainstFilter.clear();
+    this.lastAutoClip.clear();
     this.emit('not-usual', []);
     this.sessionStartedAt = Date.now();
     this.windowCounter = 0;
@@ -602,9 +605,8 @@ export class AppController extends Emitter<ControllerEvents> {
     if (s.autoSaveClips && windowAudio) {
       const best = result.detections[0];
       const sp = this.species[best.index];
-      const last = this.lastAutoClip.get(sp.scientific) ?? 0;
-      if (best.prob >= s.autoSaveMinConfidence && Date.now() - last > 30_000) {
-        this.lastAutoClip.set(sp.scientific, Date.now());
+      if (shouldAutoSaveClip(this.lastAutoClip.get(sp.scientific), best.prob, s.autoSaveMinConfidence, Date.now())) {
+        this.lastAutoClip.set(sp.scientific, { time: Date.now(), confidence: best.prob });
         // A clip that cannot be stored must not cost the sighting itself (DECISIONS.md #82).
         try {
           const rec = await this.saveRecording(windowAudio, `${AUTO_SAVE_RECORDING_PREFIX}: ${sp.common}`, 'autoclip', result.detections);

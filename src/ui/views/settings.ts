@@ -169,7 +169,7 @@ export function settingsView(ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Recording'),
-      toggle('Auto-save detections (3 s each)', 'autoSaveClips', 'Saves each detection\u2019s 3 s to Recordings, at most one per species every 30 s. Separate from members\u2019 10 s ID clips.'),
+      toggle('Auto-save detections (3 s each)', 'autoSaveClips', 'Saves a detection\u2019s 3 s to Recordings; a bird gets a new clip only when more confident than its last one this session. Separate from members\u2019 10 s ID clips.'),
       slider('Auto-save from', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below your confidence threshold.'),
     ),
     el(
