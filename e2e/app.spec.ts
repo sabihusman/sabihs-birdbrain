@@ -706,6 +706,23 @@ test('imports a recording, analyses it and explains an identification', async ({
   // Every species row starts with a small bird photo (placeholder until Wikipedia answers).
   await expect(page.locator('.chip .chip-thumb').first()).toBeVisible();
   await expect(page.getByTestId('recording-detections')).toContainText('Redpoll');
+  // At 320 px the names (with the "1 window · best at" line under them) end before the confidence bar starts;
+  // the subtitle used to be a fifth item in the row and squeezed the name over the bar.
+  await page.setViewportSize({ width: 320, height: 664 });
+  const chipBoxes = await page.getByTestId('recording-detections').locator('.chip').evaluateAll((chips) =>
+    chips.map((c) => {
+      const r = (sel: string) => c.querySelector(sel)?.getBoundingClientRect() ?? null;
+      const common = c.querySelector('.chip-common') as HTMLElement;
+      return { names: r('.chip-names'), conf: r('.chip-conf'), sub: r('.chip-names .chip-sub'), commonFits: common.scrollWidth <= common.clientWidth };
+    }),
+  );
+  expect(chipBoxes.length).toBeGreaterThan(0);
+  for (const b of chipBoxes) {
+    expect(b.sub, 'subtitle under the names').not.toBeNull();
+    expect(b.names!.right).toBeLessThanOrEqual(b.conf!.left);
+    expect(b.commonFits, 'the name does not spill out of its column').toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 664 });
 
   // Sighting card: the bird's names as the title, confidence as text, map preview above the coordinates,
   // Plus Code folded away, About this bird, and "Sign in to ask" for a free user.
