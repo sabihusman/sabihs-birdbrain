@@ -2627,6 +2627,20 @@ other open branches, so this may be renumbered at merge.)
   already-persistent, unsupported); an e2e test of the first download, no second request after a
   reload, and the Settings text.
 
+## 86. Reset and invite links survive a second drawing of their page
+
+- **Problem:** the Forgot password e2e test failed twice in slow CI-style runs with "This link is
+  incomplete". Cause: the reset page (and Create account from an invite) removes the token from the
+  address bar as soon as it opens (DECISIONS.md #78, #80). Two quick address changes queue two
+  `hashchange` events; the first drawing removes the token, and the second drawing reads the cleaned
+  address and finds none. A person tapping quickly could hit the same thing.
+- **Fix:** `takeToken()` in `src/ui/views/auth.ts` remembers a token taken from the address for
+  the rest of the page visit, so a second drawing of the same route still has it. It is forgotten
+  once used (password changed, account created) or refused (expired or used link). A reload still
+  starts without it, as before.
+- **Test:** an e2e test makes both address changes in one go, for a reset link and an invite
+  link; it fails without the fix.
+
 ## 85. "Why this ID" uses Coarse on phones without WebGL, with the chosen level one tap away
 
 - **Source:** audit item 2B (Sabih chose it).

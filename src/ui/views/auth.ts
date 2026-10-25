@@ -47,6 +47,29 @@ export function codeSentText(email: string, expiresInSeconds: number, purpose: '
   return `We emailed a 6-digit code to ${email}.${why} It expires in ${minutes} minute${minutes === 1 ? '' : 's'}.`;
 }
 
+/**
+ * Tokens taken out of the address bar during this page visit (DECISIONS.md #86). The pages remove
+ * a reset or invite token from the URL as soon as they open; if the route is drawn a second time
+ * (two quick address changes queue two `hashchange` events), that second drawing reads the
+ * cleaned address and would wrongly say the link is incomplete. It uses the remembered token.
+ */
+const takenTokens: Partial<Record<'reset' | 'invite', string>> = {};
+
+/** The token for this page: from the address (then remembered and removed), else the one remembered. */
+export function takeToken(kind: 'reset' | 'invite', fromUrl: string | undefined, cleanHash: string): string | undefined {
+  if (fromUrl) {
+    takenTokens[kind] = fromUrl;
+    if (typeof history !== 'undefined' && typeof location !== 'undefined') history.replaceState(null, '', `${location.pathname}${location.search}${cleanHash}`);
+    return fromUrl;
+  }
+  return takenTokens[kind];
+}
+
+/** Forget a token once it is used up or refused, so the page no longer offers it. */
+export function forgetToken(kind: 'reset' | 'invite'): void {
+  delete takenTokens[kind];
+}
+
 /** Back link, title and the page body in one card. */
 function page(title: string, testId: string, ...body: HTMLElement[]): { root: HTMLElement; card: HTMLElement } {
   const card = el('section', { class: 'card', 'data-testid': testId }, el('h2', null, title), ...body);
@@ -161,10 +184,10 @@ export function signInView(ctx: ViewContext): View {
   return { el: root };
 }
 
-export function signUpView(ctx: ViewContext, invite?: string): View {
+export function signUpView(ctx: ViewContext, inviteFromUrl?: string): View {
   const { api } = ctx;
   // Like the reset link, the invite token leaves the address bar at once and stays in memory only.
-  if (invite && typeof history !== 'undefined') history.replaceState(null, '', `${location.pathname}${location.search}#/signup`);
+  const invite = takeToken('invite', inviteFromUrl, '#/signup');
   const message = statusLine();
   const body = el('div', { class: 'stack' });
   const { root } = page('Create account', 'signup-page', body, message);
@@ -182,6 +205,7 @@ export function signUpView(ctx: ViewContext, invite?: string): View {
   };
 
   const done = (u: AuthUser, shareBack: boolean) => {
+    forgetToken('invite');
     // The ticked box is this person's "Share my species list" consent; it uploads once they are approved.
     if (shareBack) setSharingOn(u.id, true);
     show(message, '');
@@ -257,6 +281,7 @@ export function signUpView(ctx: ViewContext, invite?: string): View {
       })
       .catch(() => {
         inviter = null;
+        forgetToken('invite');
       })
       .finally(() => {
         inviteChecked = true;
@@ -296,8 +321,8 @@ export function forgotPasswordView(ctx: ViewContext): View {
  * The page the emailed link opens. The token is taken out of the address bar at once, so it is
  * not left in the browser history; it stays in memory for this page only.
  */
-export function resetPasswordView(ctx: ViewContext, token: string): View {
-  if (token && typeof history !== 'undefined') history.replaceState(null, '', `${location.pathname}${location.search}#/reset-password`);
+export function resetPasswordView(ctx: ViewContext, tokenFromUrl: string): View {
+  const token = takeToken('reset', tokenFromUrl || undefined, '#/reset-password') ?? '';
   const message = statusLine();
   const body = el('div', { class: 'stack' });
   const { root } = page('Choose a new password', 'reset-page', body, message);
@@ -321,9 +346,11 @@ export function resetPasswordView(ctx: ViewContext, token: string): View {
     show(message, '');
     try {
       await ctx.api.resetPassword(token, password.value);
+      forgetToken('reset');
       body.replaceChildren(el('div', { class: 'stack', role: 'status', 'data-testid': 'reset-done' }, el('p', null, AUTH_TEXT.resetDone), el('a', { class: 'btn primary', href: '#/signin' }, 'Sign in')));
     } catch (err) {
       show(message, describeApiError(err));
+      if (err instanceof ApiError && err.code === 'invalid_token') forgetToken('reset');
       if (err instanceof ApiError && err.code === 'invalid_token') body.replaceChildren(el('a', { class: 'btn', href: '#/forgot-password' }, 'Ask for a new link'));
     } finally {
       busy = submit.disabled = false;
