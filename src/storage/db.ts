@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { ClipRecord, DetectionRecord, RecordingRecord, SightingRecord, WikiCacheEntry } from './types';
 import { applyDetection, buildSightings, canMerge, DEFAULT_SIGHTING_GAP_SECONDS, sightingFromDetection } from '../species/sightings';
+import { fromStored, putWithBlobFallback } from './blob-fallback';
 
 interface BirdbrainDB extends DBSchema {
   recordings: {
@@ -92,21 +93,21 @@ export function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// Recordings
+// Recordings (audio as a Blob, or as bytes where Safari refuses the Blob: DECISIONS.md #82)
 export async function putRecording(rec: RecordingRecord): Promise<void> {
   const db = await getDB();
-  await db.put('recordings', rec);
+  await putWithBlobFallback((v) => db.put('recordings', v as RecordingRecord), rec);
 }
 
 export async function getRecording(id: string): Promise<RecordingRecord | undefined> {
   const db = await getDB();
-  return db.get('recordings', id);
+  return fromStored<RecordingRecord>(await db.get('recordings', id));
 }
 
 export async function listRecordings(): Promise<RecordingRecord[]> {
   const db = await getDB();
   const all = await db.getAllFromIndex('recordings', 'by-created');
-  return all.reverse();
+  return all.reverse().map((r) => fromStored<RecordingRecord>(r)!);
 }
 
 export async function deleteRecording(id: string): Promise<void> {
@@ -224,12 +225,12 @@ export async function putWikiCache(entry: WikiCacheEntry): Promise<void> {
 // Species clips (one per species)
 export async function getClip(scientific: string): Promise<ClipRecord | undefined> {
   const db = await getDB();
-  return db.get('clips', scientific);
+  return fromStored<ClipRecord>(await db.get('clips', scientific));
 }
 
 export async function putClip(clip: ClipRecord): Promise<void> {
   const db = await getDB();
-  await db.put('clips', clip);
+  await putWithBlobFallback((v) => db.put('clips', v as ClipRecord), clip);
 }
 
 export async function deleteClip(scientific: string): Promise<void> {
@@ -239,7 +240,7 @@ export async function deleteClip(scientific: string): Promise<void> {
 
 export async function listClips(): Promise<ClipRecord[]> {
   const db = await getDB();
-  return db.getAll('clips');
+  return (await db.getAll('clips')).map((c) => fromStored<ClipRecord>(c)!);
 }
 
 export async function clearAllData(): Promise<void> {
