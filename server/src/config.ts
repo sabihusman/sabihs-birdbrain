@@ -26,6 +26,10 @@ const envSchema = z.object({
   OLLAMA_API_KEY: z.string().optional(),
   OLLAMA_MODEL: z.string().default('gemma4:31b'),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(8000),
+  /** Anthropic (Claude) provider (DECISIONS.md #91): the key and the model both come from .env; there is no default model. Never logged. */
+  ANTHROPIC_API_KEY: z.string().trim().min(1).optional(),
+  ANTHROPIC_MODEL: z.string().trim().min(1).optional(),
+  ANTHROPIC_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
   /** eBird API 2.0 key (optional): without it /v1/ask answers without eBird sightings. Never logged. */
   EBIRD_API_KEY: z.string().trim().min(1).optional(),
   ASK_DAILY_PER_USER: z.coerce.number().int().min(0).default(20),
@@ -40,7 +44,7 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
-export const PROVIDER_NAMES = ['ollama', 'gemini'] as const;
+export const PROVIDER_NAMES = ['ollama', 'gemini', 'anthropic'] as const;
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 
 export interface Config extends Env {
@@ -83,6 +87,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
   for (const o of allowedOrigins) {
     if (!/^https?:\/\/[^/]+$/.test(o)) throw new Error(`Invalid configuration: ALLOWED_ORIGINS entry is not an origin: ${o}`);
   }
+  if (env.ANTHROPIC_API_KEY && !env.ANTHROPIC_MODEL) throw new Error('Invalid configuration: ANTHROPIC_MODEL is required when ANTHROPIC_API_KEY is set');
   // The Vite dev server, only outside production (compose.yml pins NODE_ENV=production).
   const DEV_ORIGIN = 'http://localhost:5173';
   if (env.NODE_ENV !== 'production' && !allowedOrigins.includes(DEV_ORIGIN)) allowedOrigins.push(DEV_ORIGIN);

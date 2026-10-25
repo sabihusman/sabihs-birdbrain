@@ -25,7 +25,7 @@ export function adminView(ctx: ViewContext): View {
     }
     root.replaceChildren(
       el('div', { class: 'row' }, el('a', { class: 'btn small', href: '#/admin/users', 'data-testid': 'to-user-management' }, '‹ User management')),
-      el('section', { class: 'card' }, el('h2', null, 'Ask costs'), el('p', { class: 'small muted' }, 'Which service answered over the last 30 days, then the estimated Gemini spend per UTC day from token counts and list prices. Ollama Cloud usage counts against its plan allowance, not a price. Cache hits cost nothing.'), providerTable, capLine, costStatus, costTable),
+      el('section', { class: 'card' }, el('h2', null, 'Ask costs'), el('p', { class: 'small muted' }, 'Which service answered over the last 30 days, with Claude’s estimated cost from its tokens and list price, then the estimated Gemini spend per UTC day. Ollama Cloud usage counts against its plan allowance, not a price. Cache hits cost nothing.'), providerTable, capLine, costStatus, costTable),
     );
     costStatus.textContent = 'Loading…';
     try {
@@ -57,7 +57,7 @@ export function adminView(ctx: ViewContext): View {
     const rows = providerRows(summary);
     if (rows.length === 0) return;
     const row = (cells: string[], tag: 'th' | 'td' = 'td') => el('tr', null, ...cells.map((c, i) => el(tag, { class: i < 2 ? '' : 'num' }, c)));
-    providerTable.appendChild(el('table', { class: 'cost-table' }, el('thead', null, row(['Provider', 'Model', 'Answers', 'After fallback', 'Prompt tokens', 'Answer tokens'], 'th')), el('tbody', null, ...rows.map((r) => row([r.provider, r.model, String(r.requests), String(r.fallbacks), String(r.promptTokens), String(r.answerTokens)])))));
+    providerTable.appendChild(el('table', { class: 'cost-table' }, el('thead', null, row(['Provider', 'Model', 'Answers', 'After fallback', 'Prompt tokens', 'Answer tokens', 'Est. cost'], 'th')), el('tbody', null, ...rows.map((r) => row([r.provider, r.model, String(r.requests), String(r.fallbacks), String(r.promptTokens), String(r.answerTokens), r.cost])))));
   };
 
   const renderCosts = (model: string, days: AskCostDay[]) => {
@@ -262,13 +262,16 @@ export function userManagementView(ctx: ViewContext): View {
 }
 
 /** The provider rows in configured order (a configured provider with no answers still shows a zero row); unknown models as "?". */
-export function providerRows(summary: Pick<AskCostSummary, 'providerOrder' | 'models' | 'providers'>): Array<{ provider: string; model: string; requests: number; fallbacks: number; promptTokens: number; answerTokens: number }> {
+export function providerRows(summary: Pick<AskCostSummary, 'providerOrder' | 'models' | 'providers' | 'estimates'>): Array<{ provider: string; model: string; requests: number; fallbacks: number; promptTokens: number; answerTokens: number; cost: string }> {
   const totals = summary.providers ?? [];
   const order = summary.providerOrder ?? totals.map((t) => t.provider);
   const names = [...order, ...totals.map((t) => t.provider).filter((p) => !order.includes(p))];
   return names.map((provider) => {
     const t = totals.find((x) => x.provider === provider);
-    return { provider, model: summary.models?.[provider] ?? '?', requests: t?.requests ?? 0, fallbacks: t?.fallbacks ?? 0, promptTokens: t?.promptTokens ?? 0, answerTokens: t?.answerTokens ?? 0 };
+    // Claude's estimate from its tokens; Gemini's spend is the table below; Ollama counts against its plan.
+    const est = provider === 'anthropic' ? summary.estimates?.anthropic : undefined;
+    const cost = provider === 'anthropic' ? (est == null ? '?' : fmtUsd(est)) : provider === 'gemini' ? 'below' : 'plan';
+    return { provider, model: summary.models?.[provider] ?? '?', requests: t?.requests ?? 0, fallbacks: t?.fallbacks ?? 0, promptTokens: t?.promptTokens ?? 0, answerTokens: t?.answerTokens ?? 0, cost };
   });
 }
 

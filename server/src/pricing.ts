@@ -133,3 +133,25 @@ export function costMicros(model: string, usage: TokenUsage): number | null {
 export function formatUsd(micros: number | null): string {
   return micros === null ? 'unknown' : (micros / 1_000_000).toFixed(6);
 }
+
+/**
+ * Anthropic list prices, USD per 1,000,000 tokens, Claude API, from
+ * https://platform.claude.com/docs/en/about-claude/pricing read on 2026-10-25 (DECISIONS.md #91):
+ *   Claude Sonnet 5.5  input $2,  output $10
+ *   Claude Opus 5.5    input $4,  output $20
+ *   Claude Haiku 5.5   input $0.10, output $0.50 (prompts up to 100,000 tokens; ours are ~2,000)
+ * Output includes thinking tokens. The admin estimate prices every prompt token at the input rate
+ * (cache reads are cheaper), so it errs high. An unlisted model has no estimate rather than a guess.
+ */
+export const ANTHROPIC_PRICES_VERIFIED_ON = '2026-10-25';
+export const ANTHROPIC_PRICES: Readonly<Record<string, { inputPerM: number; outputPerM: number }>> = {
+  'claude-sonnet-5-5': { inputPerM: 2, outputPerM: 10 },
+  'claude-opus-5-5': { inputPerM: 4, outputPerM: 20 },
+  'claude-haiku-5-5': { inputPerM: 0.1, outputPerM: 0.5 },
+};
+
+/** Estimated micro-dollars for token totals on an Anthropic model, or null when the model has no listed price. */
+export function anthropicCostMicros(model: string | undefined, promptTokens: number, answerTokens: number): number | null {
+  const p = model ? ANTHROPIC_PRICES[model] : undefined;
+  return p ? Math.round(promptTokens * p.inputPerM + answerTokens * p.outputPerM) : null;
+}

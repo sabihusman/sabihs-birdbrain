@@ -82,7 +82,9 @@ describe('admin cost summary with provider rows', () => {
     expect((await post(t.app, '/v1/ask', { species: 'Turdus merula', question: 'Where does it live?' }, bearer(member.token))).status).toBe(200);
     const res = (await (await get(t.app, '/v1/admin/ask-costs', bearer(admin))).json()) as Record<string, unknown>;
     expect(res.providerOrder).toEqual(['ollama', 'gemini']);
-    expect(res.models).toEqual({ ollama: 'gemma4:31b', gemini: 'gemini-3.5-flash-lite' });
+    expect(res.models).toEqual({ ollama: 'gemma4:31b', gemini: 'gemini-3.5-flash-lite', anthropic: null });
+    // No Claude answers in the window: nothing spent (DECISIONS.md #91).
+    expect(res.estimates).toEqual({ anthropic: 0 });
     expect(res.providers).toEqual([
       { provider: 'gemini', requests: 1, promptTokens: 1800, answerTokens: 120, fallbacks: 1 },
       { provider: 'ollama', requests: 1, promptTokens: 1700, answerTokens: 110, fallbacks: 0 },
