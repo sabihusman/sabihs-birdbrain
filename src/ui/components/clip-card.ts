@@ -117,7 +117,7 @@ export function clipCard(ctx: ViewContext, species: Species, clip: ClipRecord): 
       spectrogram.setHeatmap({ map: res.map, timeSteps: res.timeSteps, freqBands: res.freqBands, bandEdgesHz: res.bandEdgesHz, color, startSec: why.offsetSec, endSec: why.offsetSec + WINDOW_SECONDS });
       let maxDrop = 0;
       for (const v of res.map) maxDrop = Math.max(maxDrop, v);
-      whyBox.replaceChildren(el('div', { class: 'small', 'data-testid': 'clip-why-result' }, `${species.common}: baseline ${pct(res.baseline)} on this window. Silencing the most important region (shaded) drops it by ${pct(maxDrop)}. Window ${fmtDuration(why.offsetSec)}–${fmtDuration(why.offsetSec + WINDOW_SECONDS)}, ${res.timeSteps}×${res.freqBands} grid.`), whyBtn);
+      whyBox.replaceChildren(el('div', { class: 'small', 'data-testid': 'clip-why-result' }, `${species.common}: baseline ${pct(res.baseline)} on this window. Silencing the most important region (outlined) drops it by ${pct(maxDrop)}. Window ${fmtDuration(why.offsetSec)}–${fmtDuration(why.offsetSec + WINDOW_SECONDS)}, ${res.timeSteps}×${res.freqBands} grid.`), whyBtn);
       drawFrame();
     } catch (e) {
       cancelWhy = null;

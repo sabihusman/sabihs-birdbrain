@@ -2707,3 +2707,20 @@ other open branches, so this may be renumbered at merge.)
   before the spectrum, so loud low rumble sets the scale; the two mel inputs cover 0–3,000 Hz and
   500–15,000 Hz; the app's 150 Hz biquad (Q 1 dB) lifts 150–550 Hz by about 1.5 dB.
 - **Limits:** 13 windows; steady synthetic noise, not real gusts or microphone overload.
+
+## 89. "Why this ID" is drawn as darkening plus one outline, not a fill in the species colour
+
+- **Problem (Sabih, Great Horned Owl on an iPhone):** the occlusion result was a fill in the species
+  colour with alpha by importance. The spectrogram uses the inferno colour map (black, purple, red,
+  orange, yellow), so a pink, red or purple species colour blended into it and the boxes were hard to
+  find. The analysed-window wash (the same colour at 18% over the whole window) made it worse.
+- **Now (`src/ui/viz/why-overlay.ts`, drawn in `spectrogram.ts`):** every part of the window is
+  darkened by how little it mattered (near-black, up to 65%, none on the most important part), so the
+  sound the model relied on stays at full brightness. The parts at or above half the biggest drop get
+  one outline around them (touching parts share it): a 2.5 px line in the species colour on a 5 px
+  near-black edge, which reads on bright and dark areas whatever the colour. The window wash is skipped
+  while a result is shown; the colour strip at the top stays.
+- **Wording:** the "How to read it" line (`src/ui/why-text.ts`) now describes the outline and the
+  darkening; the ID clip card says "(outlined)".
+- **Checked:** screenshots of the bundled sample with its own colour (teal) and with a forced pink
+  close to the owl's; both outlines are clear. Unit tests in `tests/why-overlay.test.ts`.
