@@ -19,7 +19,15 @@ export function speciesChip(species: Species, opts: ChipOptions = {}): HTMLEleme
   const inner = [
     opts.thumb === false ? null : birdThumb(species),
     el('span', { class: 'swatch', style: `background:${color.css}`, 'aria-hidden': 'true' }),
-    el('span', { class: 'chip-names' }, el('span', { class: 'chip-common' }, species.common), el('span', { class: 'chip-sci' }, species.scientific)),
+    // The subtitle sits under the names, not beside them: as a fifth item in the row it squeezed the
+    // name into a column narrower than one word, which then spilled over the confidence bar.
+    el(
+      'span',
+      { class: 'chip-names' },
+      el('span', { class: 'chip-common' }, species.common),
+      el('span', { class: 'chip-sci' }, species.scientific),
+      opts.subtitle ? el('span', { class: 'chip-sub' }, opts.subtitle) : null,
+    ),
     opts.confidence != null
       ? el(
           'span',
@@ -28,7 +36,6 @@ export function speciesChip(species: Species, opts: ChipOptions = {}): HTMLEleme
           el('span', { class: 'conf-text' }, pct(opts.confidence)),
         )
       : null,
-    opts.subtitle ? el('span', { class: 'chip-sub' }, opts.subtitle) : null,
   ];
   const cls = `chip${opts.outOfRange ? ' out-of-range' : ''}`;
   if (opts.link === false) return el('div', { class: cls }, ...inner);
