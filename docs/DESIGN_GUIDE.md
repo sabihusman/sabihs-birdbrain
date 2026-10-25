@@ -156,13 +156,15 @@ running (DECISIONS.md #59).
      "Listening · mm:ss", a mini level meter and Stop.
    - **Use case:** best one-handed.
 3. **Focus mode.** One thing on screen at a time: no lists, no chips, no "How BirdNET decides"
-   row.
-   - **Ready:** an extra-large mic button, the hint, and "Last bird: <name> · <time>" when there
-     is one.
-   - **Listening:** one large card for the latest bird (big photo, 24 px name, scientific name,
-     the best confidence, "heard N times", status line) and a large Stop.
-   - **Earlier birds:** "▲ N more birds · swipe up or tap", as a swipe and as a button, for
-     anyone who cannot swipe.
+   row (DECISIONS.md #83).
+   - **Introduction:** an extra-large mic button, the hint, and "Last bird: <name> · <time>" when
+     there is one. Shown once per browsing session and day, until the first start.
+   - **After that, listening or stopped:** one large card for the latest bird (big photo, 24 px
+     name, scientific name, the best confidence, "heard N times") with the conditions note above
+     it. The controls are pinned just above the tab bar for one-handed use: Stop and Record while
+     listening, a full-width Start listening when stopped. Stopping keeps the birds on screen.
+   - **Earlier birds:** an "Earlier birds (N)" button right under the latest bird opens them in
+     place; tapping again ("Hide earlier birds") closes them. No swipe.
    - **Use case:** best at arm's length in the field.
 
 ## 7. States and wording
