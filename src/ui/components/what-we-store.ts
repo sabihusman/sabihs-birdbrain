@@ -21,7 +21,7 @@ export interface WhatWeStoreGroup {
 /** Where a question goes, named from the server's list (DECISIONS.md #90); "an AI service" until the app has asked. */
 export function aiServicesItem(services: string[] | null): string {
   const several = (services?.length ?? 0) > 1;
-  return `The question and the fetched text are then sent to ${describeAiServices(services)}; ${several ? 'none of them ever sees' : 'it never sees'} your name, email or exact location.`;
+  return `The question and those sources go to ${describeAiServices(services)}; ${several ? 'none of them sees' : 'it never sees'} your name, email or exact location.`;
 }
 
 export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[] {
@@ -29,41 +29,36 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
   {
     title: 'On the server',
     items: [
-      'If you create an account, the server keeps your email address and your password (hashed, so it cannot be read back).',
-      'It also keeps your display name and your sign-in sessions.',
-      'The 6-digit sign-in codes are kept hashed, for a few minutes.',
-      'Password reset links are kept hashed too, for an hour.',
-      'It keeps your friends and open invites, and a count of the questions you ask each day.',
-      'If you invite someone who has no account, it keeps only a scrambled (hashed) copy of their address with the invite, for up to 30 days, so the same person is not emailed twice.',
+      'With an account: your email, password (hashed, unreadable), display name and sign-in sessions.',
+      'Sign-in codes (hashed, for minutes), reset links (hashed, 1 hour), friends, open invites and a daily question count.',
+      'Inviting someone without an account: a hashed copy of their address, up to 30 days, so they aren’t emailed twice.',
     ],
   },
   {
     title: 'Only on this phone',
     items: [
-      'Your sightings, recordings, clips and ticks stay on this phone only and are never uploaded.',
+      'Sightings, recordings, clips and ticks never leave this phone.',
       // src/geo/geocode.ts (DECISIONS.md #73): rounded area centres only, and only from the Map tab's Places view.
-      'Opening Places on the Map tab sends the centre of each 1 km area, rounded to about 100 m, to OpenStreetMap’s Nominatim service to get its name; nothing else is sent.',
+      'Map › Places sends each 1 km area’s centre, rounded to ~100 m, to OpenStreetMap’s Nominatim for its name. Nothing else.',
     ],
   },
   {
     title: 'If sharing is on',
     items: [
-      'The server also keeps your species list: for each bird, its scientific name and the day you last spotted it.',
-      'Your friends see your display name, those species and those dates, and nothing else.',
+      'The server keeps each bird’s name and the last day you spotted it. Friends see only that and your display name.',
     ],
   },
   {
     title: 'When you ask about a bird',
     items: [
-      'The species name, your question and your state or province code go to the server, which looks the species up on Wikipedia and NatureServe Explorer and, with that region code, on eBird.',
-      'For questions about birds near you, your position rounded to about 10 km goes to eBird too.',
+      'The species, your question and your state/province go to the server, which looks them up on Wikipedia, NatureServe and eBird. “Near me” questions add your position, rounded to ~10 km.',
       aiServicesItem(services),
-      'Answers are kept on the server for seven days so the same question is not asked again, without your name or email.',
+      'Answers are kept 7 days for repeat questions, without your name or email.',
     ],
   },
   {
     title: 'Deleting your account',
-    items: ['Deleting your account removes all of it from the server at once.', 'Copies in the nightly server backup are removed within 14 days.'],
+    items: ['Deleting your account erases it from the server at once, and from nightly backups within 14 days.'],
   },
   ];
 }

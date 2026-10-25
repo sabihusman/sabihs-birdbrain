@@ -21,7 +21,7 @@ describe('"Why this ID" on phones without WebGL (DECISIONS.md #85)', () => {
 
   it('says what runs and why, and offers the chosen level with its cost', () => {
     const slow = planWhy('medium', 'wasm', 2000);
-    expect(whyPlanNote(slow)).toBe('Coarse detail, 25 model passes, about 50 s. This phone runs the model without graphics acceleration, so “Why this ID” uses less detail to save time and battery.');
+    expect(whyPlanNote(slow)).toBe('Coarse detail, 25 model passes, about 50 s. Less detail on this phone (no graphics acceleration) to save time and battery.');
     expect(chosenButtonText(slow)).toBe('Run at Medium (49 passes, about 2 min)');
     expect(whyPlanNote(planWhy('medium', 'webgl', 100))).toBe('Medium detail, 49 model passes, a few seconds.');
   });

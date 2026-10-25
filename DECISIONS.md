@@ -2768,3 +2768,21 @@ other open branches, so this may be renumbered at merge.)
 - **Privacy text:** unchanged code; `GET /v1/ai-services` (#90) names "Anthropic Claude" once it is in the order.
 - **Switching (server `.env`):** `ANTHROPIC_API_KEY=…`, `ANTHROPIC_MODEL=claude-sonnet-5-5`,
   `AI_PROVIDER_ORDER=anthropic,gemini` (or `anthropic,ollama,gemini`); then the deploy restarts the container.
+
+## 92. Shorter wording throughout the app
+
+- **Why (Sabih):** wordy descriptions took up much of the screen. Same information, far fewer words;
+  the bird text from Wikipedia and the AI answers stay as they are.
+- **What:** 136 pieces of text, about 3,860 → 2,270 words (the reviewed list: hints, notes, empty
+  states, status lines, confirmations, pop-ups, privacy list, How it works). Button and tab names and
+  lines that were already short are unchanged.
+- **Privacy list (What we store):** every fact kept, in short form; the unit test checks each one.
+- **Dropped on purpose** (Sabih saw the list): "We also emailed you this note" after sign-up; "you are
+  signed out" and "listening keeps working" after deleting an account; the last "› Precise Location"
+  step (the message names it); "the model would download again"; "the list is bundled with the app";
+  "our own FFT"; the low-cut tip in the rumble advice (it is in Settings). The WAV format moved from
+  Recordings to How it works.
+- **Wrong facts fixed:** How it works said Why this ID was Coarse by default (Medium since #62).
+- **Kept on purpose:** the species name on the Why this ID result (more than one bird can be explained
+  on one recording).
+- **Rule for new text:** docs/DESIGN_GUIDE.md §7 "Length".

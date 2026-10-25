@@ -21,15 +21,14 @@ describe('Sign in and Create account pages (DECISIONS.md #77)', () => {
   });
 
   it('say where the code went, why, and for how long', () => {
-    expect(codeSentText('a@b.co', 600, 'sign-in')).toBe('We emailed a 6-digit code to a@b.co. It expires in 10 minutes.');
-    expect(codeSentText('a@b.co', 600, 'sign-up')).toBe('We emailed a 6-digit code to a@b.co. Enter it to finish creating your account. It expires in 10 minutes.');
-    expect(codeSentText('a@b.co', 50, 'sign-in')).toBe('We emailed a 6-digit code to a@b.co. It expires in 1 minute.');
+    expect(codeSentText('a@b.co', 600, 'sign-in')).toBe('Enter the 6-digit code sent to a@b.co. It expires in 10 min.');
+    expect(codeSentText('a@b.co', 600, 'sign-up')).toBe('Enter the 6-digit code sent to a@b.co to finish. It expires in 10 min.');
+    expect(codeSentText('a@b.co', 50, 'sign-in')).toBe('Enter the 6-digit code sent to a@b.co. It expires in 1 min.');
   });
 
   it('tell a new account it waits for approval, in plain words', () => {
-    expect(AUTH_TEXT.pending).toContain('approves each new account by hand');
-    expect(AUTH_TEXT.pending).toContain('you will get an email when yours is approved');
-    expect(AUTH_TEXT.pendingMeanwhile).toBe('Until then, listening and identifying birds work as before.');
+    expect(AUTH_TEXT.pending).toBe('Account created. You’ll get an email when Sabih approves it.');
+    expect(AUTH_TEXT.pendingMeanwhile).toBe('Everything else works meanwhile.');
   });
 });
 
@@ -44,13 +43,13 @@ describe('invite links (DECISIONS.md #80)', () => {
 
   it('say who invited them and ask before sharing back', async () => {
     const { inviteIntro, shareBackLabel } = await import('../src/ui/views/auth');
-    expect(inviteIntro('Alex')).toBe('Alex invited you. Once Sabih approves your account, you and Alex become friends, and you see which birds Alex has spotted and the day they last spotted each one.');
-    expect(shareBackLabel('Alex')).toBe('Also share which birds I’ve spotted, and the day I last spotted each one, with Alex');
+    expect(inviteIntro('Alex')).toBe('Alex invited you. Once Sabih approves you, you’ll be friends and see Alex’s birds.');
+    expect(shareBackLabel('Alex')).toBe('Share my birds (and the last day I saw each) with Alex');
   });
 
   it('never turn "Share my species list" on by themselves', async () => {
     const { inviteShareNote } = await import('../src/ui/components/friends-panel');
-    expect(inviteShareNote(true)).toContain('Sending an invite also shares your species list with them once you are friends.');
-    expect(inviteShareNote(false)).toBe('Your species list is not shared with anyone. Turn on “Share my species list” above if you want new friends to see it.');
+    expect(inviteShareNote(true)).toBe('Once you’re friends they see your list; their switch stops it.');
+    expect(inviteShareNote(false)).toBe('Your list isn’t shared. Turn on sharing above for friends to see it.');
   });
 });

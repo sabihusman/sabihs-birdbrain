@@ -70,9 +70,9 @@ export function speciesIdCard(ctx: ViewContext, species: Species): { el: HTMLEle
           disposers.push(block.dispose);
           parts.push(block.el);
         } else {
-          parts.push(el('p', { class: 'small muted' }, 'No saved clip yet. One raw clip of up to 10 seconds around the detection is kept per species, replaced only by a more confident detection.'));
+          parts.push(el('p', { class: 'small muted' }, 'No clip yet. One 10 s clip is kept per species, replaced only by a more confident one.'));
         }
-        parts.push(el('div', { class: 'small muted' }, 'Tap the card for the full sighting history and map. Kept on this device only.'));
+        parts.push(el('div', { class: 'small muted' }, 'Tap for history and map. On this phone only.'));
         body.replaceChildren(...parts);
       };
       void render();

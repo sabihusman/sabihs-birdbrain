@@ -21,21 +21,21 @@ export function askBox(api: ApiClient, species: Species, location: () => GeoLoca
     root.replaceChildren(el('h2', null, 'Ask about this bird'));
     const user = api.user;
     if (!user) {
-      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, 'Sign in to ask. Members can ask an AI questions about a species, answered only from its Wikipedia article, its NatureServe conservation status and recent eBird sightings. ', el('a', { href: '#/signin' }, 'Sign in or create an account.')));
+      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, 'Sign in to ask an AI about this bird (answers use only Wikipedia, NatureServe and eBird). ', el('a', { href: '#/signin' }, 'Sign in or create an account.')));
       return;
     }
     if (user.status !== 'approved') {
-      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, user.status === 'pending' ? 'Sign in to ask: your account is awaiting approval, and questions unlock once Sabih approves it.' : 'Your account cannot use member features.'));
+      root.append(el('p', { class: 'small muted locked-note', 'data-testid': 'ask-locked' }, user.status === 'pending' ? 'Questions unlock once Sabih approves your account.' : 'Your account cannot use member features.'));
       return;
     }
-    const input = el('textarea', { rows: '3', maxlength: String(MAX_QUESTION), placeholder: `What would you like to know about the ${species.common}?`, 'aria-label': 'Your question', style: 'width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font:inherit' });
+    const input = el('textarea', { rows: '3', maxlength: String(MAX_QUESTION), placeholder: `Ask about the ${species.common}`, 'aria-label': 'Your question', style: 'width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font:inherit' });
     const counter = el('span', { class: 'small muted' }, `0/${MAX_QUESTION}`);
     const sent = el('p', { class: 'small muted', 'data-testid': 'ask-sent-note' });
     const describeSent = () => {
       const loc = location();
       const region = loc ? regionFor(loc.lat, loc.lon) : 'none';
       const nearby = loc && isNearbyQuestion(input.value);
-      sent.textContent = `Sent to the server: the species name, your question, your state/province code: ${describeRegion(region)}${loc ? '' : ' (location is off or unknown)'}${nearby ? ', and because this looks like a question about sightings near you, your position rounded to about 10 km' : ''}. Nothing else; nearby questions (“near me”, “in my area”…) add the rounded position only while location is on.`;
+      sent.textContent = `Sends: species, question, region ${describeRegion(region)}${loc ? '' : ' (location off)'}${nearby ? ' and your position to ~10 km. Nothing else.' : '. “Near me” questions add your position (~10 km) when location is on.'}`;
     };
     input.addEventListener('input', () => {
       counter.textContent = `${input.value.length}/${MAX_QUESTION}`;
@@ -50,7 +50,7 @@ export function askBox(api: ApiClient, species: Species, location: () => GeoLoca
       input,
       el('div', { class: 'row between' }, counter, ask),
       answer,
-      el('p', { class: 'small muted' }, 'Answers are AI-generated and can be wrong. They draw on three sources, each for one thing: Wikipedia for the biology (description, voice, range, behaviour, diet, status), NatureServe Explorer for the conservation status globally and in your state or province, and eBird for sightings reported there (and near you) in the last 30 days. Every fact is labelled with its source; when sources disagree the answer says so. Check the links.'),
+      el('p', { class: 'small muted' }, 'AI answers can be wrong. Sources: Wikipedia (biology), NatureServe (conservation status), eBird (sightings, last 30 days). Each fact names its source; check the links.'),
       sent,
     );
     form.addEventListener('submit', async (e) => {

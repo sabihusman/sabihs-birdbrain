@@ -4,7 +4,7 @@ import type { ModelStatus } from '../model/worker-client';
 export const PREPARING_TEXT = 'Preparing the model on this phone…';
 
 /** When the model files are already saved on the phone (a second tab, a later visit): nothing is downloaded. */
-export const FROM_PHONE_TEXT = 'Loading the bird model saved on this phone…';
+export const FROM_PHONE_TEXT = 'Loading the saved model…';
 
 /** Whole MB (1 MiB units, as the rest of the app and the welcome count it). */
 export function mb(bytes: number): number {

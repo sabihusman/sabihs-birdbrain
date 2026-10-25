@@ -130,7 +130,7 @@ export class ApiError extends Error {
 export const SESSION_KEY = 'birdbrain.auth.v1';
 
 /** Why the admin account has no delete flow (the server answers `admin_account`). */
-export const ADMIN_DELETE_MESSAGE = 'The admin account can’t be deleted from the app, because it approves other members. Ask Sabih.';
+export const ADMIN_DELETE_MESSAGE = 'The admin account can’t be deleted here.';
 
 /** Human-readable text for API error codes. */
 export function describeApiError(e: unknown): string {
@@ -143,7 +143,7 @@ export function describeApiError(e: unknown): string {
     case 'rate_limited':
       return 'Too many attempts. Wait a few minutes and try again.';
     case 'email_unavailable':
-      return 'The email with your code could not be sent right now. Try again in a minute.';
+      return 'Couldn’t send your code. Try again in a minute.';
     case 'account_disabled':
       return 'This account is disabled.';
     case 'not_approved':
@@ -151,18 +151,18 @@ export function describeApiError(e: unknown): string {
     case 'user_cap':
       return 'You have reached today’s question limit.';
     case 'global_cap':
-      return 'The daily question limit for everyone has been reached. Try again tomorrow.';
+      return 'Today’s question limit is used up. Try tomorrow.';
     case 'no_wikipedia_summary':
       return 'There is no Wikipedia summary to answer from for this species.';
     case 'wikipedia_unavailable':
     case 'model_unavailable':
-      return 'Bird questions are busy right now. Please try again in a few minutes.';
+      return 'Busy right now. Try again in a few minutes.';
     case 'unauthorized':
       return 'Please sign in again.';
     case 'payload_too_large':
       return 'That request is too large.';
     case 'invalid_request':
-      return 'The server did not accept that. Check what you typed and try again.';
+      return 'Not accepted. Check what you typed.';
     case 'not_found':
       return 'That invite is no longer open.';
     case 'unknown_species':
@@ -182,7 +182,7 @@ export function describeApiError(e: unknown): string {
     case 'forbidden':
       return 'Only the admin can do that.';
     case 'invalid_token':
-      return 'This link has expired or was already used. Ask for a new one.';
+      return 'Link expired or already used. Ask for a new one.';
     default:
       return `Request failed (${e.status}).`;
   }

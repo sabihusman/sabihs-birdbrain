@@ -102,7 +102,7 @@ describe('FriendsCache', () => {
       const cache = new FriendsCache(api, new MemoryStorage(), () => true);
       // The cache refreshes itself, so a copy written before a new friendship is not kept until
       // the Species tab happens to be opened.
-      await vi.waitFor(() => expect(cache.lastError).toMatch(/server was busy/));
+      await vi.waitFor(() => expect(cache.lastError).toMatch(/may be out of date/));
       expect(calls).toHaveLength(1);
       // First retry after the first backoff step; it succeeds and clears the message.
       status = 200;
@@ -120,8 +120,8 @@ describe('FriendsCache', () => {
   });
 
   it('words a rate-limited refresh differently from any other failure', () => {
-    expect(describeRefreshFailure('rate_limited (429)')).toMatch(/server was busy/);
-    expect(describeRefreshFailure('Rate limit')).toMatch(/server was busy/);
+    expect(describeRefreshFailure('rate_limited (429)')).toBe('Friends’ birds may be out of date. Retrying…');
+    expect(describeRefreshFailure('Rate limit')).toBe('Friends’ birds may be out of date. Retrying…');
     expect(describeRefreshFailure('Failed to fetch')).toBe('Couldn’t refresh friends’ birds: Failed to fetch');
   });
 

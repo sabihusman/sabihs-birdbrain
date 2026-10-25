@@ -10,13 +10,13 @@ import type { PipelineStage } from '../../app/controller';
  * every audio chunk, so a repeated `mic` must not reset anything).
  */
 export const PIPELINE_STAGES: Array<{ id: PipelineStage; chip: string; title: string; text: string }> = [
-  { id: 'mic', chip: 'Mic', title: 'Microphone', text: 'Your phone’s mic captures sound. It stays on the device.' },
-  { id: 'resample', chip: 'Resample', title: 'Resample', text: 'Audio is converted to mono at 48,000 samples per second, the rate BirdNET expects.' },
-  { id: 'window', chip: 'Window', title: 'Window', text: 'The stream is cut into 3-second pieces that overlap, so a call on a boundary is not missed.' },
-  { id: 'spectrogram', chip: 'Spectrogram', title: 'Spectrogram', text: 'Each window becomes two mel spectrograms (0–3 kHz and 0.5–15 kHz): pictures of pitch over time.' },
-  { id: 'network', chip: 'Network', title: 'Neural network', text: 'An EfficientNet-style network scores all 6,522 classes; several can be high at once.' },
-  { id: 'filter', chip: 'Location', title: 'Location & season', text: 'A second model drops species not expected at your location this week.' },
-  { id: 'result', chip: 'Result', title: 'Result', text: 'Everything above your confidence slider is shown, with its confidence.' },
+  { id: 'mic', chip: 'Mic', title: 'Microphone', text: 'The mic captures sound; it stays on your phone.' },
+  { id: 'resample', chip: 'Resample', title: 'Resample', text: 'Converted to mono at 48 kHz, what BirdNET expects.' },
+  { id: 'window', chip: 'Window', title: 'Window', text: 'Cut into overlapping 3 s windows so no call falls between them.' },
+  { id: 'spectrogram', chip: 'Spectrogram', title: 'Spectrogram', text: 'Each window becomes two pictures of pitch over time (0–3 kHz, 0.5–15 kHz).' },
+  { id: 'network', chip: 'Network', title: 'Neural network', text: 'A neural network scores all 6,522 classes; several can score high.' },
+  { id: 'filter', chip: 'Location', title: 'Location & season', text: 'A second model drops species not expected here this week.' },
+  { id: 'result', chip: 'Result', title: 'Result', text: 'Anything above your minimum is shown.' },
 ];
 
 const ORDER = new Map(PIPELINE_STAGES.map((s, i) => [s.id, i]));

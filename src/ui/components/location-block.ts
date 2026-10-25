@@ -19,9 +19,9 @@ export async function copyText(text: string, button: HTMLButtonElement): Promise
 export const PLUS_CODE_HELP = "Google's short code for this spot; works in Google Maps.";
 
 /** iOS gives no flag for Precise Location; an accuracy of a kilometre or more is the clue. */
-export const IMPRECISE_HINT = 'This looks like Precise Location is off for this app. iPhone: Settings › Privacy & Security › Location Services › Sabih’s Birdbrain › Precise Location.';
+export const IMPRECISE_HINT = 'Precise Location looks off: Settings › Privacy & Security › Location Services › Sabih’s Birdbrain.';
 /** Rows saved before the fix time was stored could have come from the start of the session. */
-export const LEGACY_POSITION_NOTE = 'Saved before the app followed your position: location may be from session start.';
+export const LEGACY_POSITION_NOTE = 'Older sighting: position may be from when listening started.';
 
 /**
  * Coordinates with a copy button and a Google Maps link; the Plus Code sits in

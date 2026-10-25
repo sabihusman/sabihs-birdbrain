@@ -10,7 +10,7 @@ import { timeToX } from '../ui/viz/static-spectrogram';
 import { clipWindows } from './clips';
 
 /** One sentence shown wherever the identifying windows are: what an outlined window means. */
-export const WINDOW_MEANING = 'BirdNET marks when a species is heard, not which of the overlapping sounds it is. Other birds may be audible in the clip.';
+export const WINDOW_MEANING = 'Other birds may be audible too: BirdNET can’t tell overlapping sounds apart.';
 
 export interface OutlineSpan {
   startSec: number;
@@ -67,7 +67,7 @@ function mmss(sec: number): string {
  * or a note that an older clip did not record them.
  */
 export function describeWindows(windows: ClipWindow[] | null, windowSec = WINDOW_SECONDS): string {
-  if (!windows) return 'Which 3-second windows triggered this ID was not recorded (clip saved by an earlier version).';
+  if (!windows) return 'Saved by an older version: matching windows unknown.';
   if (windows.length === 0) return 'No identifying window was recorded for this clip.';
   const parts = windows.map((w) => `${mmss(Math.max(0, w.offsetSec))}–${mmss(Math.max(0, w.offsetSec) + windowSec)} (${Math.round(w.confidence * 100)}%)`);
   return `Identified in ${windows.length} window${windows.length === 1 ? '' : 's'} of ${windowSec} s: ${parts.join(', ')}.`;

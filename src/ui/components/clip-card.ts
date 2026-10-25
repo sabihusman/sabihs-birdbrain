@@ -29,7 +29,7 @@ export function clipCard(ctx: ViewContext, species: Species, clip: ClipRecord): 
   const windowsLine = el('p', { class: 'small muted clip-windows', 'data-testid': 'clip-windows' }, describeWindows(clipWindows(clip)));
   const whyBox = el('div', { class: 'stack', 'data-testid': 'clip-why' });
   const meaning = el('p', { class: 'small clip-meaning', 'data-testid': 'clip-meaning' }, WINDOW_MEANING);
-  const root = el('div', { class: 'clip-card', 'data-testid': 'clip-card' }, player.el, box, el('div', { class: 'viz-label' }, 'Our own FFT of the raw clip. Outlines: the 3-second windows that identified the species, labelled with their confidence.'), windowsLine, whyBox, meaning);
+  const root = el('div', { class: 'clip-card', 'data-testid': 'clip-card' }, player.el, box, el('div', { class: 'viz-label' }, 'Outlined: the 3 s windows that identified it, with their confidence.'), windowsLine, whyBox, meaning);
 
   const spectrogram = new SpectrogramView(canvas, overlay, Math.max(WINDOW_SECONDS, clip.durationSec), 160);
   const color = speciesColor(species.scientific);
@@ -79,7 +79,7 @@ export function clipCard(ctx: ViewContext, species: Species, clip: ClipRecord): 
     chosenBtn.textContent = chosenButtonText(plan);
     whyBox.replaceChildren(
       el('div', { class: 'row' }, whyBtn, plan.reduced ? chosenBtn : null),
-      el('div', { class: 'small muted', 'data-testid': 'clip-why-note' }, `Runs the occlusion analysis (${whyPlanNote(plan)}) on the ${why.known ? 'most confident identifying window' : 'centre 3 s of the clip (windows not recorded)'} and shades the parts the confidence depends on. Nothing runs until you tap.`),
+      el('div', { class: 'small muted', 'data-testid': 'clip-why-note' }, `Mutes parts of the ${why.known ? 'best window' : 'middle 3 s (windows not recorded)'} (${whyPlanNote(plan)}) to show what the ID depends on. Runs only when you tap.`),
     );
   };
   whyBtn.addEventListener('click', () => void runWhy(currentPlan().resolution));
@@ -117,7 +117,7 @@ export function clipCard(ctx: ViewContext, species: Species, clip: ClipRecord): 
       spectrogram.setHeatmap({ map: res.map, timeSteps: res.timeSteps, freqBands: res.freqBands, bandEdgesHz: res.bandEdgesHz, color, startSec: why.offsetSec, endSec: why.offsetSec + WINDOW_SECONDS });
       let maxDrop = 0;
       for (const v of res.map) maxDrop = Math.max(maxDrop, v);
-      whyBox.replaceChildren(el('div', { class: 'small', 'data-testid': 'clip-why-result' }, `${species.common}: baseline ${pct(res.baseline)} on this window. Silencing the most important region (outlined) drops it by ${pct(maxDrop)}. Window ${fmtDuration(why.offsetSec)}–${fmtDuration(why.offsetSec + WINDOW_SECONDS)}, ${res.timeSteps}×${res.freqBands} grid.`), whyBtn);
+      whyBox.replaceChildren(el('div', { class: 'small', 'data-testid': 'clip-why-result' }, `${pct(res.baseline)} on ${fmtDuration(why.offsetSec)}–${fmtDuration(why.offsetSec + WINDOW_SECONDS)}. Muting the outlined part drops it by ${pct(maxDrop)}. ${res.timeSteps}×${res.freqBands} grid.`), whyBtn);
       drawFrame();
     } catch (e) {
       cancelWhy = null;

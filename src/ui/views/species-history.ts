@@ -52,7 +52,7 @@ function historyBody(ctx: ViewContext, sp: Species): { el: HTMLElement; dispose:
   const summary = el('div', { class: 'small muted', 'data-testid': 'history-summary' }, 'Loading…');
   const mapBox = el('div', { class: 'map', 'data-testid': 'history-map' });
   const modeBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'history-mode' }, '');
-  const mapCard = el('section', { class: 'card' }, el('div', { class: 'row between' }, el('h3', { style: 'margin:0' }, 'Where you heard it'), modeBtn), mapBox, el('p', { class: 'small muted' }, 'Heat map and pins show only your own detections, stored on this device. Tiles come from OpenStreetMap and are not cached.'));
+  const mapCard = el('section', { class: 'card' }, el('div', { class: 'row between' }, el('h3', { style: 'margin:0' }, 'Where you heard it'), modeBtn), mapBox, el('p', { class: 'small muted' }, 'Your own sightings, from this phone. The map needs a connection.'));
   const list = el('div', { class: 'list', 'data-testid': 'history-list' });
   const clipBox = el('div', null);
   const root = el('div', { class: 'stack' }, el('section', { class: 'card' }, summary, clipBox), mapCard, el('section', { class: 'card' }, el('h3', null, 'All sightings'), list));

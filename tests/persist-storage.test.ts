@@ -46,9 +46,10 @@ describe('asking the browser to keep storage (DECISIONS.md #84)', () => {
   });
 
   it('explains the reasons and the benefit in plain words', () => {
-    expect(PERSIST_REASON).toContain('so they are not deleted when space runs low');
-    expect(PERSIST_EXPLAINED).toContain('the browser may delete them on its own when the phone runs low on space');
-    expect(PERSIST_EXPLAINED).toContain('Firefox shows a prompt');
-    expect(PERSIST_EXPLAINED).toContain('Nothing leaves your phone either way.');
+    expect(PERSIST_REASON).toBe('Asking your browser to keep the model and sightings, so low space can’t delete them.');
+    expect(PERSIST_EXPLAINED).toContain('the browser may delete them when space is low');
+    expect(PERSIST_EXPLAINED).toContain('Safari clears sites left unused; anything not exported is lost');
+    expect(PERSIST_EXPLAINED).toContain('Firefox asks');
+    expect(PERSIST_EXPLAINED).toContain('Nothing leaves your phone.');
   });
 });

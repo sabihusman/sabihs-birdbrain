@@ -10,11 +10,12 @@ const WHAT_WE_STORE_TEXT = whatWeStoreText(SERVICES);
 describe('what we store', () => {
   it('is one paragraph that covers every stored or sent item and ends with the backups sentence', () => {
     expect(WHAT_WE_STORE_TEXT).not.toContain('\n');
-    for (const needle of ['email address', 'password (hashed', 'display name', 'sessions', '6-digit sign-in codes', 'friends and open invites', 'questions you ask each day', 'sightings, recordings, clips and ticks stay on this phone only', 'scientific name and the day you last spotted it', 'friends see your display name, those species and those dates, and nothing else', 'species name, your question and your state or province code', 'Wikipedia', 'NatureServe Explorer', 'eBird', 'rounded to about 10 km', 'Ollama Cloud, or Google Gemini as backup', 'none of them ever sees your name, email or exact location', 'Answers are kept on the server for seven days', 'Deleting your account removes all of it', 'rounded to about 100 m', 'Nominatim', 'centre of each 1 km area']) {
+    // Every fact, in the shorter wording (DECISIONS.md #92): nothing was dropped when the list was cut down.
+    for (const needle of ['your email', 'password (hashed, unreadable)', 'display name', 'sign-in sessions', 'Sign-in codes (hashed, for minutes)', 'reset links (hashed, 1 hour)', 'friends, open invites', 'daily question count', 'hashed copy of their address, up to 30 days', 'Sightings, recordings, clips and ticks never leave this phone', 'each bird’s name and the last day you spotted it', 'Friends see only that and your display name', 'The species, your question and your state/province go to the server', 'Wikipedia', 'NatureServe', 'eBird', 'rounded to ~10 km', 'Ollama Cloud, or Google Gemini as backup', 'none of them sees your name, email or exact location', 'Answers are kept 7 days', 'without your name or email', 'erases it from the server at once', 'rounded to ~100 m', 'Nominatim', '1 km area’s centre']) {
       expect(WHAT_WE_STORE_TEXT).toContain(needle);
     }
     // Since 2026-10-19 23:00 UTC a root cron job runs backup.sh nightly at 03:15 UTC with BACKUP_RETENTION_DAYS=14 (round-3 report, Backups).
-    expect(WHAT_WE_STORE_TEXT.endsWith('Copies in the nightly server backup are removed within 14 days.')).toBe(true);
+    expect(WHAT_WE_STORE_TEXT.endsWith('and from nightly backups within 14 days.')).toBe(true);
     // Nothing the server does not do.
     expect(WHAT_WE_STORE_TEXT).not.toMatch(/recordings are uploaded|password is stored|not stored/);
   });
@@ -37,15 +38,15 @@ describe('what we store, regrouped', () => {
     expect(WHAT_WE_STORE_SUMMARY).toBe('Sightings stay on your phone');
     expect(SIGN_UP_PRIVACY_LINE).toBe('Your sightings stay on your phone. We store your email and a few account details.');
     // The phone-only promise must still be a fact in the groups, not only a headline.
-    expect(WHAT_WE_STORE_GROUPS.find((g) => g.title === 'Only on this phone')?.items.join(' ')).toContain('never uploaded');
+    expect(WHAT_WE_STORE_GROUPS.find((g) => g.title === 'Only on this phone')?.items.join(' ')).toContain('never leave this phone');
   });
 });
 
 /** The AI services are named from the server's list, so a provider switch needs no app change (DECISIONS.md #90). */
 describe('what we store, AI services', () => {
   it('names one, two or no services in plain words', () => {
-    expect(aiServicesItem(['Google Gemini'])).toBe('The question and the fetched text are then sent to Google Gemini; it never sees your name, email or exact location.');
-    expect(aiServicesItem(SERVICES)).toBe('The question and the fetched text are then sent to Ollama Cloud, or Google Gemini as backup; none of them ever sees your name, email or exact location.');
-    expect(aiServicesItem(null)).toBe('The question and the fetched text are then sent to an AI service; it never sees your name, email or exact location.');
+    expect(aiServicesItem(['Google Gemini'])).toBe('The question and those sources go to Google Gemini; it never sees your name, email or exact location.');
+    expect(aiServicesItem(SERVICES)).toBe('The question and those sources go to Ollama Cloud, or Google Gemini as backup; none of them sees your name, email or exact location.');
+    expect(aiServicesItem(null)).toBe('The question and those sources go to an AI service; it never sees your name, email or exact location.');
   });
 });

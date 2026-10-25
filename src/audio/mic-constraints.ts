@@ -86,7 +86,7 @@ export function describeVoiceProcessing(r: VoiceProcessingReport): { headline: s
           ? 'Voice processing: on'
           : r.status === 'not-controllable'
             ? 'Voice processing: not controllable'
-            : 'Voice processing: unknown (start listening to find out)';
+            : 'Voice processing: unknown until you listen';
   const parts: string[] = [];
   for (const k of VOICE_PROCESSING_KEYS) {
     const v = r.details[k];
@@ -95,7 +95,7 @@ export function describeVoiceProcessing(r: VoiceProcessingReport): { headline: s
   if (r.sampleRate) parts.push(`${r.sampleRate} Hz`);
   const note =
     r.status === 'not-controllable'
-      ? ' The browser ignores these settings; on iPhone, noise suppression and automatic gain cannot be switched off from a web page.'
+      ? ' The browser ignored this; on iPhone a web page can’t turn them off.'
       : r.unreported.length && r.status !== 'unknown'
         ? ` ${r.unreported.map((k) => LABELS[k]).join(' and ')} not controllable on this browser.`
         : '';

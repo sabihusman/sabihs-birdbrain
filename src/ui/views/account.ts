@@ -61,9 +61,9 @@ export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { 
   const statusText = (u: AuthUser) => {
     switch (u.status) {
       case 'approved':
-        return u.role === 'admin' ? 'Admin. Member features are enabled.' : 'Member. You can ask AI questions about any bird on its species page.';
+        return u.role === 'admin' ? 'Admin. Member features are enabled.' : 'Member: ask AI about any bird on its page.';
       case 'pending':
-        return 'Awaiting approval by Sabih. Everything on-device keeps working; member features unlock once approved.';
+        return 'Waiting for Sabih’s approval. Everything else works meanwhile.';
       case 'rejected':
         return 'This account was not approved.';
       case 'disabled':
@@ -236,7 +236,7 @@ export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { 
     const form = el(
       'form',
       { class: 'stack' },
-      el('p', { class: 'small', 'data-testid': 'delete-warning' }, 'This deletes your account right away and for good: your sign-in, sessions, friends, invites and your shared species list. There is no undo and no waiting period. Listening and identifying keep working without an account.'),
+      el('p', { class: 'small', 'data-testid': 'delete-warning' }, 'Deletes your account, friends, invites and shared list at once. No undo. Listening still works without an account.'),
       el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'Your password'), pw),
       el('div', { class: 'field', style: 'margin:0' }, el('label', null, 'Type DELETE to confirm'), word),
       el('div', { class: 'stack' }, go),
@@ -274,8 +274,8 @@ export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { 
     const box = el(
       'div',
       { class: 'stack', 'data-testid': 'account-deleted', role: 'status' },
-      el('p', null, el('strong', null, 'Your account was deleted.'), ' Everything the server held for you is gone and you are signed out. A short confirmation was emailed to you.'),
-      el('p', { class: 'small muted' }, 'Sightings, recordings and clips saved on this phone are still here. Listening and identifying keep working without an account.'),
+      el('p', null, el('strong', null, 'Your account was deleted.'), ' A confirmation was emailed.'),
+      el('p', { class: 'small muted' }, 'Your sightings on this phone are still here.'),
       el('label', { class: 'row', style: 'gap:8px;align-items:center' }, wipe, 'Also clear sightings saved on this phone'),
       el('div', { class: 'row' }, done),
     );
@@ -306,7 +306,7 @@ export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { 
     el(
       'div',
       { class: 'stack' },
-      el('p', { class: 'small' }, 'An account is optional. It adds Ask about this bird and sharing your species list with friends. Sabih approves each new account by hand.'),
+      el('p', { class: 'small' }, 'Optional. Adds Ask about this bird and sharing with friends. Sabih approves each account.'),
       el('div', { class: 'row' }, el('a', { class: 'btn primary', href: '#/signin', 'data-testid': 'account-signin' }, 'Sign in'), el('a', { class: 'btn', href: '#/signup', 'data-testid': 'account-signup' }, 'Create account')),
       el('p', { class: 'small muted', 'data-testid': 'signup-privacy' }, SIGN_UP_PRIVACY_LINE),
       whatWeStoreFold('what-we-store-signup'),

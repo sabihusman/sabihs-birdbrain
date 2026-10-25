@@ -22,7 +22,8 @@ describe('microphone help by browser', () => {
 
   it('gives Chrome-on-iOS its own path, Safari its own, and a generic Apps path otherwise', () => {
     expect(micHelp(UA.chrome).steps[0]).toBe('iPhone Settings › Apps › Chrome › Microphone, then reload and tap Allow.');
-    expect(micHelp(UA.safari).steps.join(' ')).toContain('Settings → Safari → Microphone');
+    expect(micHelp(UA.safari).steps.join(' ')).toContain('Tap “aA” in the address bar › Website Settings › Microphone.');
+    expect(micHelp(UA.safari).steps.join(' ')).toContain('(older iOS: Settings › Safari)');
     expect(micHelp(UA.safari).steps.join(' ')).toContain('Settings › Apps › Safari › Microphone');
     expect(micHelp(UA.duck).steps[0]).toBe('Settings › Apps › [your browser] › Microphone, then reload and tap Allow.');
     expect(micHelp(UA.android).steps[0]).toMatch(/site settings/);

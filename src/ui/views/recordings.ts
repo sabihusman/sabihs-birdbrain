@@ -30,7 +30,7 @@ export function recordingsView(ctx: ViewContext): View {
   const list = el('div', { class: 'list', 'data-testid': 'recordings-list' });
   const fileInput = el('input', { type: 'file', accept: 'audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac', class: 'sr-only', id: 'import-file' });
   const importBtn = el('label', { class: 'btn', for: 'import-file' }, 'Import audio file');
-  const hint = el('p', { class: 'small muted' }, `Recordings are 16-bit WAV at 48 kHz, stored in this browser only. Imported files are analysed on-device and capped at ${MAX_IMPORT_SECONDS} seconds.`);
+  const hint = el('p', { class: 'small muted' }, `Saved on this phone only. Imports are analysed here, up to ${MAX_IMPORT_SECONDS} s.`);
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
@@ -41,7 +41,7 @@ export function recordingsView(ctx: ViewContext): View {
     try {
       const decoded = await controller.decodeAudioFile(await file.arrayBuffer());
       const capped = capImportedAudio(decoded);
-      if (capped.truncated) ctx.notify({ kind: 'warn', text: `Imported clips are capped at ${MAX_IMPORT_SECONDS} seconds; the first ${MAX_IMPORT_SECONDS} s of this ${Math.round(capped.originalSeconds)} s file were kept.` });
+      if (capped.truncated) ctx.notify({ kind: 'warn', text: `Kept the first ${MAX_IMPORT_SECONDS} s of this ${Math.round(capped.originalSeconds)} s file (the limit).` });
       const rec = await controller.saveRecording(capped.audio, file.name.replace(/\.[^.]+$/, ''), 'import');
       location.hash = hrefFor({ name: 'recording', id: rec.id });
     } catch (e) {
@@ -113,9 +113,9 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     const located = rec.lat != null && rec.lon != null;
     const preview = located ? mapPreview(rec.lat!, rec.lon!, { color: cssToken('accent', '#5FCB97'), label: 'this sighting' }) : null;
     if (preview) disposers.push(preview.dispose);
-    const locationPart = located ? el('div', { class: 'stack', 'data-testid': 'sighting-location' }, el('h3', { style: 'margin:8px 0 0' }, 'Location'), preview!.el, locationBlock(rec.lat!, rec.lon!, { accuracy: rec.accuracy, fixTime: rec.fixTime ?? null, time: rec.createdAt })) : el('p', { class: 'small muted' }, 'No position was recorded for this sighting.');
+    const locationPart = located ? el('div', { class: 'stack', 'data-testid': 'sighting-location' }, el('h3', { style: 'margin:8px 0 0' }, 'Location'), preview!.el, locationBlock(rec.lat!, rec.lon!, { accuracy: rec.accuracy, fixTime: rec.fixTime ?? null, time: rec.createdAt })) : el('p', { class: 'small muted' }, 'No position recorded.');
     // "About this bird" and "Ask about this bird" follow the top species; built once it is known.
-    const aboutSlot = el('div', { 'data-testid': 'about-slot' }, el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse the recording to see which bird this is.')));
+    const aboutSlot = el('div', { 'data-testid': 'about-slot' }, el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse to see which bird this is.')));
     const askSlot = el('div', { 'data-testid': 'ask-slot' });
     let topSpecies: Species | null = null;
     const topDisposers: Array<() => void> = [];
@@ -128,7 +128,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       sciName.style.display = sp ? '' : 'none';
       preview?.setColor(sp ? speciesColor(sp.scientific).css : cssToken('accent', '#5FCB97'));
       if (!sp) {
-        aboutSlot.replaceChildren(el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse the recording to see which bird this is.')));
+        aboutSlot.replaceChildren(el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse to see which bird this is.')));
         askSlot.replaceChildren();
         return;
       }
@@ -150,10 +150,10 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         { class: 'card', 'data-testid': 'spectrogram-card' },
         el('h2', null, 'Spectrogram'),
         specBox,
-        el('div', { class: 'viz-label' }, 'Our own FFT, an approximation of what the model sees. Colour strips mark species per analysed window. Tap to seek.'),
+        el('div', { class: 'viz-label' }, 'Close to what the model sees. Colour strips: species per window. Tap to seek.'),
         confidenceBox,
         el('h3', null, 'Why this ID'),
-        el('p', { class: 'small muted' }, 'Silences one small part of the sound at a time and re-runs the model, to show which parts the ID depends on.'),
+        el('p', { class: 'small muted' }, 'Mutes one part at a time and re-runs the model to show what the ID depends on.'),
         whyBox,
       ),
       el('section', { class: 'card' }, el('h2', null, 'Detections'), detectionsBox),
@@ -235,7 +235,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
           el('p', { class: 'tabular', style: 'margin:0', 'data-testid': 'confidence-line' }, confidenceLine(ranked[0][1].best, s.threshold)),
           lines.length > 1
             ? el('div', null, el('p', { class: 'small muted', style: 'margin:4px 0 0' }, `${top.common} matched in ${lines.length} windows:`), el('ul', { class: 'windows-list small tabular', 'data-testid': 'confidence-windows' }, ...lines.map((t) => el('li', null, t))))
-            : el('p', { class: 'small muted', style: 'margin:4px 0 0' }, lines.length === 1 ? `${top.common} matched in one 3 s window (${lines[0].split(' · ')[0]}).` : ''),
+            : el('p', { class: 'small muted', style: 'margin:4px 0 0' }, lines.length === 1 ? `Matched in one 3 s window (${lines[0].split(' · ')[0]}).` : ''),
         );
       }
       for (const [index, info] of ranked) {

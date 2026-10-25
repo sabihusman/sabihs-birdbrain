@@ -73,18 +73,18 @@ export function settingsView(ctx: ViewContext): View {
     const dets = await countDetections().catch(() => 0);
     const sightings = await countSightings().catch(() => 0);
     if (!st.supported) {
-      storageText.textContent = 'Storage estimates are not available in this browser.';
+      storageText.textContent = 'Storage size unknown in this browser.';
       return;
     }
-    storageText.textContent = `${formatBytes(st.usageBytes)} used of ${formatBytes(st.quotaBytes)} available · ${sightings} sightings (${dets} analysed windows) stored`;
+    storageText.textContent = `${formatBytes(st.usageBytes)} of ${formatBytes(st.quotaBytes)} used · ${sightings} sightings (${dets} windows)`;
     const frac = st.usageBytes != null && st.quotaBytes ? Math.min(1, st.usageBytes / st.quotaBytes) : 0;
     (storageBar.firstElementChild as HTMLElement).style.width = `${Math.max(1, Math.round(frac * 100))}%`;
-    persistText.textContent = st.persisted === null ? 'Persistent storage: not supported here.' : st.persisted ? 'Persistent storage: on. The browser keeps the model and your sightings until you delete them.' : 'Persistent storage: off. The browser may delete the model and your sightings when space runs low.';
+    persistText.textContent = st.persisted === null ? 'Persistent storage: not supported here.' : st.persisted ? 'Persistent storage: on. Kept until you delete them.' : 'Persistent storage: off. The browser may delete the model and sightings if space runs low.';
   };
   const persistBtn = el('button', { class: 'btn small' }, 'Request persistent storage');
   persistBtn.addEventListener('click', async () => {
     const r = await requestPersistentStorage();
-    ctx.notify({ kind: 'info', text: r === null ? 'navigator.storage.persist() is not available in this browser.' : r ? 'Persistent storage granted.' : 'Persistent storage was not granted.' });
+    ctx.notify({ kind: 'info', text: r === null ? 'This browser can’t keep storage.' : r ? 'Persistent storage granted.' : 'Persistent storage was not granted.' });
     void refreshStorage();
   });
   void refreshStorage();
@@ -102,7 +102,7 @@ export function settingsView(ctx: ViewContext): View {
   });
   const clearBtn = el('button', { class: 'btn small danger' }, 'Delete all recordings and detections');
   clearBtn.addEventListener('click', async () => {
-    if (!confirm('Delete every recording, detection and cached species page on this device? This cannot be undone.')) return;
+    if (!confirm('Delete all recordings, detections and saved species pages on this phone? No undo.')) return;
     await clearAllData();
     // A fresh start opens in the default Listen layout again (DECISIONS.md #63).
     controller.settings.update({ listenLayout: DEFAULT_SETTINGS.listenLayout });
@@ -148,8 +148,8 @@ export function settingsView(ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Microphone'),
-      toggle('Low-cut filter (150 Hz)', 'lowCut', 'Removes wind and handling rumble from what the model hears, live and for imported clips. Saved recordings stay unfiltered.'),
-      el('div', { class: 'field' }, micHeadline, micDetail, el('div', { class: 'small muted' }, 'The app asks the browser to turn off echo cancellation, noise suppression and automatic gain, which are tuned for speech and can erase bird sound. Browsers may ignore the request; this shows what was applied to the last microphone session.')),
+      toggle('Low-cut filter (150 Hz)', 'lowCut', 'Cuts wind and handling rumble before the model hears it. Saved audio stays unfiltered.'),
+      el('div', { class: 'field' }, micHeadline, micDetail, el('div', { class: 'small muted' }, 'The app asks the browser to turn off speech processing (echo, noise, gain), which can erase bird sound. Browsers may refuse; this shows the last session.')),
     ),
     el(
       'section',
@@ -169,8 +169,8 @@ export function settingsView(ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Recording'),
-      toggle('Auto-save 3-second detection windows as recordings', 'autoSaveClips', 'Each detection\u2019s 3 s analysis window is saved to Recordings (one per species every 30 s). Separate from the 10-second species ID clip that members keep per species.'),
-      slider('Auto-save a window when confidence is at least', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below the confidence threshold: raising the threshold raises this too.'),
+      toggle('Auto-save detections (3 s each)', 'autoSaveClips', 'Saves each detection\u2019s 3 s to Recordings, at most one per species every 30 s. Separate from members\u2019 10 s ID clips.'),
+      slider('Auto-save from', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below your confidence threshold.'),
     ),
     el(
       'section',
@@ -195,13 +195,13 @@ export function settingsView(ctx: ViewContext): View {
           ['medium', 'Medium (8×6 grid, 49 runs)'],
           ['fine', 'Fine (12×8 grid, 97 runs)'],
         ],
-        'Finer uses more CPU and battery; Coarse uses less. On a phone without graphics acceleration (WebAssembly or plain JavaScript), “Why this ID” starts with Coarse and offers this level as a second button with its time.',
+        'Finer uses more battery. Phones without graphics acceleration start with Coarse and offer this as a second button.',
       ),
     ),
     el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, el('p', { class: 'small muted', 'data-testid': 'persist-explained' }, PERSIST_EXPLAINED), el('div', { class: 'row' }, persistBtn)),
-    el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), el('p', { class: 'small muted' }, 'One row per sighting: first and last time, species, peak confidence, number of windows, position and recording link.')),
+    el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), el('p', { class: 'small muted' }, 'One row per sighting: times, species, peak confidence, windows, position, recording.')),
     el('section', { class: 'card' }, el('h2', null, 'Data'), el('div', { class: 'row' }, clearBtn)),
-    el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works, limitations and licences')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
+    el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
     // Last thing on the page, closed: the full privacy facts are there when wanted and out of the way otherwise.
     whatWeStoreFold(),
   );
