@@ -1812,3 +1812,51 @@ test('My account: friends open with a "Share with" switch each and Remove; Setti
   }
   await context.close();
 });
+
+test('a browser that refuses to store Blobs (Safari private tab) still saves an imported recording as bytes, and it plays and re-analyses (DECISIONS.md #82)', async ({ page }) => {
+  // Make IndexedDB behave like Safari in a private tab: any put of a value holding a Blob fails.
+  await page.addInitScript(() => {
+    const realPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value: unknown, key?: IDBValidKey) {
+      if (value && typeof value === 'object' && (value as { blob?: unknown }).blob instanceof Blob) {
+        throw new DOMException('Error preparing Blob/File data to be stored in object store', 'UnknownError');
+      }
+      return key === undefined ? realPut.call(this, value) : realPut.call(this, value, key);
+    };
+  });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('./#/recordings');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
+  await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
+  await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByTestId('recording-detections')).toContainText('Redpoll');
+  await expect(page.getByText('Error preparing Blob/File data')).toHaveCount(0);
+  // Stored without a Blob, as bytes...
+  const stored = await page.evaluate(
+    () =>
+      new Promise<{ hasBlob: boolean; bytes: number; type: string }>((resolve, reject) => {
+        const open = indexedDB.open('sabihs-birdbrain');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const req = open.result.transaction('recordings').objectStore('recordings').getAll();
+          req.onsuccess = () => {
+            const r = req.result[0] as { blob?: Blob; audioBytes?: ArrayBuffer; audioType?: string };
+            resolve({ hasBlob: r.blob instanceof Blob, bytes: r.audioBytes?.byteLength ?? 0, type: r.audioType ?? '' });
+          };
+        };
+      }),
+  );
+  expect(stored.hasBlob).toBe(false);
+  expect(stored.bytes).toBeGreaterThan(100_000);
+  expect(stored.type).toBe('audio/wav');
+  // ...and after a reload it still opens with its audio and can be analysed again.
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.locator('audio')).toHaveAttribute('src', /^blob:/);
+  expect(await page.locator('audio').evaluate((a) => new Promise<number>((res) => ((a as HTMLAudioElement).readyState >= 1 ? res((a as HTMLAudioElement).duration) : a.addEventListener('loadedmetadata', () => res((a as HTMLAudioElement).duration)))))).toBeGreaterThan(2.5);
+  await page.getByTestId('reanalyze').click();
+  await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
+  expect(errors).toEqual([]);
+});

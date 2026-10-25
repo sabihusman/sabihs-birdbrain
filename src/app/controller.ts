@@ -398,6 +398,7 @@ export class AppController extends Emitter<ControllerEvents> {
       throw err;
     }
     this.sessionId = newId();
+    this.saveWarned.clear();
     this.sessionStartedAt = Date.now();
     this.windowCounter = 0;
     this.conditions.reset();
@@ -472,17 +473,35 @@ export class AppController extends Emitter<ControllerEvents> {
     const windowId = ++this.windowCounter;
     const offsetSec = offsetSamples / SAMPLE_RATE;
     const time = (this.sessionStartedAt ?? Date.now()) + offsetSec * 1000;
+    let result: WindowResult;
     try {
       const res = await this.inference.analyze(audio);
       const detections = selectDetections(res.scores, this.species, { threshold: s.threshold, applyGeo: res.geoApplied, includeNonBird: s.includeNonBird });
       this.stats = { ...this.stats, windows: this.stats.windows + 1, lastInferMs: res.inferMs };
       this.emit('stage', 'result');
-      const result: WindowResult = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, ephemeral: false };
+      result = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, ephemeral: false };
       this.emit('window-result', result);
-      if (detections.length > 0) await this.persistDetections(result, copy);
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Analysis failed: ${(e as Error).message}` });
+      return;
     }
+    // Saving is not analysis: the result is already on screen, so a storage failure says so
+    // in its own words, once per session (DECISIONS.md #82).
+    if (result.detections.length === 0) return;
+    try {
+      await this.persistDetections(result, copy);
+    } catch (e) {
+      this.warnSaveFailed('sighting', e);
+    }
+  }
+
+  private saveWarned = new Set<string>();
+  /** One plain warning per kind and session when this phone's storage refuses a save. */
+  private warnSaveFailed(what: 'sighting' | 'clip', e: unknown): void {
+    if (this.saveWarned.has(what)) return;
+    this.saveWarned.add(what);
+    const text = what === 'sighting' ? 'Could not save sightings on this phone, so they will not be in Recordings or Species' : 'Could not save the audio clip on this phone';
+    this.emit('notice', { kind: 'warn', text: `${text}: ${(e as Error).message}. Identifying still works. A private browser tab can cause this.` });
   }
 
   private async persistDetections(result: WindowResult, windowAudio: Float32Array | null): Promise<void> {
@@ -496,8 +515,13 @@ export class AppController extends Emitter<ControllerEvents> {
       const last = this.lastAutoClip.get(sp.scientific) ?? 0;
       if (best.prob >= s.autoSaveMinConfidence && Date.now() - last > 30_000) {
         this.lastAutoClip.set(sp.scientific, Date.now());
-        const rec = await this.saveRecording(windowAudio, `${AUTO_SAVE_RECORDING_PREFIX}: ${sp.common}`, 'autoclip', result.detections);
-        recordingId = rec.id;
+        // A clip that cannot be stored must not cost the sighting itself (DECISIONS.md #82).
+        try {
+          const rec = await this.saveRecording(windowAudio, `${AUTO_SAVE_RECORDING_PREFIX}: ${sp.common}`, 'autoclip', result.detections);
+          recordingId = rec.id;
+        } catch (e) {
+          this.warnSaveFailed('clip', e);
+        }
       }
     }
     const records: DetectionRecord[] = result.detections.map((d) => {
@@ -588,7 +612,7 @@ export class AppController extends Emitter<ControllerEvents> {
         const saved = await saveClipIfBetter({ ...p.candidate, windows }, audio);
         if (saved) this.emit('clip-saved', saved);
       } catch (e) {
-        this.emit('notice', { kind: 'warn', text: `Could not save the species clip: ${(e as Error).message}` });
+        this.warnSaveFailed('clip', e);
       }
     }
   }
