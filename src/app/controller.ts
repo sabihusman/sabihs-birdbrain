@@ -21,6 +21,7 @@ import { PositionWatch, positionStamp } from './position-watch';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
 import { isModelCached, markModelWanted, safeLocalStorage } from './first-visit';
+import { askToKeepStorageOnce, PERSIST_REASON } from '../storage/quota';
 
 export interface WindowResult {
   windowId: number;
@@ -279,6 +280,8 @@ export class AppController extends Emitter<ControllerEvents> {
         await this.inference.init(MODEL_BASE_URL, this.settings.get().backend);
         await this.pushGeo();
         void this.refreshLocalSpecies();
+        // Right after the first download: ask the browser to keep the model and the sightings (DECISIONS.md #84).
+        if (!this.modelFromCache) void askToKeepStorageOnce(safeLocalStorage(), undefined, () => this.emit('notice', { kind: 'info', text: PERSIST_REASON }));
         return true;
       } catch (e) {
         // The technical reason stays in the console; the member reads what to do about it.
