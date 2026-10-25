@@ -3,7 +3,7 @@ import { downloadBlob, timestampForFilename } from '../../export/download';
 import { sightingsToGeoJson } from '../../export/geojson';
 import { DEFAULT_SETTINGS, type BackendPreference, type LocationMode, type OcclusionResolution } from '../../app/settings';
 import { clearAllData, countDetections, countSightings, listSightings } from '../../storage/db';
-import { formatBytes, getStorageStatus, requestPersistentStorage } from '../../storage/quota';
+import { formatBytes, getStorageStatus, PERSIST_EXPLAINED, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
 import { accountSection } from './account';
@@ -79,7 +79,7 @@ export function settingsView(ctx: ViewContext): View {
     storageText.textContent = `${formatBytes(st.usageBytes)} used of ${formatBytes(st.quotaBytes)} available · ${sightings} sightings (${dets} analysed windows) stored`;
     const frac = st.usageBytes != null && st.quotaBytes ? Math.min(1, st.usageBytes / st.quotaBytes) : 0;
     (storageBar.firstElementChild as HTMLElement).style.width = `${Math.max(1, Math.round(frac * 100))}%`;
-    persistText.textContent = st.persisted === null ? 'Persistent storage: not supported here.' : st.persisted ? 'Persistent storage: granted. iOS may still remove data for sites not used in a while.' : 'Persistent storage: not granted (the browser may evict data under pressure).';
+    persistText.textContent = st.persisted === null ? 'Persistent storage: not supported here.' : st.persisted ? 'Persistent storage: on. The browser keeps the model and your sightings until you delete them.' : 'Persistent storage: off. The browser may delete the model and your sightings when space runs low.';
   };
   const persistBtn = el('button', { class: 'btn small' }, 'Request persistent storage');
   persistBtn.addEventListener('click', async () => {
@@ -198,7 +198,7 @@ export function settingsView(ctx: ViewContext): View {
         'Finer uses more CPU and battery; Coarse uses less.',
       ),
     ),
-    el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, el('div', { class: 'row' }, persistBtn)),
+    el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, el('p', { class: 'small muted', 'data-testid': 'persist-explained' }, PERSIST_EXPLAINED), el('div', { class: 'row' }, persistBtn)),
     el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), el('p', { class: 'small muted' }, 'One row per sighting: first and last time, species, peak confidence, number of windows, position and recording link.')),
     el('section', { class: 'card' }, el('h2', null, 'Data'), el('div', { class: 'row' }, clearBtn)),
     el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works, limitations and licences')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
