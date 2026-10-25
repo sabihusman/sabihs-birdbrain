@@ -83,7 +83,9 @@ Key modules:
   `server/src/password-reset.ts`, token hashed at rest, #78). My account
   (`#/account`, `accountView` in `src/ui/views/account.ts`, #79): password,
   sharing, friends with a "Share with <name>" switch each (`friendship.a_shares`
-  / `b_shares`); the Settings card is a summary that links there.
+  / `b_shares`); the Settings card is a summary that links there. Invites to an
+  address with no account (`server/src/email-invites.ts`, #80) mail a
+  `#/signup?invite=` link; approval makes the two friends.
 
 Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
 

@@ -247,9 +247,23 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return data as T;
   }
 
-  /** Create an account; like `login`, it answers with a challenge and the code goes by email (DECISIONS.md #77). */
-  signup(email: string, password: string, name?: string): Promise<{ challenge: string; expiresInSeconds: number }> {
-    return this.call('/v1/auth/signup', name ? { email, password, name } : { email, password });
+  /**
+   * Create an account; like `login`, it answers with a challenge and the code goes by email (DECISIONS.md #77).
+   * `invite` and `shareWithInviter` come from an invite link (DECISIONS.md #80).
+   */
+  signup(email: string, password: string, opts: { name?: string; invite?: string; shareWithInviter?: boolean } = {}): Promise<{ challenge: string; expiresInSeconds: number }> {
+    const body: Record<string, unknown> = { email, password };
+    if (opts.name) body.name = opts.name;
+    if (opts.invite) {
+      body.invite = opts.invite;
+      body.shareWithInviter = opts.shareWithInviter === true;
+    }
+    return this.call('/v1/auth/signup', body);
+  }
+
+  /** Who sent an invite link; `not_found` for an unknown, used or expired one. */
+  inviteInfo(token: string): Promise<{ fromName: string; expiresAt: number }> {
+    return this.call('/v1/auth/invite-info', { token });
   }
 
   login(email: string, password: string): Promise<{ challenge: string; expiresInSeconds: number }> {
@@ -330,7 +344,8 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
   }
 
   /** Always resolves with "Invite sent" (the server never says whether the address has an account). */
-  inviteFriend(email: string): Promise<{ ok: boolean; message: string }> {
+  /** `newAccount`: the address has no account, so a Create account link went out (DECISIONS.md #80). */
+  inviteFriend(email: string): Promise<{ ok: boolean; message: string; newAccount?: boolean }> {
     return this.call('/v1/friends/invite', { email });
   }
 

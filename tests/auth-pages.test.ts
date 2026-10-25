@@ -32,3 +32,25 @@ describe('Sign in and Create account pages (DECISIONS.md #77)', () => {
     expect(AUTH_TEXT.pendingMeanwhile).toBe('Until then, listening and identifying birds work as before.');
   });
 });
+
+describe('invite links (DECISIONS.md #80)', () => {
+  it('carry their token to Create account and round-trip', async () => {
+    const { hrefFor: href, parseHash: parse } = await import('../src/ui/router');
+    expect(parse('#/signup?invite=abc_DEF-123')).toEqual({ name: 'signup', invite: 'abc_DEF-123' });
+    expect(parse('#/signup')).toEqual({ name: 'signup' });
+    expect(href({ name: 'signup', invite: 'a/b' })).toBe('#/signup?invite=a%2Fb');
+    expect(parse(href({ name: 'signup', invite: 'a/b' }))).toEqual({ name: 'signup', invite: 'a/b' });
+  });
+
+  it('say who invited them and ask before sharing back', async () => {
+    const { inviteIntro, shareBackLabel } = await import('../src/ui/views/auth');
+    expect(inviteIntro('Alex')).toBe('Alex invited you. Once Sabih approves your account, you and Alex become friends, and you see which birds Alex has spotted and the day they last spotted each one.');
+    expect(shareBackLabel('Alex')).toBe('Also share which birds I’ve spotted, and the day I last spotted each one, with Alex');
+  });
+
+  it('never turn "Share my species list" on by themselves', async () => {
+    const { inviteShareNote } = await import('../src/ui/components/friends-panel');
+    expect(inviteShareNote(true)).toContain('Sending an invite also shares your species list with them once you are friends.');
+    expect(inviteShareNote(false)).toBe('Your species list is not shared with anyone. Turn on “Share my species list” above if you want new friends to see it.');
+  });
+});

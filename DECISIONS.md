@@ -2514,6 +2514,37 @@ other open branches, so this may be renumbered at merge.)
   account; a new e2e test (Settings link, open friends, switch on/off with a failed change put
   back, Remove, 320 px in both themes with a 44 px switch row).
 
+## 80. Invites to people without an account: a Create account link, friends on approval
+
+- **Problem (Sabih):** an invite to someone without an account did nothing, and the app still
+  said "Invite sent", so neither side knew.
+- **Sender (Sabih's choice: say when the address is new):** an address with no account now gets
+  an email with a Create account link (`#/signup?invite=<token>`), and the sender sees "They don't
+  have an account yet, so we emailed them a link to create one. You become friends once Sabih
+  approves it." Addresses that have an account still all get the same "Invite sent", as before.
+  This does let a member learn whether an address has an account (accepted by Sabih).
+- **Create account from the link:** the page says who invited them ("Alex invited you…") and
+  shows an unticked box, "Also share which birds I've spotted, and the day I last spotted each
+  one, with Alex" (Sabih's choice: agree in advance). The token leaves the address bar at once.
+  The ticked box turns on that person's "Share my species list" on their phone. A used or expired
+  link says so and the account is created without it.
+- **Server:** `email_invite` keeps SHA-256 of the token and an HMAC of the address (keyed with
+  `BETTER_AUTH_SECRET`, so the same person is not mailed twice), never either in the clear; open
+  for 30 days. `POST /v1/auth/invite-info` gives the inviter's display name for a live token.
+  Sign-up claims the invite silently on the path that has the account's password (the answer
+  stays the same for every address). On approval (or at once, for an account that is already
+  approved), each claimed invite from a still-approved member becomes a friendship: the inviter's
+  list goes to the new member (the invite was the inviter's yes), the new member's list goes back
+  only if they ticked the box. The approval mail names the new friends; the inviter gets "Your
+  friend joined Birdbrain". Deleting an account deletes the invites it sent or claimed.
+- **Not done on purpose:** sending an invite never turns on the sender's "Share my species list".
+  That switch covers every friend, so turning it on would also share with friends the sender had
+  not chosen. The note under the invite form says whether the list is being shared.
+- **Tests:** `server/test/email-invites.test.ts` (8: whole flow with mails, no box, one use, an
+  existing member through a link, wrong password claims nothing, 30-day expiry, nothing stored in
+  the clear, bad tokens, deletion); invite tests updated for the new answer; unit tests for the
+  route and texts; an e2e test of the link, the box, an expired link and the sender's message.
+
 ## 81. Signed in means returning: no welcome layer
 
 - **Problem (Sabih, iPhone):** signed in, but Listen showed the first-visit welcome with "Sign in /

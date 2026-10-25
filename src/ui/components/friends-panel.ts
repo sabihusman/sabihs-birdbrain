@@ -18,12 +18,23 @@ export function shareStatusText(enabled: boolean, lastError: string | null): str
   return 'Sharing is on. Your list is updated after each new sighting.';
 }
 
+/**
+ * Under the invite form (DECISIONS.md #80): sending an invite is the sender's yes to sharing with that
+ * person, but only while "Share my species list" is on; it never turns that switch on by itself,
+ * because that would also share with every other friend.
+ */
+export function inviteShareNote(sharingOn: boolean): string {
+  return sharingOn
+    ? 'Sending an invite also shares your species list with them once you are friends. You can stop it with the switch next to their name.'
+    : 'Your species list is not shared with anyone. Turn on “Share my species list” above if you want new friends to see it.';
+}
+
 /** What a per-friend switch did, in plain words (DECISIONS.md #79). */
 export function friendShareNotice(name: string, on: boolean): string {
   return on ? `${name} can see your species list again.` : `${name} no longer sees your species list. You still see theirs if they share it.`;
 }
 
-export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () => void } {
+export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () => void; sharingChanged: () => void } {
   const { api, friends: cache, notify } = ctx;
   const root = el('div', { class: 'stack friends-panel', 'data-testid': 'friends' });
   const invitesBox = el('div', { class: 'stack', 'data-testid': 'friend-invites' });
@@ -123,9 +134,10 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
   };
 
   // Add a friend
+  const shareNote = el('p', { class: 'small muted', 'data-testid': 'invite-share-note' }, inviteShareNote(ctx.sharing.enabled));
   const email = el('input', { type: 'email', autocomplete: 'off', placeholder: 'Friend’s email', required: true, 'aria-label': 'Friend’s email', 'data-testid': 'invite-email' });
   const send = el('button', { class: 'btn small', type: 'submit', 'data-testid': 'invite-send' }, 'Send invite');
-  const inviteForm = el('form', { class: 'stack' }, el('h3', null, 'Add a friend'), el('div', { class: 'row' }, el('div', { class: 'field', style: 'flex:1;margin:0' }, email), send), el('p', { class: 'small muted' }, 'They get an email and accept on their My account page. Friends see your display name, never your email. Up to 10 invites a day; invites expire after 30 days.'));
+  const inviteForm = el('form', { class: 'stack' }, el('h3', null, 'Add a friend'), el('div', { class: 'row' }, el('div', { class: 'field', style: 'flex:1;margin:0' }, email), send), shareNote, el('p', { class: 'small muted' }, 'A member gets an email and accepts on their My account page. Someone without an account gets a link to create one, and you become friends once Sabih approves it. Friends see your display name, never your email. Up to 10 invites a day; invites expire after 30 days.'));
   inviteForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!inviteForm.reportValidity()) return;
@@ -150,7 +162,7 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
     status,
   );
   void load();
-  return { el: root, dispose: () => undefined };
+  return { el: root, dispose: () => undefined, sharingChanged: () => (shareNote.textContent = inviteShareNote(ctx.sharing.enabled)) };
 }
 
 /**
@@ -158,7 +170,7 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
  * (DECISIONS.md #44). The long consent text stays in the friends panel, which the
  * Account screen keeps behind a collapsed row.
  */
-export function sharingRow(ctx: ViewContext): { el: HTMLElement; dispose: () => void } {
+export function sharingRow(ctx: ViewContext, onChange?: () => void): { el: HTMLElement; dispose: () => void } {
   const { sharing, notify } = ctx;
   const input = el('input', { type: 'checkbox', checked: sharing.enabled, 'data-testid': 'share-species' });
   const note = textRow(shareStatusText(sharing.enabled, sharing.lastError), { testId: 'share-status' });
@@ -179,6 +191,7 @@ export function sharingRow(ctx: ViewContext): { el: HTMLElement; dispose: () => 
         busy = false;
         input.disabled = false;
         note.textContent = shareStatusText(sharing.enabled, sharing.lastError);
+        onChange?.();
       }
     })();
   });

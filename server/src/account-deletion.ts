@@ -9,7 +9,7 @@ import type { DatabaseSync } from 'node:sqlite';
  * `session` rows and anything in `verification` for the address; the app's
  * `login_challenge` (emailed codes), `ask_usage` counter under `user:<id>`,
  * `shared_species`, `friendship` in both directions, `friend_invite` in both
- * directions and `invite_usage`. Sightings, clips, detections and ticks live
+ * directions, `email_invite` sent or claimed (DECISIONS.md #80) and `invite_usage`. Sightings, clips, detections and ticks live
  * only on the device (IndexedDB) and never reach the server; the
  * `wiki_article_cache`, `natureserve_cache` and `ebird_cache` tables hold
  * public species text keyed by scientific name, not by person; `answer_cache`
@@ -23,6 +23,7 @@ export function deleteUserCompletely(db: DatabaseSync, userId: string, email: st
     db.prepare('DELETE FROM shared_species WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM friendship WHERE user_a = ? OR user_b = ?').run(userId, userId);
     db.prepare('DELETE FROM friend_invite WHERE from_user_id = ? OR to_user_id = ?').run(userId, userId);
+    db.prepare('DELETE FROM email_invite WHERE from_user_id = ? OR claimed_by = ?').run(userId, userId);
     db.prepare('DELETE FROM invite_usage WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM ask_usage WHERE scope = ?').run(`user:${userId}`);
     db.prepare('DELETE FROM login_challenge WHERE user_id = ? OR lower(email) = lower(?)').run(userId, email);

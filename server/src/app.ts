@@ -17,6 +17,7 @@ import { createAnswerCache, type AnswerCache } from './answer-cache.js';
 import type { AnswerBody } from './ask.js';
 import { COST_SUMMARY_DAYS, createAskCostStore, type AskCostStore } from './ask-cost.js';
 import { createUsageStore } from './db.js';
+import { EmailInvites, friendJoinedMail, joinInviteMail, type JoinedFriend } from './email-invites.js';
 import { FriendsStore, INVITES_PER_DAY, INVITE_TTL_DAYS, MAX_SHARED_SPECIES, isCalendarDay } from './friends.js';
 import { clientIp, emailSchema, passwordSchema, readJson } from './http.js';
 import type { SpeciesLabels } from './labels.js';
@@ -75,7 +76,9 @@ export const displayNameSchema = z
   .max(40)
   .refine((v) => !/[\p{Cc}\p{Cf}]/u.test(v), 'control characters are not allowed');
 const nameSchema = z.object({ name: displayNameSchema }).strict();
-const signupSchema = z.object({ email: emailSchema, password: passwordSchema, name: displayNameSchema.optional() }).strict();
+const inviteTokenSchema = z.string().min(16).max(128);
+const signupSchema = z.object({ email: emailSchema, password: passwordSchema, name: displayNameSchema.optional(), invite: inviteTokenSchema.optional(), shareWithInviter: z.boolean().optional() }).strict();
+const inviteInfoSchema = z.object({ token: inviteTokenSchema }).strict();
 const inviteSchema = z.object({ email: emailSchema }).strict();
 const shareSchema = z.object({ on: z.boolean() }).strict();
 const sharedSpeciesSchema = z
@@ -101,6 +104,7 @@ export function createApp(deps: AppDeps) {
   const providerUsage = deps.providerUsage ?? createProviderUsageStore(db);
   const answers = deps.answers ?? createAnswerCache<AnswerBody>(db);
   const friends = new FriendsStore(db);
+  const emailInvites = new EmailInvites(db, config.BETTER_AUTH_SECRET);
   const invitesPerDay = deps.limits?.invitesPerDay ?? INVITES_PER_DAY;
   const caps: CapConfig = { perUserDaily: config.ASK_DAILY_PER_USER, globalDaily: config.ASK_DAILY_GLOBAL };
   const windowMs = deps.limits?.windowMs ?? 10 * 60 * 1000;
@@ -140,6 +144,23 @@ export function createApp(deps: AppDeps) {
     return json(c, 500, { error: 'internal_error' });
   });
   app.notFound((c) => json(c, 404, { error: 'not_found' }));
+
+  /**
+   * Turn the invites this account claimed into friendships and tell each inviter by mail
+   * (`name` null: the account was approved already, so the name comes from the database).
+   */
+  async function befriendInviters(userId: string, name: string | null): Promise<JoinedFriend[]> {
+    const joined = emailInvites.applyClaimed(userId, friends);
+    const who = name ?? users.get(userId)?.name ?? 'Your friend';
+    for (const j of joined) {
+      try {
+        await mailer.send(friendJoinedMail(j.inviterEmail, who, config.allowedOrigins[0]));
+      } catch (err) {
+        console.error(`[error] friend-joined mail failed: ${describeMailError(err)}`);
+      }
+    }
+    return joined;
+  }
 
   /** One safe line for the log: the error kind, never the recipient or the code. */
   function describeMailError(err: unknown): string {
@@ -198,6 +219,8 @@ export function createApp(deps: AppDeps) {
     let challenge: string;
     let mail: Mail;
     if (session && !blocked) {
+      // An invite link (DECISIONS.md #80) is claimed silently: the answer must stay the same for every address.
+      if (body.invite) emailInvites.claim(body.invite, session.user.id, body.shareWithInviter === true);
       const ch = challenges.create(session.user.id, session.user.email, session.token);
       challenge = ch.id;
       mail = signupCodeMail(session.user.email, ch.code, ttlMinutes);
@@ -271,6 +294,8 @@ export function createApp(deps: AppDeps) {
         console.error(`[error] pending mail failed: ${describeMailError(err)}`);
       }
     }
+    // An invite claimed by an account that is already approved becomes a friendship now (DECISIONS.md #80).
+    if (user.status === 'approved') await befriendInviters(user.id, null);
     return json(c, 200, { token: ch.session_token, expiresAt: expiresAt.toISOString(), user: publicUser(user) });
   });
 
@@ -424,13 +449,15 @@ export function createApp(deps: AppDeps) {
     return { user: s.user };
   }
 
-  const INVITE_SENT = { ok: true, message: 'Invite sent' };
+  const INVITE_SENT = { ok: true, message: 'Invite sent', newAccount: false };
+  /** Sabih's choice (DECISIONS.md #80): the sender is told when the address has no account yet. */
+  const INVITE_NEW = { ok: true, message: 'They don’t have an account yet, so we emailed them a link to create one. You become friends once Sabih approves it.', newAccount: true };
 
   /**
-   * Always answers "Invite sent" (and 429 only for the caller's own daily cap,
-   * which counts every attempt). A mail goes out only when an approved account
-   * with that address exists, is not the caller, is not already a friend and
-   * has no open invite with the caller; the body is identical either way.
+   * An address with an account answers "Invite sent" (a mail goes out only when it is an approved
+   * member, not the caller, not already a friend and with no open invite). An address with no
+   * account gets a Create account link (DECISIONS.md #80) and the answer says so. 429 only for the
+   * caller's own daily cap, which counts every attempt.
    */
   app.post('/v1/friends/invite', async (c) => {
     const m = await requireMember(c);
@@ -441,8 +468,20 @@ export function createApp(deps: AppDeps) {
     if (friends.invitesToday(m.user.id, now) >= invitesPerDay) return json(c, 429, { error: 'rate_limited' });
     friends.recordInviteAttempt(m.user.id, now);
     friends.purgeExpired(now);
+    emailInvites.purgeExpired(now);
     const target = users.getByEmail(body.email);
-    const sendable = target && target.id !== m.user.id && target.status === 'approved' && !friends.areFriends(m.user.id, target.id) && !friends.openInviteBetween(m.user.id, target.id, now);
+    if (!target) {
+      if (!emailInvites.openFor(m.user.id, body.email, now)) {
+        const token = emailInvites.create(m.user.id, body.email, now);
+        try {
+          await mailer.send(joinInviteMail(body.email, m.user.name, `${config.allowedOrigins[0]}/#/signup?invite=${encodeURIComponent(token)}`));
+        } catch (err) {
+          console.error(`[error] join invite mail failed: ${describeMailError(err)}`);
+        }
+      }
+      return json(c, 200, INVITE_NEW);
+    }
+    const sendable = target.id !== m.user.id && target.status === 'approved' && !friends.areFriends(m.user.id, target.id) && !friends.openInviteBetween(m.user.id, target.id, now);
     if (sendable) {
       friends.createInvite(m.user.id, target.id, now);
       try {
@@ -457,6 +496,15 @@ export function createApp(deps: AppDeps) {
       }
     }
     return json(c, 200, INVITE_SENT);
+  });
+
+  /** Who sent an invite link, for the Create account page; 404 for an unknown, used or expired link. */
+  app.post('/v1/auth/invite-info', async (c) => {
+    if (!requireAuthRate(c)) return json(c, 429, { error: 'rate_limited' });
+    const body = await readJson(c, inviteInfoSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    const info = emailInvites.info(body.token);
+    return info ? json(c, 200, info) : json(c, 404, { error: 'not_found' });
   });
 
   app.get('/v1/friends', async (c) => {
@@ -623,9 +671,13 @@ export function createApp(deps: AppDeps) {
     users.setStatus(id.data, status);
     let emailed = false;
     if (status === 'approved' && target.status !== 'approved') {
+      // Claimed invites become friendships first, so the approval mail can name them (DECISIONS.md #80).
+      const joined = await befriendInviters(target.id, target.name || target.email.split('@')[0]);
+      const names = joined.map((j) => j.inviterName);
+      const friendsLine = names.length ? `\n\nYou and ${names.join(', ')} are now friends on Birdbrain. Manage what you share on My account: ${config.allowedOrigins[0]}/#/account` : '';
       // The approval itself is already saved; a mail failure must not undo or hide it.
       try {
-        await mailer.send({ to: target.email, subject: 'Your Birdbrain account is approved', text: 'Sabih approved your account. Sign in again to use member features.' });
+        await mailer.send({ to: target.email, subject: 'Your Birdbrain account is approved', text: `Sabih approved your account. Sign in again to use member features.${friendsLine}` });
         emailed = true;
       } catch (err) {
         console.error(`[error] approval mail failed: ${describeMailError(err)}`);
