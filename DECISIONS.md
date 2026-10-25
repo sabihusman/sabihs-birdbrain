@@ -2581,6 +2581,32 @@ other open branches, so this may be renumbered at merge.)
   imported recording is saved as bytes, plays after a reload and re-analyses, and without the
   fallback the import fails. A private tab still keeps nothing after it is closed.
 
+## 83. Focus: controls pinned above the tab bar, earlier birds by tap, the big Start page once per session
+
+- **Problem (Sabih, iPhone):** in Focus the listening card sat at the top, out of reach of a thumb;
+  "swipe up for earlier birds" was clunky; and Stop sent the screen back to the big Start page,
+  dropping every bird on it.
+- **Controls at the bottom:** after the introduction, the listening panel (timer, screen note,
+  level, Stop, Record) is pinned just above the tab bar, and when stopped the bar there holds a
+  full-width "Start listening" (the Bottom dock's bar, reused). The page keeps room for whichever
+  is showing (a `ResizeObserver` sets `--focus-bar-h`), so nothing sits under it. The conditions
+  note moves above the bird card so the pinned panel stays short.
+- **Earlier birds:** an "Earlier birds (N)" button right under the highlighted bird opens the
+  other birds in place and becomes "Hide earlier birds"; it is hidden when there are none. The
+  swipe-up sheet and its touch handlers are removed.
+- **Stop keeps the birds:** stopping no longer hides the bird card.
+- **The big Start page is an introduction (Sabih's rule):** it shows until the first start in a
+  browsing session, then not again that day. `sessionStorage` (`birdbrain.focus-intro.v1`) holds
+  the day of the first start, so a new tab or browser session, or a new day in a long-lived one,
+  shows it again. States that need words (loading, mic blocked, an error) still show the state
+  block.
+- **Reading chosen without asking:** "first comes to it" is taken as "until the first start", so
+  someone who opens Listen and leaves without starting sees the introduction again.
+- **Tests:** `tests/focus-intro.test.ts`; a new e2e test (introduction, panel and Start bar flush
+  with the tab bar, the bird not under the bar, earlier birds open and close, Stop keeps the
+  bird, no introduction after a reload, again on a new day, 320 px in both themes); the layouts
+  test updated for the hidden button.
+
 ## 84. Ask once to keep storage, right after the first model download, and say why
 
 - **Source:** audit item 1b (Sabih chose it, and asked for the reasons and benefits to be explained).
