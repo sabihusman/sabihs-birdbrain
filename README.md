@@ -136,8 +136,8 @@ The name is always shown next to the colour.
   Passwords are 8 to 128 characters and can be changed under Settings ›
   Account › Change password.
 - **Species:** offline browser of the BirdNET classes, listing by default the
-  species the location model expects near you in some week of the year
-  ("312 local species · 6,511 total", with a "Show all species" toggle and a
+  birds that live near you or pass through at some time of year (BirdNET's
+  location model, best of its 48 weeks; "312 local species · 6,511 total", with a "Show all species" toggle and a
   note when no location is available), with search by
   common or scientific name; Wikipedia summary (scientific name first, then
   common; disambiguation and not-found handled), image with Commons attribution

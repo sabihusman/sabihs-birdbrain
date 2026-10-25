@@ -37,7 +37,7 @@ export function speciesListView(ctx: ViewContext): View {
     settings.update({ speciesShowAll: showAll.checked });
     search();
   });
-  const toggle = el('label', { class: 'switch' }, el('span', null, 'Show all species', el('div', { class: 'small muted' }, 'Off: only species the location model expects near you in some week of the year.')), showAll);
+  const toggle = el('label', { class: 'switch' }, el('span', null, 'Show all species', el('div', { class: 'small muted', 'data-testid': 'show-all-hint' }, 'Off: only birds that live near you or pass through at some time of year. On: every species the app knows, worldwide.')), showAll);
   // "Spotted by me": species with at least one sighting on this device (DECISIONS.md #41).
   const spottedCount = el('span', { class: 'filter-chip-count' }, '');
   const spottedChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': String(settings.get().speciesSpottedOnly), 'data-testid': 'spotted-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'), 'Spotted by me', spottedCount);

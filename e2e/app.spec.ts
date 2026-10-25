@@ -775,6 +775,8 @@ test('imports a recording, analyses it and explains an identification', async ({
   // Species tab: the spotted species carries a tick; "Spotted by me" narrows the list to it; the tick says "Sign in to unlock" (DECISIONS.md #41).
   await page.goto('./#/species');
   // The manual position set above narrows the list to local species; show all so the search can find the redpoll.
+  // The switch says in plain words what the local list holds (any time of year, passing migrants too).
+  await expect(page.getByTestId('show-all-hint')).toHaveText('Off: only birds that live near you or pass through at some time of year. On: every species the app knows, worldwide.');
   await page.getByTestId('show-all-species').check();
   await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
   const redpollRow = page.getByTestId('spotted-row').filter({ hasText: 'Lesser Redpoll' });
