@@ -2680,3 +2680,30 @@ other open branches, so this may be renumbered at merge.)
 - **Tests:** `tests/audio-store.test.ts` (details apart from audio, lists without audio, deletes,
   an older row still plays, Delete all data); the migration test now expects version 6 with the
   `audio` store; the Safari-fallback e2e test reads the bytes from the `audio` store.
+
+## 88. No "Rumble Shield": the 150–550 Hz experiment showed the app is better without it
+
+- **Question (Sabih):** would attenuating 150–550 Hz wind and traffic rumble (a fixed 550 Hz cut or
+  a dynamic shield) raise BirdNET's confidence enough to build it? Also audit item 3: does the
+  150 Hz IIR low-cut's phase shift hurt the real-part STFT features (DECISIONS.md #2)?
+- **Test (2026-10-25, not committed):** the app's BirdNET V2.4 weights and `MelSpecLayerSimple`
+  in Node; 13 clean windows from 7 species (Lesser Redpoll, Mourning Dove, Eurasian Collared-Dove,
+  Great Horned Owl, Northern Cardinal, Black-capped Chickadee, American Robin; xeno-canto
+  recordings used locally only); 80–500 Hz brown noise at 0, −12 and −20 dB SNR; five modes: no
+  filter, the app's 150 Hz high-pass, a 550 Hz 4th-order high-pass, the brief's dynamic shield
+  inside the layer (bins below 550 Hz × 0.15 when 150–550 Hz energy exceeds 1–8 kHz), and the
+  same shield before normalisation. Measured: confidence for the correct species.
+- **Result:** no mode helps without hurting another group of birds. The 550 Hz cut rescued both
+  doves in heavy rumble but cut the Great Horned Owl from 97% to 82% in clean air and the
+  Cardinal from 80% to 39% in heavy noise. The dynamic shield wrecked the doves even in clean air
+  (Collared Dove 99% → 47%), because a dove's coo sits in 150–550 Hz and triggers it. Songbirds
+  stayed above 60% with no filter even at −20 dB. Averaged over all birds, nothing beat no filter
+  in clean or moderate (0 dB) conditions; at −12 dB the 550 Hz cut averaged 64% against 56%, all of
+  it from the doves while the Cardinal and Chickadee lost; at −20 dB the best gain was 3 points.
+- **Decision (Sabih):** not built; the 150 Hz low-cut stays as it is. Audit item 3 closed: the
+  app's filter and no filter scored within a few points everywhere, so its phase shift does not
+  measurably change confidence.
+- **Facts worth keeping:** `normalizeWindow` maps each window's min/max to ±1 in the time domain
+  before the spectrum, so loud low rumble sets the scale; the two mel inputs cover 0–3,000 Hz and
+  500–15,000 Hz; the app's 150 Hz biquad (Q 1 dB) lifts 150–550 Hz by about 1.5 dB.
+- **Limits:** 13 windows; steady synthetic noise, not real gusts or microphone overload.
