@@ -1,3 +1,4 @@
+import { KEEP_SIGHTING, KEPT_SIGHTING, NOT_USUAL_SUBTITLE, notUsualToggleText, SOUND_ONLY_NOTE } from '../../species/sound-only';
 import { BROWSER_UNSUPPORTED_HINT, BROWSER_UNSUPPORTED_TITLE } from '../../app/browser-support';
 import type { WindowResult } from '../../app/controller';
 import type { ListenLayout } from '../../app/settings';
@@ -119,6 +120,12 @@ export function listenView(ctx: ViewContext): View {
   // Results
   const resultsList = el('div', { class: 'result-list', 'data-testid': 'results' });
   const lowLine = el('button', { class: 'btn small text', type: 'button', 'data-testid': 'low-toggle', style: 'display:none' }, '');
+  // Birds matched by sound but hidden by the location filter: counted here, one tap away, each with a Keep button (DECISIONS.md #93).
+  const notUsualLine = el('button', { class: 'btn small text', type: 'button', 'data-testid': 'not-usual-toggle', style: 'display:none' }, '');
+  const notUsualList = el('div', { class: 'not-usual-list', 'data-testid': 'not-usual-list', style: 'display:none' });
+  let showNotUsual = false;
+  /** Placed per layout: under the results elsewhere, under the earlier birds in Focus. */
+  const notUsualBox = el('div', { class: 'stack not-usual' }, notUsualLine, notUsualList);
   const resultsEmpty = el('p', { class: 'muted', 'data-testid': 'results-empty' }, 'Nothing above your minimum yet. Dawn is best.');
   const recentList = el('div', { class: 'recent-list', 'data-testid': 'recent' });
   const recentEmpty = el('p', { class: 'small muted', 'data-testid': 'recent-empty' }, 'Birds you hear appear here, one card each.');
@@ -156,7 +163,7 @@ export function listenView(ctx: ViewContext): View {
   // ---- layout ----------------------------------------------------------------
   const stateRow = el('div', { class: 'state-row' }, stateIcon, stateTitle);
   const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), chips, noLocationNote, el('div', { class: 'row' }, demoBtn), lastBirdLine, status);
-  const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, resultsEmpty);
+  const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, notUsualBox, resultsEmpty);
   const dockTimer = el('span', { class: 'dock-time' }, ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00'));
   const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn);
   const focusLatest = el('div', { class: 'focus-latest', 'data-testid': 'focus-latest' });
@@ -197,21 +204,25 @@ export function listenView(ctx: ViewContext): View {
     resultsList.remove();
     recentBody.remove();
     dock.remove();
+    notUsualBox.remove();
     // Focus moves the conditions note out of the panel; every other layout keeps it above Stop and Record.
     if (conditionsLine.parentElement !== panel) panel.insertBefore(conditionsLine, panel.lastElementChild);
     if (next === 'focus') {
       // The conditions note reads above the bird; the panel with Stop and Record is pinned above the tab bar.
       focusBlock.prepend(conditionsLine);
       moreList.appendChild(resultsList);
+      focusBlock.appendChild(notUsualBox);
       recentDetails.appendChild(recentBody);
       root.replaceChildren(readyBlock, focusBlock, credit, panel, dock);
     } else if (next === 'dock') {
       resultsBlock.prepend(resultsList);
+      lowLine.after(notUsualBox);
       recentInline.appendChild(recentBody);
       // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
       root.replaceChildren(readyBlock, recentInline, resultsBlock, how, credit, dock);
     } else {
       resultsBlock.prepend(resultsList);
+      lowLine.after(notUsualBox);
       recentDetails.appendChild(recentBody);
       root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails, credit);
     }
@@ -335,7 +346,7 @@ export function listenView(ctx: ViewContext): View {
       low = lastResult.scores.filter((x) => x.prob < s.threshold && x.prob >= LOW_FLOOR && x.inRange && (controller.species[x.index]?.isBird || s.includeNonBird)).length;
       // One card per species, newest first; a new hit moves its species to the top (src/species/recent.ts).
       const items = groupRecent(hits);
-      const cardFor = (g: (typeof items)[number], large = false) => resultCard(ctx, g.species, { confidence: g.best, time: g.lastHeard, heardTimes: g.detections.length, large, conditions: large ? conditionsText : undefined });
+      const cardFor = (g: (typeof items)[number], large = false) => resultCard(ctx, g.species, { confidence: g.best, time: g.lastHeard, heardTimes: g.detections.length, large, conditions: large ? conditionsText : undefined, soundOnly: g.soundOnly });
       if (layout !== 'focus') {
         for (const g of items) {
           const card = cardFor(g);
@@ -373,6 +384,35 @@ export function listenView(ctx: ViewContext): View {
     dirty = true;
   };
 
+  const renderNotUsual = () => {
+    const birds = controller.getNotUsual().filter((b) => !b.kept);
+    notUsualLine.textContent = notUsualToggleText(birds.length, showNotUsual);
+    setHidden(notUsualLine, birds.length === 0);
+    setHidden(notUsualList, !showNotUsual || birds.length === 0);
+    if (!showNotUsual) return;
+    notUsualList.replaceChildren(
+      ...birds.flatMap((b) => {
+        const sp = controller.species[b.index];
+        if (!sp) return [];
+        const keep = el('button', { class: 'btn small', type: 'button', 'data-testid': 'keep-sighting' }, KEEP_SIGHTING);
+        keep.addEventListener('click', async () => {
+          keep.disabled = true;
+          keep.textContent = KEPT_SIGHTING;
+          if (!(await controller.keepNotUsual(b.scientific))) {
+            keep.disabled = false;
+            keep.textContent = KEEP_SIGHTING;
+            return;
+          }
+          hits.push({ key: sp.scientific, species: sp, time: b.time, confidence: b.prob, soundOnly: true });
+          ctx.notify({ kind: 'info', text: `${sp.common} kept. ${SOUND_ONLY_NOTE}` });
+          renderResults();
+          renderRecent();
+        });
+        return [el('div', { class: 'not-usual-row', 'data-testid': 'not-usual-row', 'data-species': sp.scientific }, speciesChip(sp, { confidence: b.prob, subtitle: NOT_USUAL_SUBTITLE }), keep)];
+      }),
+    );
+  };
+
   const renderRecent = () => {
     for (const d of recentDisposers.splice(0)) d();
     recentList.replaceChildren();
@@ -408,7 +448,7 @@ export function listenView(ctx: ViewContext): View {
     for (const d of r.detections) {
       const sp = controller.species[d.index];
       if (!sp) continue;
-      hits.push({ key: sp.scientific, species: sp, time: r.time, confidence: d.prob });
+      hits.push({ key: sp.scientific, species: sp, time: r.time, confidence: d.prob, ...(r.soundOnly?.includes(d.index) ? { soundOnly: true } : {}) });
     }
     if (hits.length > MAX_RECENT_HITS) hits.splice(0, hits.length - MAX_RECENT_HITS);
     renderResults();
@@ -494,6 +534,10 @@ export function listenView(ctx: ViewContext): View {
       renderState();
     }
   });
+  notUsualLine.addEventListener('click', () => {
+    showNotUsual = !showNotUsual;
+    renderNotUsual();
+  });
   lowLine.addEventListener('click', () => {
     showLow = !showLow;
     renderResults();
@@ -514,6 +558,7 @@ export function listenView(ctx: ViewContext): View {
       (level.firstElementChild as HTMLElement).style.width = `${Math.min(100, Math.round(Math.sqrt(l) * 140))}%`;
     }),
     controller.on('window-result', onResult),
+    controller.on('not-usual', renderNotUsual),
     controller.on('conditions', (a) => {
       conditionsText = a ? a.title : null;
       renderConditions(a);
@@ -581,6 +626,7 @@ export function listenView(ctx: ViewContext): View {
     if (controller.listening) status.textContent = 'Listening…';
     renderState();
     renderResults();
+    renderNotUsual();
   }
 
   return {

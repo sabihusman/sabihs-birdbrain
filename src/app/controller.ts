@@ -17,7 +17,7 @@ import { Emitter } from '../shared/emitter';
 import { getClipMeta, newId, putRecording, recordDetections } from '../storage/db';
 import type { ClipRecord, DetectionRecord, RecordingRecord, SpeciesSummary } from '../storage/types';
 import { LocationManager, type LocationState } from './location';
-import { PositionWatch, positionStamp } from './position-watch';
+import { PositionWatch, positionStamp, type PositionStamp } from './position-watch';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
 import { isModelCached, markModelWanted, safeLocalStorage } from './first-visit';
@@ -35,6 +35,21 @@ export interface WindowResult {
   geoApplied: boolean;
   /** Not persisted (e.g. the demo clip). */
   ephemeral: boolean;
+  /** Indices in `detections` that are there only because the user kept the bird against the location filter (DECISIONS.md #93). */
+  soundOnly?: number[];
+}
+
+/**
+ * A bird the sound model matched above the minimum this session but the location filter hid (DECISIONS.md #93):
+ * its best window, where the phone was then, and whether the user kept it.
+ */
+export interface NotUsualBird {
+  index: number;
+  scientific: string;
+  prob: number;
+  time: number;
+  where: PositionStamp;
+  kept: boolean;
 }
 
 export interface SessionStats {
@@ -86,6 +101,8 @@ interface ControllerEvents extends Record<string, unknown> {
   'clip-saved': ClipRecord;
   /** The first-visit welcome layer is shown (true) or was dismissed (false). */
   welcome: boolean;
+  /** Birds hidden by the location filter this session changed (one more seen, or one kept). */
+  'not-usual': NotUsualBird[];
 }
 
 /** Seconds of raw live audio kept so a species clip can be centred on its detection window. */
@@ -402,6 +419,9 @@ export class AppController extends Emitter<ControllerEvents> {
     }
     this.sessionId = newId();
     this.saveWarned.clear();
+    this.notUsual.clear();
+    this.keptAgainstFilter.clear();
+    this.emit('not-usual', []);
     this.sessionStartedAt = Date.now();
     this.windowCounter = 0;
     this.conditions.reset();
@@ -479,10 +499,16 @@ export class AppController extends Emitter<ControllerEvents> {
     let result: WindowResult;
     try {
       const res = await this.inference.analyze(audio);
-      const detections = selectDetections(res.scores, this.species, { threshold: s.threshold, applyGeo: res.geoApplied, includeNonBird: s.includeNonBird });
+      const filtered = selectDetections(res.scores, this.species, { threshold: s.threshold, applyGeo: res.geoApplied, includeNonBird: s.includeNonBird });
+      // Matched by sound but hidden by the location filter: counted on Listen instead of vanishing; a bird the
+      // user kept this session counts as a sighting from then on, marked sound-only (DECISIONS.md #93).
+      const hidden = res.geoApplied ? selectDetections(res.scores, this.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird }).filter((d) => !d.inRange) : [];
+      const kept = hidden.filter((d) => this.keptAgainstFilter.has(this.species[d.index]?.scientific ?? ''));
+      const detections = kept.length ? [...filtered, ...kept].sort((a, b) => b.prob - a.prob) : filtered;
+      this.noteNotUsual(hidden.filter((d) => !kept.includes(d)), time);
       this.stats = { ...this.stats, windows: this.stats.windows + 1, lastInferMs: res.inferMs };
       this.emit('stage', 'result');
-      result = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, ephemeral: false };
+      result = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, ephemeral: false, soundOnly: kept.map((d) => d.index) };
       this.emit('window-result', result);
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Analysis failed: ${(e as Error).message}` });
@@ -496,6 +522,67 @@ export class AppController extends Emitter<ControllerEvents> {
     } catch (e) {
       this.warnSaveFailed('sighting', e);
     }
+  }
+
+  /** Birds hidden by the location filter this session, best window each, by scientific name (DECISIONS.md #93). */
+  private notUsual = new Map<string, NotUsualBird>();
+  /** Species the user kept this session: later windows count as sightings, marked sound-only. */
+  private keptAgainstFilter = new Set<string>();
+
+  private noteNotUsual(hidden: Score[], time: number): void {
+    if (hidden.length === 0) return;
+    const where = positionStamp(this.positions.current());
+    for (const d of hidden) {
+      const sp = this.species[d.index];
+      if (!sp) continue;
+      const seen = this.notUsual.get(sp.scientific);
+      if (!seen || d.prob > seen.prob) this.notUsual.set(sp.scientific, { index: d.index, scientific: sp.scientific, prob: d.prob, time, where, kept: false });
+    }
+    this.emit('not-usual', this.getNotUsual());
+  }
+
+  /** This session's birds hidden by the location filter, newest first; kept ones included, marked. */
+  getNotUsual(): NotUsualBird[] {
+    return Array.from(this.notUsual.values()).sort((a, b) => b.time - a.time);
+  }
+
+  /**
+   * "Keep this sighting": save the bird's best window as a normal sighting, marked as verified by sound only,
+   * and treat it as a sighting for the rest of the session. False when there is nothing to keep or the phone
+   * refused the save (which says so once, as for any sighting).
+   */
+  async keepNotUsual(scientific: string): Promise<boolean> {
+    const bird = this.notUsual.get(scientific);
+    const sp = bird ? this.species[bird.index] : undefined;
+    if (!bird || !sp || bird.kept) return false;
+    const record: DetectionRecord = {
+      id: newId(),
+      time: bird.time,
+      label: sp.label,
+      scientific: sp.scientific,
+      common: sp.common,
+      confidence: bird.prob,
+      lat: bird.where.lat,
+      lon: bird.where.lon,
+      accuracy: bird.where.accuracy,
+      fixTime: bird.where.fixTime,
+      recordingId: null,
+      offsetSec: null,
+      source: 'live',
+      sessionId: this.sessionId,
+      soundOnly: true,
+    };
+    try {
+      await recordDetections([record]);
+    } catch (e) {
+      this.warnSaveFailed('sighting', e);
+      return false;
+    }
+    bird.kept = true;
+    this.keptAgainstFilter.add(scientific);
+    this.emit('detections-changed', undefined);
+    this.emit('not-usual', this.getNotUsual());
+    return true;
   }
 
   private saveWarned = new Set<string>();
@@ -544,6 +631,7 @@ export class AppController extends Emitter<ControllerEvents> {
         offsetSec: recordingId ? 0 : null,
         source: 'live',
         sessionId: this.sessionId,
+        ...(result.soundOnly?.includes(d.index) ? { soundOnly: true } : {}),
       };
     });
     await recordDetections(records);

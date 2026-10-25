@@ -1,3 +1,4 @@
+import { SOUND_ONLY_TAG } from '../species/sound-only';
 import type { SightingRecord } from '../storage/types';
 
 export function csvEscape(value: unknown): string {
@@ -21,6 +22,8 @@ export const SIGHTING_CSV_COLUMNS = [
   'recording_id',
   'offset_sec',
   'source',
+  // "sound only": kept although the location filter did not expect the bird there (DECISIONS.md #93).
+  'location_check',
 ] as const;
 
 export function sightingsToCsv(sightings: SightingRecord[]): string {
@@ -41,6 +44,7 @@ export function sightingsToCsv(sightings: SightingRecord[]): string {
         s.recordingId,
         s.offsetSec,
         s.source,
+        s.soundOnly ? SOUND_ONLY_TAG : '',
       ]
         .map(csvEscape)
         .join(','),

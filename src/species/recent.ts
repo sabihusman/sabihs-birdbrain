@@ -61,11 +61,15 @@ export interface SpeciesGroup<S> {
   lastHeard: number;
   /** Total analysis windows behind the card. */
   hitCount: number;
+  /** Any of its hits was kept against the location filter. */
+  soundOnly: boolean;
 }
 
 export interface KeyedHit<S> extends RecentHit {
   key: string;
   species: S;
+  /** Kept against the location filter (DECISIONS.md #93). */
+  soundOnly?: boolean;
 }
 
 /**
@@ -90,6 +94,7 @@ export function groupRecent<S>(hits: readonly KeyedHit<S>[], gapMs = LUMP_GAP_SE
       best: Math.max(...list.map((h) => h.confidence)),
       lastHeard: detections[0].end,
       hitCount: list.length,
+      soundOnly: list.some((h) => h.soundOnly === true),
     });
   }
   return groups.sort((a, b) => b.lastHeard - a.lastHeard || a.key.localeCompare(b.key));

@@ -1,3 +1,4 @@
+import { SOUND_ONLY_TAG } from '../species/sound-only';
 import type { SightingRecord } from '../storage/types';
 
 export interface GeoJsonFeature {
@@ -31,6 +32,7 @@ export function sightingsToGeoJson(sightings: SightingRecord[]): GeoJsonFeatureC
         recording_id: s.recordingId,
         offset_sec: s.offsetSec,
         source: s.source,
+        location_check: s.soundOnly ? SOUND_ONLY_TAG : null,
       },
     });
   }

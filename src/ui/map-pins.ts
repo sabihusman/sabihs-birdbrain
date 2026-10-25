@@ -1,4 +1,5 @@
 /** Pure helpers for the Map tab's photo pins and compact card (DECISIONS.md #75). Unit-tested. */
+import { SOUND_ONLY_TAG } from '../species/sound-only';
 import { describeAccuracy } from '../app/position-watch';
 import { formatLatLon } from '../geo/pluscode';
 import { hrefFor, speciesHref } from './router';
@@ -11,6 +12,8 @@ export interface PinSighting {
   firstTime: number;
   lastTime: number;
   peakConfidence: number;
+  /** Kept against the location filter (DECISIONS.md #93). */
+  soundOnly?: boolean;
   lat: number | null;
   lon: number | null;
   accuracy: number | null;
@@ -38,9 +41,9 @@ function shortTime(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-/** "Oct 21 · 6:42 PM · 83%" (the year is added outside the current one). */
-export function compactWhen(s: Pick<PinSighting, 'firstTime' | 'peakConfidence'>, now = Date.now()): string {
-  return `${shortDate(s.firstTime, now)} · ${shortTime(s.firstTime)} · ${Math.round(s.peakConfidence * 100)}%`;
+/** "Oct 21 · 6:42 PM · 83%" (the year is added outside the current one), plus " · sound only" for a kept sighting. */
+export function compactWhen(s: Pick<PinSighting, 'firstTime' | 'peakConfidence' | 'soundOnly'>, now = Date.now()): string {
+  return `${shortDate(s.firstTime, now)} · ${shortTime(s.firstTime)} · ${Math.round(s.peakConfidence * 100)}%${s.soundOnly ? ` · ${SOUND_ONLY_TAG}` : ''}`;
 }
 
 /** "41.74013, −93.71845 · ±5 m": the copied text keeps the plain hyphen, the shown one a real minus sign. */
