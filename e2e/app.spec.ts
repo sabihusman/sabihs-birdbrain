@@ -2273,3 +2273,35 @@ test('Recordings shows one card per bird that opens to its recordings (DECISIONS
   await redpoll.getByTestId('recording-row').first().click();
   await expect(page).toHaveURL(/#\/recordings\/.+/);
 });
+
+test('the Species tab has the "Share my species list" switch for members, the same setting as My account (DECISIONS.md #98)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  const uploads: string[] = [];
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/me\/species$/, (route) => {
+    uploads.push(route.request().postData() ?? '');
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, count: 0 }) });
+  });
+  // Signed out: no switch.
+  await page.goto('./#/species');
+  await expect(page.getByRole('searchbox', { name: 'Search species' })).toBeVisible();
+  await expect(page.getByTestId('species-share')).toBeHidden();
+  // An approved member: the switch is on the Species tab, off until they turn it on.
+  await page.evaluate(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Sam', status: 'approved', role: 'member' } })));
+  await page.reload();
+  const share = page.getByTestId('species-share');
+  await expect(share).toBeVisible();
+  await expect(share).toContainText('Share my species list');
+  await expect(share).toContainText('Friends see species and dates only');
+  const sw = share.getByTestId('share-species');
+  await expect(sw).not.toBeChecked();
+  await sw.check();
+  await expect(page.getByText('Sharing is on. Your species list was uploaded.')).toBeVisible();
+  expect(uploads.length).toBeGreaterThan(0);
+  // Same setting on My account.
+  await page.goto('./#/account');
+  await expect(page.getByTestId('share-species')).toBeChecked();
+  await context.close();
+});

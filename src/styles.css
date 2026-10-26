@@ -453,6 +453,8 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 /* .row-item sets `font: inherit`, which would otherwise beat the .small class on a status row. */
 .row-item.small { font-size: var(--text-sm); }
 .contents-row { display: contents; }
+/* The share switch on the Species tab (DECISIONS.md #98): the row's own padding would indent it inside the card. */
+.species-share .row-item { padding-left: 0; padding-right: 0; }
 .btn.block { width: 100%; justify-content: center; }
 .name-host:empty { display: none; }
 .name-form { margin-top: var(--space-2); }
