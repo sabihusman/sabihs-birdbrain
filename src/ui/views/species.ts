@@ -17,6 +17,7 @@ import { isSpotted, loadSpottedSet, type SpottedSet } from '../../species/spotte
 import { scopeSpeciesList } from '../../species/list-scope';
 import { describeSpottedBy } from '../../species/friends';
 import { spottedByBlock } from '../components/spotted-by';
+import { sharingRow } from '../components/friends-panel';
 
 const PAGE = 60;
 
@@ -135,16 +136,34 @@ export function speciesListView(ctx: ViewContext): View {
   };
   input.addEventListener('input', search);
   more.addEventListener('click', () => render(false));
-  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search), controller.on('detections-changed', refreshSpotted), api.on('change', search), ctx.friends.on('change', search)];
+  // "Share my species list" sits next to the Spotted chips for approved members (DECISIONS.md #98); it is the
+  // same switch and setting as on My account, so the two always agree.
+  const shareBox = el('div', { class: 'row-group species-share', 'data-testid': 'species-share' });
+  let shareRow: ReturnType<typeof sharingRow> | null = null;
+  const renderShare = () => {
+    const member = isMember(api.user);
+    if (member && !shareRow) {
+      shareRow = sharingRow(ctx);
+      shareBox.replaceChildren(shareRow.el);
+    } else if (!member && shareRow) {
+      shareRow.dispose();
+      shareRow = null;
+      shareBox.replaceChildren();
+    }
+    shareBox.hidden = !member;
+  };
+  renderShare();
+  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search), controller.on('detections-changed', refreshSpotted), api.on('change', search), api.on('change', renderShare), ctx.friends.on('change', search)];
   search();
   refreshSpotted();
   void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, shareBox, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {
       for (const u of unsubs) u();
+      shareRow?.dispose();
     },
   };
 }

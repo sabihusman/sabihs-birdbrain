@@ -2862,3 +2862,11 @@ other open branches, so this may be renumbered at merge.)
   your own recordings and imports keep their names. Other birds in a recording are listed as "Also: …".
   Recordings with no bird found share one "No bird found" card. Cards are ordered by their newest recording;
   an opened card stays open when a new clip arrives. Nothing is deleted or merged in storage.
+
+## 98. "Share my species list" on the Species tab
+
+- **Why (Sabih):** the switch was buried in Settings › Account › My account.
+- **Now:** approved members see the same switch on the Species tab, under the "Spotted by me / Spotted by
+  friends" chips, with its hint ("Friends see species and dates only") and status line. It is the same
+  component and the same per-account setting as on My account (`sharingRow`), so the two always agree;
+  My account keeps it too, with the full consent text. Signed-out, pending or rejected accounts don't see it.
