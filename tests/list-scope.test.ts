@@ -53,3 +53,12 @@ describe('scopeSpeciesList', () => {
     expect(loading.friendsCount).toBe('');
   });
 });
+
+describe('which Species notes may fold (DECISIONS.md #100)', () => {
+  it('explanations fold; a reason the list differs or a next step stays in view', () => {
+    expect(scopeSpeciesList({ ...base, spottedOnly: true }).noteKind).toBe('info');
+    expect(scopeSpeciesList({ ...base, friendsOnly: true }).noteKind).toBe('info');
+    expect(scopeSpeciesList({ ...base, friendsOnly: true, friendCount: 0 }).noteKind).toBe('status');
+    expect(scopeSpeciesList({ ...base, localIndices: null, localNote: 'All species: location filter off (Settings › Location).' }).noteKind).toBe('status');
+  });
+});

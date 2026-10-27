@@ -2890,3 +2890,18 @@ other open branches, so this may be renumbered at merge.)
   the Recordings list did not redraw when they were, so going straight back could show the new recording under
   "No bird found" until the next visit. "Analysed" now appears after the save, and the list redraws on
   `detections-changed`.
+
+## 100. Extra text folds under one line
+
+- **Why (Sabih):** the Species card and Settings were walls of grey text. Asked for: tick boxes stay, each with
+  one line saying what it does; the rest opens by tapping that line or an arrow. Approved from a mockup of
+  Species, Settings, My account and the invite on Create account.
+- **How:** `foldHint` in `src/ui/components/rows.ts` (a closed `details`, line + ⌄, a 44 px tap target).
+  It sits under the label, never inside it, so tapping the explanation never flips the box. Folds start
+  closed on every visit.
+- **Never folded:** live status and problems: an upload error on "Share my species list", "Persistent
+  storage: off", the location status, "Voice processing: …", and Species notes that say why the list
+  differs or what to do next (`noteKind: 'status'` in `src/species/list-scope.ts`). The Species count under
+  the list shows only when it adds something (cut short, a search).
+- **Left alone:** Listen (no tick boxes; its extras are already folded or live status), the delete-account
+  wipe box (a destructive step), bird descriptions and AI answers.

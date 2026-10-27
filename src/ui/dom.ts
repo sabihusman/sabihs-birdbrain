@@ -1,4 +1,4 @@
-type Child = Node | string | number | null | undefined | false | Child[];
+export type Child = Node | string | number | null | undefined | false | Child[];
 
 type Props = Record<string, unknown> & { class?: string; style?: string; dataset?: Record<string, string> };
 

@@ -4,6 +4,7 @@ import { listSightingsForSpecies, getRecordingMeta } from '../../storage/db';
 import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
+import { foldHint } from '../components/rows';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor, speciesHref } from '../router';
 import { createMiniMap } from './map';
@@ -31,14 +32,24 @@ export function speciesListView(ctx: ViewContext): View {
   const list = el('div', { class: 'chip-list', 'data-testid': 'species-list' });
   const more = el('button', { class: 'btn small' }, 'Show more');
   const count = el('div', { class: 'small muted' }, '');
-  const localLine = el('div', { class: 'small', 'data-testid': 'local-count' }, '');
-  const note = el('div', { class: 'small muted', 'data-testid': 'local-note' }, '');
+  // The count line opens to the rest (DECISIONS.md #100); a note that says why the list differs stays in view.
+  const localLine = el('span', { class: 'stat-line', 'data-testid': 'local-count' }, '');
+  const note = el('p', { class: 'small muted', 'data-testid': 'local-note' }, '');
+  const totalLine = el('p', null, '');
+  const offlineLine = el('p', null, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.');
+  const scopeFold = foldHint(localLine, [totalLine, offlineLine], { testId: 'species-about' });
+  const statusNote = el('div', { class: 'small muted' });
   const showAll = el('input', { type: 'checkbox', checked: settings.get().speciesShowAll, 'data-testid': 'show-all-species' });
   showAll.addEventListener('change', () => {
     settings.update({ speciesShowAll: showAll.checked });
     search();
   });
-  const toggle = el('label', { class: 'switch' }, el('span', null, 'Show all species', el('div', { class: 'small muted', 'data-testid': 'show-all-hint' }, 'Off: birds found near you at any time of year. On: every species, worldwide.')), showAll);
+  const toggle = el(
+    'div',
+    { class: 'switch-folded' },
+    el('label', { class: 'switch' }, el('span', null, 'Show all species'), showAll),
+    foldHint('On: every species, worldwide', [el('p', null, 'Off: only birds found near you at any time of year.')], { testId: 'show-all-hint' }),
+  );
   // "Spotted by me": species with at least one sighting on this device (DECISIONS.md #41).
   const spottedCount = el('span', { class: 'filter-chip-count' }, '');
   const spottedChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': String(settings.get().speciesSpottedOnly), 'data-testid': 'spotted-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'), 'Spotted by me', spottedCount);
@@ -95,6 +106,8 @@ export function speciesListView(ctx: ViewContext): View {
     shown += next.length;
     more.style.display = shown < results.length ? '' : 'none';
     count.textContent = results.length ? `${results.length.toLocaleString()} species${shown < results.length ? `, showing ${shown}` : ''}` : controller.species.length ? 'No matches.' : 'Loading species list…';
+    // The fold's line already gives the count; repeat it only when it says something more.
+    count.hidden = results.length > 0 && shown >= results.length && !input.value.trim();
   };
   const search = () => {
     const all = controller.species.filter((s) => s.isBird || settings.get().includeNonBird);
@@ -118,9 +131,13 @@ export function speciesListView(ctx: ViewContext): View {
     friendsNote.textContent = ctx.friends.available ? (ctx.friends.lastError ?? '') : '';
     friendsNote.hidden = friendsNote.textContent === '';
     spottedCount.textContent = scope.spottedCount;
-    localLine.textContent = scope.line;
+    const [head, total] = scope.line.split(' · ');
+    localLine.textContent = head ?? '';
+    totalLine.textContent = total ? `${total.replace(/ total$/, '')} species in total.` : '';
+    totalLine.hidden = !total;
     note.textContent = scope.note ?? '';
-    note.style.display = scope.note ? '' : 'none';
+    if (scope.note && scope.noteKind === 'info') scopeFold.querySelector('.fold-hint-more')?.insertBefore(note, offlineLine);
+    else statusNote.replaceChildren(...(scope.note ? [note] : []));
     showAll.disabled = local.indices === null;
     results = input.value.trim() ? searchSpecies(scope.shown, input.value, 500) : scope.shown;
     render(true);
@@ -158,7 +175,7 @@ export function speciesListView(ctx: ViewContext): View {
   refreshSpotted();
   void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, shareBox, localLine, note, toggle, el('p', { class: 'small muted' }, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.'), count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, shareBox, toggle, scopeFold, statusNote, count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {

@@ -6,6 +6,7 @@ import { clearAllData, countDetections, countSightings, listSightings } from '..
 import { formatBytes, getStorageStatus, PERSIST_EXPLAINED, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
+import { foldHint } from '../components/rows';
 import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
 import { layoutPicker } from '../components/layout-picker';
@@ -40,17 +41,18 @@ export function settingsView(ctx: ViewContext): View {
   const picker = layoutPicker(s.listenLayout, (listenLayout) => settings.update({ listenLayout }));
   syncs.push(() => picker.sync(settings.get().listenLayout));
 
-  const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut', hint?: string) => {
+  // A tick box keeps one short line; the rest opens under it, outside the label, so tapping it never flips the box (DECISIONS.md #100).
+  const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut', line: string, more: string) => {
     const input = el('input', { type: 'checkbox', checked: s[key] });
     input.addEventListener('change', () => settings.update({ [key]: input.checked }));
-    return el('label', { class: 'switch' }, el('span', null, label, hint ? el('div', { class: 'small muted' }, hint) : null), input);
+    return el('div', { class: 'switch-folded' }, el('label', { class: 'switch' }, el('span', null, label), input), foldHint(line, [el('p', null, more)]));
   };
 
-  const select = <T extends string>(label: string, key: 'locationMode' | 'backend' | 'occlusionResolution', options: Array<[T, string]>, hint?: string) => {
+  const select = <T extends string>(label: string, key: 'locationMode' | 'backend' | 'occlusionResolution', options: Array<[T, string]>, hint?: string | Node) => {
     const sel = el('select', { 'aria-label': label });
     for (const [v, text] of options) sel.appendChild(el('option', { value: v, selected: s[key] === v }, text));
     sel.addEventListener('change', () => settings.update({ [key]: sel.value as LocationMode & BackendPreference & OcclusionResolution }));
-    return el('div', { class: 'field' }, el('label', null, label), sel, hint ? el('div', { class: 'small muted' }, hint) : null);
+    return el('div', { class: 'field' }, el('label', null, label), sel, typeof hint === 'string' ? el('div', { class: 'small muted' }, hint) : (hint ?? null));
   };
 
   // Manual location
@@ -67,7 +69,11 @@ export function settingsView(ctx: ViewContext): View {
   // Storage
   const storageText = el('div', { class: 'small' }, 'Checking storage…');
   const storageBar = el('div', { class: 'progress' }, el('span', { style: 'width:0%' }));
-  const persistText = el('div', { class: 'small muted' }, '');
+  // "On" is a fold line; "off" or "not supported" is a warning and stays in view, with the explanation folded under it.
+  const persistText = el('div', { class: 'small', 'data-testid': 'persist-status' }, '');
+  const persistLine = el('span', null, '');
+  const persistMore = el('p', null, '');
+  const persistFold = foldHint(persistLine, [persistMore, el('p', { 'data-testid': 'persist-explained' }, PERSIST_EXPLAINED)], { testId: 'persist-fold' });
   const refreshStorage = async () => {
     const st = await getStorageStatus();
     const dets = await countDetections().catch(() => 0);
@@ -79,7 +85,12 @@ export function settingsView(ctx: ViewContext): View {
     storageText.textContent = `${formatBytes(st.usageBytes)} of ${formatBytes(st.quotaBytes)} used · ${sightings} sightings (${dets} windows)`;
     const frac = st.usageBytes != null && st.quotaBytes ? Math.min(1, st.usageBytes / st.quotaBytes) : 0;
     (storageBar.firstElementChild as HTMLElement).style.width = `${Math.max(1, Math.round(frac * 100))}%`;
-    persistText.textContent = st.persisted === null ? 'Persistent storage: not supported here.' : st.persisted ? 'Persistent storage: on. Kept until you delete them.' : 'Persistent storage: off. The browser may delete the model and sightings if space runs low.';
+    const on = st.persisted === true;
+    persistText.textContent = st.persisted === null ? 'Persistent storage: not supported here.' : on ? '' : 'Persistent storage: off. The browser may delete the model and sightings if space runs low.';
+    persistText.hidden = on;
+    persistLine.textContent = on ? 'Persistent storage: on' : 'Why this matters';
+    persistMore.textContent = on ? 'Kept until you delete them.' : '';
+    persistMore.hidden = !on;
   };
   const persistBtn = el('button', { class: 'btn small' }, 'Request persistent storage');
   persistBtn.addEventListener('click', async () => {
@@ -140,16 +151,16 @@ export function settingsView(ctx: ViewContext): View {
       { class: 'card' },
       el('h2', null, 'Detection'),
       slider('Confidence threshold', 'threshold', 0.05, 0.95, 0.05, pct),
-      el('div', { class: 'small muted', 'data-testid': 'threshold-help' }, 'Lower catches faint or distant birds but adds false IDs.'),
+      foldHint('Lower: more birds, more mistakes', [el('p', null, 'Lower catches faint or distant birds but adds false IDs.')], { testId: 'threshold-help' }),
       slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
-      toggle('Show non-bird classes', 'includeNonBird', 'Dog, engine, siren, human voice and similar.'),
+      toggle('Show non-bird classes', 'includeNonBird', 'Dogs, engines, voices…', 'Dog, engine, siren, human voice and similar.'),
     ),
     el(
       'section',
       { class: 'card' },
       el('h2', null, 'Microphone'),
-      toggle('Low-cut filter (150 Hz)', 'lowCut', 'Cuts wind and handling rumble before the model hears it. Saved audio stays unfiltered.'),
-      el('div', { class: 'field' }, micHeadline, micDetail, el('div', { class: 'small muted' }, 'The app asks the browser to turn off speech processing (echo, noise, gain), which can erase bird sound. Browsers may refuse; this shows the last session.')),
+      toggle('Low-cut filter (150 Hz)', 'lowCut', 'Cuts wind and handling rumble', 'Cuts wind and handling rumble before the model hears it. Saved audio stays unfiltered.'),
+      el('div', { class: 'field' }, micHeadline, foldHint('What this means', [micDetail, el('p', null, 'The app asks the browser to turn off speech processing (echo, noise, gain), which can erase bird sound. Browsers may refuse; this shows the last session.')], { testId: 'mic-fold' })),
     ),
     el(
       'section',
@@ -161,7 +172,7 @@ export function settingsView(ctx: ViewContext): View {
         ['off', 'No location filter'],
       ]),
       el('div', { class: 'row' }, el('div', { class: 'field', style: 'flex:1' }, el('label', null, 'Latitude'), latInput), el('div', { class: 'field', style: 'flex:1' }, el('label', null, 'Longitude'), lonInput)),
-      toggle('Use the current week of the year', 'useWeek', 'Off = year-round species list for the location.'),
+      toggle('Use the current week of the year', 'useWeek', 'Off = all year', 'Off = year-round species list for the location.'),
       slider('Species range threshold', 'geoThreshold', 0.01, 0.2, 0.01, (v) => v.toFixed(2)),
       locationStatus,
     ),
@@ -169,7 +180,7 @@ export function settingsView(ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Recording'),
-      toggle('Auto-save detections (3 s each)', 'autoSaveClips', 'Saves a detection\u2019s 3 s to Recordings; a bird gets a new clip only when more confident than its last one this session. Separate from members\u2019 10 s ID clips.'),
+      toggle('Auto-save detections (3 s each)', 'autoSaveClips', 'Keeps 3 s of each detection', 'Saves a detection\u2019s 3 s to Recordings; a bird gets a new clip only when more confident than its last one this session. Separate from members\u2019 10 s ID clips.'),
       slider('Auto-save from', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below your confidence threshold.'),
     ),
     el(
@@ -195,11 +206,11 @@ export function settingsView(ctx: ViewContext): View {
           ['medium', 'Medium (8×6 grid, 49 runs)'],
           ['fine', 'Fine (12×8 grid, 97 runs)'],
         ],
-        'Finer uses more battery. Phones without graphics acceleration start with Coarse and offer this as a second button.',
+        foldHint('Finer uses more battery', [el('p', null, 'Finer uses more battery. Phones without graphics acceleration start with Coarse and offer this as a second button.')]),
       ),
     ),
-    el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, el('p', { class: 'small muted', 'data-testid': 'persist-explained' }, PERSIST_EXPLAINED), el('div', { class: 'row' }, persistBtn)),
-    el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), el('p', { class: 'small muted' }, 'One row per sighting: times, species, peak confidence, windows, position, recording.')),
+    el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, persistFold, el('div', { class: 'row' }, persistBtn)),
+    el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), foldHint('What’s in the file', [el('p', null, 'One row per sighting: times, species, peak confidence, windows, position, recording.')])),
     el('section', { class: 'card' }, el('h2', null, 'Data'), el('div', { class: 'row' }, clearBtn)),
     el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
     // Last thing on the page, closed: the full privacy facts are there when wanted and out of the way otherwise.
