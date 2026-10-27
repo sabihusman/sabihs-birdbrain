@@ -89,10 +89,16 @@ export function recordingsView(ctx: ViewContext): View {
     }
   };
   void render();
-  const unsub = controller.on('recording-saved', () => void render());
+  // A recording's bird is known only once its analysis is saved, which can finish after this list is shown.
+  const subs = [controller.on('recording-saved', () => void render()), controller.on('detections-changed', () => void render())];
 
   const root = el('div', null, el('section', { class: 'card' }, el('div', { class: 'row' }, importBtn, fileInput), hint), list);
-  return { el: root, dispose: unsub };
+  return {
+    el: root,
+    dispose() {
+      for (const u of subs) u();
+    },
+  };
 }
 
 export function recordingDetailView(ctx: ViewContext, id: string): View {
@@ -333,10 +339,14 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       renderDetections();
       cancelBtn.style.display = 'none';
       progress.style.display = 'none';
-      progressText.textContent = cancelled ? 'Cancelled.' : `Analysed ${windows.length} windows.`;
-      analyzeBtn.disabled = false;
-      analyzeBtn.textContent = 'Re-analyse';
-      if (!cancelled) await persist(s.threshold, s.includeNonBird);
+      // "Analysed" only once the results are saved, so the Recordings list can already group it by bird.
+      try {
+        if (!cancelled) await persist(s.threshold, s.includeNonBird);
+      } finally {
+        progressText.textContent = cancelled ? 'Cancelled.' : `Analysed ${windows.length} windows.`;
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = 'Re-analyse';
+      }
     };
 
     const persist = async (threshold: number, includeNonBird: boolean) => {

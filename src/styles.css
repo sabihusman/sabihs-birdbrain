@@ -315,6 +315,7 @@ textarea { color: inherit; }
 .result-sci { font-style: italic; color: var(--muted); font-size: var(--text-xs); }
 /* A sighting kept against the location filter (DECISIONS.md #93). */
 .sound-only-note { display: block; color: var(--muted); font-size: var(--text-xs); margin-top: 2px; }
+.sound-only-note[hidden], .result-meta [hidden] { display: none; }
 .not-usual-list { display: flex; flex-direction: column; gap: 6px; }
 .not-usual-row { display: flex; flex-direction: column; gap: 4px; }
 .not-usual-row .btn { align-self: flex-start; }

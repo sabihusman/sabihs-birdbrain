@@ -32,3 +32,46 @@ export function clipPlayer(clip: ClipRecord): { el: HTMLElement; audio: HTMLAudi
     },
   };
 }
+
+/**
+ * The saved clip on a Listen card that stays on screen for the whole session (DECISIONS.md #99):
+ * `refresh()` looks the clip up again and swaps in a newer one, but never while one is playing.
+ */
+export interface ClipLoaders {
+  /** The clip's details only (cheap: no audio read). */
+  meta: (scientific: string) => Promise<{ savedAt: number } | undefined>;
+  clip: (scientific: string) => Promise<ClipRecord | undefined>;
+}
+
+export function clipSlot(parent: HTMLElement, scientific: string, classes: string[], load: ClipLoaders): { refresh: () => void; dispose: () => void } {
+  let current: { savedAt: number; player: ReturnType<typeof clipPlayer> } | null = null;
+  let busy = false;
+  let disposed = false;
+  return {
+    refresh() {
+      if (busy || disposed) return;
+      busy = true;
+      const unchanged = (savedAt: number | undefined) => savedAt == null || disposed || current?.savedAt === savedAt || (current != null && !current.player.audio.paused);
+      void load
+        .meta(scientific)
+        .then((meta) => (unchanged(meta?.savedAt) ? undefined : load.clip(scientific)))
+        .then((clip) => {
+          if (!clip || unchanged(clip.savedAt)) return;
+          current?.player.el.remove();
+          current?.player.dispose();
+          const player = clipPlayer(clip);
+          player.el.classList.add(...classes);
+          parent.appendChild(player.el);
+          current = { savedAt: clip.savedAt, player };
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          busy = false;
+        });
+    },
+    dispose() {
+      disposed = true;
+      current?.player.dispose();
+    },
+  };
+}

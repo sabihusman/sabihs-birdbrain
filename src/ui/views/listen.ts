@@ -9,8 +9,9 @@ import { speciesColor } from '../../species/colors';
 import { groupRecent, LUMP_GAP_SECONDS, toggleExpanded, type KeyedHit } from '../../species/recent';
 import { plusCode } from '../../geo/pluscode';
 import type { View, ViewContext } from '../app';
-import { recentGroupCard } from '../components/recent-group-card';
-import { resultCard } from '../components/result-card';
+import { recentGroupCard, type RecentGroupCardHandle } from '../components/recent-group-card';
+import { resultCard, type ResultCardHandle } from '../components/result-card';
+import { keyedPool, syncChildren } from '../keyed';
 import { birdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
 import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
@@ -49,7 +50,6 @@ export function listenView(ctx: ViewContext): View {
   const { controller } = ctx;
   const settings = controller.settings;
   const subs: Array<() => void> = [];
-  const disposers: Array<() => void> = [];
   let layout: ListenLayout = settings.get().listenLayout;
 
   // ---- shared pieces -------------------------------------------------------
@@ -236,7 +236,9 @@ export function listenView(ctx: ViewContext): View {
   let lastResult: WindowResult | null = null;
   const hits: KeyedHit<Species>[] = [];
   const expanded = new Set<string>();
-  const recentDisposers: Array<() => void> = [];
+  // Cards are kept per species and updated in place, so each window doesn't rebuild them (no flicker).
+  const resultCards = keyedPool<ResultCardHandle>();
+  const recentCards = keyedPool<RecentGroupCardHandle>();
   let showLow = false;
   let raf = 0;
   let dirty = true;
@@ -339,36 +341,26 @@ export function listenView(ctx: ViewContext): View {
   };
 
   const renderResults = () => {
-    for (const d of disposers.splice(0)) d();
-    resultsList.replaceChildren();
     const s = settings.get();
     let low = 0;
+    const listNodes: Node[] = [];
     if (lastResult) {
       const dets = selectDetections(lastResult.scores, controller.species, { threshold: s.threshold, applyGeo: lastResult.geoApplied, includeNonBird: s.includeNonBird });
       const shown = new Set(dets.map((d) => d.index));
       low = lastResult.scores.filter((x) => x.prob < s.threshold && x.prob >= LOW_FLOOR && x.inRange && (controller.species[x.index]?.isBird || s.includeNonBird)).length;
       // One card per species, newest first; a new hit moves its species to the top (src/species/recent.ts).
       const items = groupRecent(hits);
-      const cardFor = (g: (typeof items)[number], large = false) => resultCard(ctx, g.species, { confidence: g.best, time: g.lastHeard, heardTimes: g.detections.length, large, conditions: large ? conditionsText : undefined, soundOnly: g.soundOnly });
-      if (layout !== 'focus') {
-        for (const g of items) {
-          const card = cardFor(g);
-          disposers.push(card.dispose);
-          resultsList.appendChild(card.el);
-        }
-      } else {
-        for (const g of items.slice(1)) {
-          const card = cardFor(g);
-          disposers.push(card.dispose);
-          resultsList.appendChild(card.el);
-        }
-        focusLatest.replaceChildren();
+      const cardFor = (g: (typeof items)[number], large = false) => {
+        const opts = { confidence: g.best, time: g.lastHeard, heardTimes: g.detections.length, large, conditions: large ? conditionsText : undefined, soundOnly: g.soundOnly };
+        const card = resultCards.take(g.key, () => resultCard(ctx, g.species, opts));
+        card.update(opts);
+        return card.el;
+      };
+      let latestNode: Node | null = null;
+      for (const g of layout === 'focus' ? items.slice(1) : items) listNodes.push(cardFor(g));
+      if (layout === 'focus') {
         const latest = items[0];
-        if (latest) {
-          const card = cardFor(latest, true);
-          disposers.push(card.dispose);
-          focusLatest.appendChild(card.el);
-        } else renderFocusLatestEmpty(controller.listening);
+        if (latest) latestNode = cardFor(latest, true);
         earlierCount = Math.max(0, items.length - 1);
         renderMoreBtn();
       }
@@ -376,10 +368,16 @@ export function listenView(ctx: ViewContext): View {
         for (const x of lastResult.scores) {
           if (x.prob >= s.threshold || x.prob < LOW_FLOOR || shown.has(x.index)) continue;
           const sp = controller.species[x.index];
-          if (sp && (sp.isBird || s.includeNonBird)) resultsList.appendChild(speciesChip(sp, { confidence: x.prob, outOfRange: !x.inRange, subtitle: x.inRange ? 'below your minimum' : 'not expected here (location filter)' }));
+          if (sp && (sp.isBird || s.includeNonBird)) listNodes.push(speciesChip(sp, { confidence: x.prob, outOfRange: !x.inRange, subtitle: x.inRange ? 'below your minimum' : 'not expected here (location filter)' }));
         }
       }
-    }
+      resultCards.sweep();
+      if (layout === 'focus') {
+        if (latestNode) syncChildren(focusLatest, [latestNode]);
+        else renderFocusLatestEmpty(controller.listening);
+      }
+    } else resultCards.sweep();
+    syncChildren(resultsList, listNodes);
     lowLine.textContent = showLow ? 'Hide sounds below your minimum' : `${low} more sound${low === 1 ? '' : 's'} below your minimum · show`;
     setHidden(lowLine, low === 0);
     setHidden(resultsEmpty, hits.length > 0 || showLow);
@@ -417,8 +415,6 @@ export function listenView(ctx: ViewContext): View {
   };
 
   const renderRecent = () => {
-    for (const d of recentDisposers.splice(0)) d();
-    recentList.replaceChildren();
     const groups = groupRecent(hits);
     setHidden(recentEmpty, groups.length > 0);
     const detections = groups.reduce((n, g) => n + g.detections.length, 0);
@@ -428,17 +424,23 @@ export function listenView(ctx: ViewContext): View {
     const newest = groups[0];
     lastBirdLine.textContent = newest ? `Last bird: ${newest.species.common} · ${new Date(newest.lastHeard).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
     if (layout === 'focus') setHidden(lastBirdLine, controller.listening || !newest);
-    for (const g of groups) {
-      const card = recentGroupCard(ctx, g, {
-        expanded: expanded.has(g.key),
-        onToggle: (key) => {
-          toggleExpanded(expanded, key);
-          renderRecent();
-        },
-      });
-      recentDisposers.push(card.dispose);
-      recentList.appendChild(card.el);
-    }
+    syncChildren(
+      recentList,
+      groups.map((g) => {
+        const card = recentCards.take(g.key, () =>
+          recentGroupCard(ctx, g, {
+            expanded: expanded.has(g.key),
+            onToggle: (key) => {
+              toggleExpanded(expanded, key);
+              renderRecent();
+            },
+          }),
+        );
+        card.update(g, expanded.has(g.key));
+        return card.el;
+      }),
+    );
+    recentCards.sweep();
   };
 
   const onResult = (r: WindowResult) => {
@@ -637,8 +639,8 @@ export function listenView(ctx: ViewContext): View {
     dispose() {
       cancelAnimationFrame(raf);
       for (const u of subs) u();
-      for (const d of disposers) d();
-      for (const d of recentDisposers) d();
+      resultCards.clear();
+      recentCards.clear();
       pipeline.dispose();
     },
   };

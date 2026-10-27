@@ -1,5 +1,6 @@
 import { getWikiCache, putWikiCache } from '../storage/db';
 import type { Species } from '../model/labels';
+import { htmlToText } from './html-text';
 
 export const WIKI_USER_AGENT = 'SabihsBirdbrain/1.0 (https://sabihs-birdbrain.vercel.app/; on-device bird ID PWA)';
 const SUMMARY_BASE = 'https://en.wikipedia.org/api/rest_v1/page/summary/';
@@ -110,14 +111,13 @@ async function fetchImageInfo(fileName: string, fetchFn: typeof fetch): Promise<
     if (!res.ok) return { fileName, filePageUrl, artist: null, license: null, licenseUrl: null, credit: null };
     const json = (await res.json()) as { query?: { pages?: Array<{ imageinfo?: Array<{ extmetadata?: Record<string, { value?: string }> }> }> } };
     const meta = json.query?.pages?.[0]?.imageinfo?.[0]?.extmetadata ?? {};
-    const strip = (s?: string) => (s ? s.replace(/<[^>]+>/g, '').trim() : null);
     return {
       fileName,
       filePageUrl,
-      artist: strip(meta.Artist?.value),
-      license: strip(meta.LicenseShortName?.value),
-      licenseUrl: strip(meta.LicenseUrl?.value),
-      credit: strip(meta.Credit?.value),
+      artist: htmlToText(meta.Artist?.value),
+      license: htmlToText(meta.LicenseShortName?.value),
+      licenseUrl: htmlToText(meta.LicenseUrl?.value),
+      credit: htmlToText(meta.Credit?.value),
     };
   } catch {
     return { fileName, filePageUrl, artist: null, license: null, licenseUrl: null, credit: null };
@@ -128,7 +128,7 @@ function toSummary(data: SummaryResponse, lookedUpBy: 'scientific' | 'common', i
   return {
     status: 'ok',
     title: data.title ?? '',
-    displayTitle: (data.displaytitle ?? data.title ?? '').replace(/<[^>]+>/g, ''),
+    displayTitle: htmlToText(data.displaytitle) ?? data.title ?? '',
     description: data.description ?? null,
     extract: data.extract ?? '',
     thumbnail: data.thumbnail ?? null,
@@ -141,6 +141,22 @@ function toSummary(data: SummaryResponse, lookedUpBy: 'scientific' | 'common', i
 }
 
 /**
+ * Summaries cached before the title and image credit were decoded still hold "&#039;" and the like;
+ * decoding them again is harmless for anything saved since.
+ */
+function cleanCached(r: WikiResult): WikiResult {
+  if (r.status !== 'ok') return r;
+  const image = r.image && {
+    ...r.image,
+    artist: htmlToText(r.image.artist),
+    license: htmlToText(r.image.license),
+    licenseUrl: htmlToText(r.image.licenseUrl),
+    credit: htmlToText(r.image.credit),
+  };
+  return { ...r, displayTitle: htmlToText(r.displayTitle) ?? r.title, image };
+}
+
+/**
  * Wikipedia summary for a species: scientific name first, then common name.
  * Results are cached in IndexedDB so previously viewed species work offline.
  */
@@ -149,7 +165,7 @@ export async function getSpeciesSummary(species: Species, opts: { force?: boolea
   const fetchFn = opts.fetchFn ?? ((input, init) => fetch(input, init));
   if (!opts.force) {
     const cached = await getWikiCache(key).catch(() => undefined);
-    if (cached) return cached.data as WikiResult;
+    if (cached) return cleanCached(cached.data as WikiResult);
   }
   const attempts: Array<['scientific' | 'common', string]> = [
     ['scientific', species.scientific],
@@ -172,7 +188,7 @@ export async function getSpeciesSummary(species: Species, opts: { force?: boolea
   }
   if (sawNetworkError) {
     const cached = await getWikiCache(key).catch(() => undefined);
-    return cached ? (cached.data as WikiResult) : { status: 'offline' };
+    return cached ? cleanCached(cached.data as WikiResult) : { status: 'offline' };
   }
   const searchUrl = wikiSearchUrl(`${species.common} ${species.scientific}`);
   if (disambiguation) {
