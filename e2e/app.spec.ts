@@ -2305,3 +2305,48 @@ test('the Species tab has the "Share my species list" switch for members, the sa
   await expect(page.getByTestId('share-species')).toBeChecked();
   await context.close();
 });
+
+test('live listening updates the result and recent cards in place, so they do not flicker (DECISIONS.md #99)', async ({ playwright }) => {
+  // The sample redpoll recording loops as the microphone with no location filter, so the same bird is matched window after window.
+  const browser = await playwright.chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
+  });
+  const context = await browser.newContext({ ...devices['iPhone 13'], permissions: ['microphone'], baseURL: test.info().project.use.baseURL });
+  await context.addInitScript(() => {
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'dock', locationMode: 'off' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+  });
+  const page = await context.newPage();
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.getByTestId('start-stop').click();
+  const card = page.getByTestId('results').getByTestId('result-card').first();
+  await expect(card).toBeVisible({ timeout: 90_000 });
+  const recent = page.getByTestId('recent-inline').getByTestId('recent-card').first();
+  await expect(recent).toBeVisible();
+  await recent.click();
+  await expect(recent).toHaveAttribute('aria-expanded', 'true');
+  // Mark today's nodes and count every card the page throws away from now on.
+  await page.evaluate(() => {
+    const w = window as unknown as { removedCards: number; marked: Element[] };
+    w.removedCards = 0;
+    w.marked = [document.querySelector('[data-testid="results"] .result-wrap')!, document.querySelector('[data-testid="recent-inline"] .recent-card')!];
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.removedNodes) if (n instanceof Element && (n.matches('.result-wrap, .recent-card') || n.querySelector('.result-wrap, .recent-card'))) w.removedCards++;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  const hits = async () => Number((await page.getByTestId('recent-inline').getByTestId('recent-rows').first().locator('.recent-row').first().textContent())?.match(/(\d+) hits?/)?.[1] ?? 0);
+  const before = await hits();
+  // Several more windows arrive and are counted in the same open card.
+  await expect.poll(hits, { timeout: 60_000 }).toBeGreaterThanOrEqual(before + 2);
+  const state = await page.evaluate(() => {
+    const w = window as unknown as { removedCards: number; marked: Element[] };
+    return { removed: w.removedCards, connected: w.marked.map((m) => m.isConnected) };
+  });
+  expect(state.removed, 'no card is rebuilt between windows').toBe(0);
+  expect(state.connected).toEqual([true, true]);
+  await expect(recent).toHaveAttribute('aria-expanded', 'true');
+  await expect(card.getByTestId('sound-only-note')).toBeHidden();
+  await page.getByTestId('stop').click();
+  await browser.close();
+});

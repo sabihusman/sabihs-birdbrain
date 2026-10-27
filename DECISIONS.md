@@ -2870,3 +2870,19 @@ other open branches, so this may be renumbered at merge.)
   friends" chips, with its hint ("Friends see species and dates only") and status line. It is the same
   component and the same per-account setting as on My account (`sharingRow`), so the two always agree;
   My account keeps it too, with the full consent text. Signed-out, pending or rejected accounts don't see it.
+
+## 99. Listen cards update in place; Wikipedia and Commons text is decoded
+
+- **Why (a tester's report, passed on by Sabih):** while listening the results panel flickered, and
+  apostrophes showed as `&#039;` (e.g. "Swainson&#039;s thrush").
+- **Flicker:** every analysis window (about every 1.5 s) rebuilt every result card and every Recent
+  sightings card, so each photo and members' clip loaded again. Now each species keeps one card
+  (`src/ui/keyed.ts`: a pool by scientific name and `syncChildren`, which moves only nodes out of place);
+  `resultCard` and `recentGroupCard` return `update()`, which changes only text that changed. A card is
+  removed only when its bird leaves the list. A member's saved clip on a card is looked up again on each
+  update (`clipSlot`, details first, audio only when the clip is newer) and never swapped while playing. The e2e test counts removed cards while the sample bird
+  loops as the microphone: none.
+- **Apostrophes:** Wikipedia's `displaytitle` (the species page heading) and the Commons photo credit are
+  HTML; the app removed the tags but not the character references. `src/species/html-text.ts` removes tags
+  and decodes them; summaries cached by earlier versions are cleaned when read. Checked on 2026-10-27:
+  the REST summary for Swainson's thrush sends `Swainson&#039;s thrush`.
