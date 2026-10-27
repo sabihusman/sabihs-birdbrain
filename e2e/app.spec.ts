@@ -2313,7 +2313,7 @@ test('live listening updates the result and recent cards in place, so they do no
   });
   const context = await browser.newContext({ ...devices['iPhone 13'], permissions: ['microphone'], baseURL: test.info().project.use.baseURL });
   await context.addInitScript(() => {
-    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'dock', locationMode: 'off' }));
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
   });
   const page = await context.newPage();
@@ -2322,7 +2322,8 @@ test('live listening updates the result and recent cards in place, so they do no
   await page.getByTestId('start-stop').click();
   const card = page.getByTestId('results').getByTestId('result-card').first();
   await expect(card).toBeVisible({ timeout: 90_000 });
-  const recent = page.getByTestId('recent-inline').getByTestId('recent-card').first();
+  await page.getByTestId('recent-fold').locator('summary').click();
+  const recent = page.getByTestId('recent-fold').getByTestId('recent-card').first();
   await expect(recent).toBeVisible();
   await recent.click();
   await expect(recent).toHaveAttribute('aria-expanded', 'true');
@@ -2330,12 +2331,12 @@ test('live listening updates the result and recent cards in place, so they do no
   await page.evaluate(() => {
     const w = window as unknown as { removedCards: number; marked: Element[] };
     w.removedCards = 0;
-    w.marked = [document.querySelector('[data-testid="results"] .result-wrap')!, document.querySelector('[data-testid="recent-inline"] .recent-card')!];
+    w.marked = [document.querySelector('[data-testid="results"] .result-wrap')!, document.querySelector('[data-testid="recent-fold"] .recent-card')!];
     new MutationObserver((records) => {
       for (const r of records) for (const n of r.removedNodes) if (n instanceof Element && (n.matches('.result-wrap, .recent-card') || n.querySelector('.result-wrap, .recent-card'))) w.removedCards++;
     }).observe(document.body, { childList: true, subtree: true });
   });
-  const hits = async () => Number((await page.getByTestId('recent-inline').getByTestId('recent-rows').first().locator('.recent-row').first().textContent())?.match(/(\d+) hits?/)?.[1] ?? 0);
+  const hits = async () => Number((await page.getByTestId('recent-fold').getByTestId('recent-rows').first().locator('.recent-row').first().textContent())?.match(/(\d+) hits?/)?.[1] ?? 0);
   const before = await hits();
   // Several more windows arrive and are counted in the same open card.
   await expect.poll(hits, { timeout: 60_000 }).toBeGreaterThanOrEqual(before + 2);
