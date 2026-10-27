@@ -1,4 +1,4 @@
-import { el } from '../dom';
+import { el, type Child } from '../dom';
 
 /**
  * Grouped rows for Settings (DESIGN_GUIDE.md §5): a titled group of full-width rows,
@@ -38,9 +38,31 @@ export function linkRow(text: string, href: string, opts: { hint?: string; testI
   return el('a', { class: 'row-item', href, 'data-testid': opts.testId }, label(text, opts.hint), el('span', { class: 'row-chevron', 'aria-hidden': 'true' }, '›'));
 }
 
-/** A row with a switch on the right. The caller owns the checkbox. */
-export function switchRow(text: string, input: HTMLInputElement, opts: { hint?: string; testId?: string } = {}): HTMLElement {
-  return el('label', { class: 'row-item row-switch', 'data-testid': opts.testId }, label(text, opts.hint), input);
+/**
+ * One short grey line that opens to the rest of the explanation (DECISIONS.md #100): tap the line or the
+ * arrow. Starts closed on every visit. Problems and live status are never put inside one.
+ */
+export function foldHint(line: Child, more: Child[], opts: { testId?: string } = {}): HTMLDetailsElement {
+  return el(
+    'details',
+    { class: 'fold-hint', 'data-testid': opts.testId },
+    el('summary', null, el('span', { class: 'fold-hint-line' }, line), el('span', { class: 'fold-hint-chev', 'aria-hidden': 'true' }, '›')),
+    el('div', { class: 'fold-hint-more' }, ...more),
+  );
+}
+
+/**
+ * A row with a switch on the right. The caller owns the checkbox. With `more`, the hint becomes a fold
+ * under the row, outside the label, so tapping the explanation never flips the switch.
+ */
+export function switchRow(text: string, input: HTMLInputElement, opts: { hint?: string; more?: Child[]; testId?: string; foldTestId?: string } = {}): HTMLElement {
+  if (!opts.more || !opts.hint) return el('label', { class: 'row-item row-switch', 'data-testid': opts.testId }, label(text, opts.hint), input);
+  return el(
+    'div',
+    { class: 'row-folded' },
+    el('label', { class: 'row-item row-switch', 'data-testid': opts.testId }, label(text), input),
+    foldHint(opts.hint, opts.more, { testId: opts.foldTestId }),
+  );
 }
 
 /** A row that is only text, for a status line inside a group. */

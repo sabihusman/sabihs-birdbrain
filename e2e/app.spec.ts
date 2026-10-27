@@ -787,7 +787,8 @@ test('imports a recording, analyses it and explains an identification', async ({
   await page.goto('./#/species');
   // The manual position set above narrows the list to local species; show all so the search can find the redpoll.
   // The switch says in plain words what the local list holds (any time of year, passing migrants too).
-  await expect(page.getByTestId('show-all-hint')).toHaveText('Off: birds found near you at any time of year. On: every species, worldwide.');
+  await expect(page.getByTestId('show-all-hint').locator('summary')).toHaveText('On: every species, worldwide›');
+  await expect(page.getByTestId('show-all-hint')).toContainText('Off: only birds found near you at any time of year.');
   await page.getByTestId('show-all-species').check();
   await page.getByRole('searchbox', { name: 'Search species' }).fill('redpoll');
   const redpollRow = page.getByTestId('spotted-row').filter({ hasText: 'Lesser Redpoll' });
@@ -1892,9 +1893,10 @@ test('Invite links: Create account says who invited them, asks before sharing ba
   // A live link: who invited them, the box unticked, the token out of the address bar.
   await page.goto('./#/signup?invite=inv_live_0123456789abcdef');
   const signup = page.getByTestId('signup-page');
-  await expect(signup.getByTestId('signup-invite')).toContainText('Alex invited you. Once Sabih approves you, you’ll be friends and see Alex’s birds.');
+  await expect(signup.getByTestId('signup-invite')).toContainText('Alex invited you.');
+  await expect(signup.getByTestId('signup-invite-more')).toContainText('Once Sabih approves you, you’ll be friends and see Alex’s birds.');
   await expect(page).toHaveURL(/#\/signup$/);
-  const box = signup.getByRole('checkbox', { name: 'Share my birds (and the last day I saw each) with Alex' });
+  const box = signup.getByRole('checkbox', { name: 'Share my birds with Alex' });
   await expect(box).not.toBeChecked();
   await box.check();
   await signup.getByLabel('Email').fill('robin@example.com');
@@ -2350,4 +2352,52 @@ test('live listening updates the result and recent cards in place, so they do no
   await expect(card.getByTestId('sound-only-note')).toBeHidden();
   await page.getByTestId('stop').click();
   await browser.close();
+});
+
+test('extra text folds under one line: tapping the line opens it and never flips the tick box; 320 px in both themes (DECISIONS.md #100)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/me\/species$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, count: 0 }) }));
+  await page.addInitScript(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Sam', status: 'approved', role: 'member' } })));
+  for (const theme of ['dark', 'light'] as const) {
+    await page.addInitScript((t) => localStorage.setItem('birdbrain.theme.v1', t), theme);
+    // Species: the share switch, Show all species and the count line each keep one line, closed.
+    await page.goto('./#/species');
+    const shareFold = page.getByTestId('share-fold');
+    await expect(shareFold.locator('summary')).toHaveText('Friends see species and dates only›');
+    await expect(page.getByTestId('share-status')).toBeHidden();
+    const sw = page.getByTestId('share-species');
+    await expect(sw).not.toBeChecked();
+    await shareFold.locator('summary').click();
+    await expect(page.getByTestId('share-status')).toHaveText('Sharing is off. Nothing is on the server.');
+    await expect(sw, 'tapping the explanation does not flip the switch').not.toBeChecked();
+    const showAll = page.getByTestId('show-all-hint');
+    await expect(showAll).not.toHaveAttribute('open', /.*/);
+    await showAll.locator('summary').click();
+    await expect(showAll.getByText('Off: only birds found near you at any time of year.')).toBeVisible();
+    await expect(page.getByTestId('show-all-species')).not.toBeChecked();
+    const about = page.getByTestId('species-about');
+    await expect(about.getByText(/Works offline/)).toBeHidden();
+    await about.locator('summary').click();
+    await expect(about.getByText(/Works offline/)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    // Settings: the long hints are closed; status lines stay in view.
+    await page.goto('./#/settings');
+    await expect(page.getByText('Lower: more birds, more mistakes')).toBeVisible();
+    await expect(page.getByText('Lower catches faint or distant birds but adds false IDs.')).toBeHidden();
+    await expect(page.getByText(/Saves a detection’s 3 s to Recordings/)).toBeHidden();
+    const autoSave = page.getByText('Keeps 3 s of each detection');
+    await autoSave.click();
+    await expect(page.getByText(/Saves a detection’s 3 s to Recordings/)).toBeVisible();
+    await expect(page.getByTestId('voice-processing')).toBeVisible();
+    await expect(page.getByTestId('persist-explained')).toBeHidden();
+    // Every fold's line is a 44 px tap target and nothing overflows.
+    const heights = await page.locator('.fold-hint > summary').evaluateAll((els) => els.filter((e) => (e as HTMLElement).offsetParent).map((e) => e.getBoundingClientRect().height));
+    expect(heights.length).toBeGreaterThan(5);
+    for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  }
+  await context.close();
 });

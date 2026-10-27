@@ -26,6 +26,11 @@ export interface ListScope {
   line: string;
   /** The note under it, or null when there is none. */
   note: string | null;
+  /**
+   * 'info' explains the list and can sit in the fold; 'status' says why the list is not what it would
+   * normally be, or what to do next, so it stays in view (DECISIONS.md #100).
+   */
+  noteKind: 'info' | 'status';
   /** Counts on the two filter chips ('' while the list is still loading or the chip is hidden). */
   spottedCount: string;
   friendsCount: string;
@@ -55,6 +60,7 @@ export function scopeSpeciesList(input: ListScopeInput): ListScope {
     shown,
     line,
     note: noteFor(spottedOnly, friendsOnly, input.friendCount, local.note),
+    noteKind: spottedOnly || (friendsOnly && input.friendCount > 0) ? 'info' : 'status',
     spottedCount: loaded ? String(countSpotted(all, spotted)) : '',
     friendsCount: loaded && input.friendsAvailable ? String(all.filter((s) => friendSpecies.has(s.scientific)).length) : '',
     friendsOnly,

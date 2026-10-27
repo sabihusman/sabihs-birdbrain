@@ -2,7 +2,7 @@ import { describeApiError, type Friend, type FriendInvite } from '../../api/clie
 import { SHARING_CONSENT_TEXT } from '../../species/sharing';
 import type { ViewContext } from '../app';
 import { el, fmtDate } from '../dom';
-import { switchRow, textRow } from './rows';
+import { switchRow } from './rows';
 
 /**
  * Friends and sharing, on the My account page for approved members (DECISIONS.md #79)
@@ -34,7 +34,7 @@ export function friendShareNotice(name: string, on: boolean): string {
   return on ? `${name} can see your species list again.` : `${name} no longer sees your list (you still see theirs).`;
 }
 
-export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () => void; sharingChanged: () => void } {
+export function friendsPanel(ctx: ViewContext): { el: HTMLElement; consent: HTMLElement[]; dispose: () => void; sharingChanged: () => void } {
   const { api, friends: cache, notify } = ctx;
   const root = el('div', { class: 'stack friends-panel', 'data-testid': 'friends' });
   const invitesBox = el('div', { class: 'stack', 'data-testid': 'friend-invites' });
@@ -153,16 +153,19 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
     });
   });
 
+  // The consent text goes in the fold under "Share my species list" (DECISIONS.md #100), not above the friends.
+  const consent = [
+    el('p', { 'data-testid': 'share-consent' }, SHARING_CONSENT_TEXT),
+    el('p', null, 'Friends’ birds show as “Spotted by” on Species. Nothing of yours is shared until you turn on sharing; each friend’s switch controls just them.'),
+  ];
   root.append(
-    el('p', { class: 'small muted', 'data-testid': 'share-consent' }, SHARING_CONSENT_TEXT),
-    el('p', { class: 'small muted' }, 'Friends’ birds show as “Spotted by” on Species. Nothing of yours is shared until you turn on sharing; each friend’s switch controls just them.'),
     invitesBox,
     friendsBox,
     inviteForm,
     status,
   );
   void load();
-  return { el: root, dispose: () => undefined, sharingChanged: () => (shareNote.textContent = inviteShareNote(ctx.sharing.enabled)) };
+  return { el: root, consent, dispose: () => undefined, sharingChanged: () => (shareNote.textContent = inviteShareNote(ctx.sharing.enabled)) };
 }
 
 /**
@@ -170,10 +173,24 @@ export function friendsPanel(ctx: ViewContext): { el: HTMLElement; dispose: () =
  * (DECISIONS.md #44). The long consent text stays in the friends panel, which the
  * Account screen keeps behind a collapsed row.
  */
-export function sharingRow(ctx: ViewContext, onChange?: () => void): { el: HTMLElement; dispose: () => void } {
+export function sharingRow(ctx: ViewContext, onChange?: () => void, moreText: Node[] = []): { el: HTMLElement; dispose: () => void } {
   const { sharing, notify } = ctx;
   const input = el('input', { type: 'checkbox', checked: sharing.enabled, 'data-testid': 'share-species' });
-  const note = textRow(shareStatusText(sharing.enabled, sharing.lastError), { testId: 'share-status' });
+  // The status sits inside the fold; a failed upload comes out of it and stays in view (DECISIONS.md #100).
+  const note = el('p', { class: 'share-status', 'data-testid': 'share-status' });
+  const problem = el('div', { class: 'row-item row-static small share-problem' });
+  const row = switchRow('Share my species list', input, { hint: 'Friends see species and dates only', more: [note], foldTestId: 'share-fold' });
+  const showStatus = () => {
+    const text = shareStatusText(sharing.enabled, sharing.lastError);
+    note.textContent = text;
+    const more = row.querySelector('.fold-hint-more');
+    if (sharing.lastError) {
+      problem.replaceChildren(note);
+      more?.replaceChildren(...moreText);
+    } else more?.replaceChildren(note, ...moreText);
+    problem.hidden = !sharing.lastError;
+  };
+  showStatus();
   let busy = false;
   input.addEventListener('change', () => {
     if (busy) return;
@@ -190,13 +207,13 @@ export function sharingRow(ctx: ViewContext, onChange?: () => void): { el: HTMLE
       } finally {
         busy = false;
         input.disabled = false;
-        note.textContent = shareStatusText(sharing.enabled, sharing.lastError);
+        showStatus();
         onChange?.();
       }
     })();
   });
   return {
-    el: el('div', { class: 'contents-row' }, switchRow('Share my species list', input, { hint: 'Friends see species and dates only' }), note),
+    el: el('div', { class: 'contents-row' }, row, problem),
     dispose: () => undefined,
   };
 }

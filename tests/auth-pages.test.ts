@@ -42,9 +42,10 @@ describe('invite links (DECISIONS.md #80)', () => {
   });
 
   it('say who invited them and ask before sharing back', async () => {
-    const { inviteIntro, shareBackLabel } = await import('../src/ui/views/auth');
-    expect(inviteIntro('Alex')).toBe('Alex invited you. Once Sabih approves you, you’ll be friends and see Alex’s birds.');
-    expect(shareBackLabel('Alex')).toBe('Share my birds (and the last day I saw each) with Alex');
+    const { inviteIntro, inviteMore, shareBackLabel } = await import('../src/ui/views/auth');
+    expect(inviteIntro('Alex')).toBe('Alex invited you.');
+    expect(inviteMore('Alex')).toBe('Once Sabih approves you, you’ll be friends and see Alex’s birds.');
+    expect(shareBackLabel('Alex')).toBe('Share my birds with Alex');
   });
 
   it('never turn "Share my species list" on by themselves', async () => {

@@ -2,6 +2,7 @@ import { ApiError, describeApiError, type AuthUser } from '../../api/client';
 import type { View, ViewContext } from '../app';
 import { SIGN_UP_PRIVACY_LINE, whatWeStoreFold } from '../components/what-we-store';
 import { setSharingOn } from '../../species/sharing';
+import { foldHint } from '../components/rows';
 import { el } from '../dom';
 
 /**
@@ -32,12 +33,17 @@ export const AUTH_TEXT = {
 
 /** The line above the Create account form when it was opened from an invite link (DECISIONS.md #80). */
 export function inviteIntro(fromName: string): string {
-  return `${fromName} invited you. Once Sabih approves you, you’ll be friends and see ${fromName}’s birds.`;
+  return `${fromName} invited you.`;
 }
 
-/** The consent box for sharing back; unticked until the person ticks it. */
+/** Folded under the share-back box (DECISIONS.md #100). */
+export function inviteMore(fromName: string): string {
+  return `Once Sabih approves you, you’ll be friends and see ${fromName}’s birds.`;
+}
+
+/** The consent box for sharing back; unticked until the person ticks it. The fold under it says what is shared. */
 export function shareBackLabel(fromName: string): string {
-  return `Share my birds (and the last day I saw each) with ${fromName}`;
+  return `Share my birds with ${fromName}`;
 }
 
 /** "Enter the 6-digit code sent to x. It expires in 10 min." */
@@ -198,7 +204,7 @@ export function signUpView(ctx: ViewContext, inviteFromUrl?: string): View {
   /** Who invited them and the unticked consent box, or a note that the link no longer works. */
   const fillInvite = () => {
     if (!inviteHost) return;
-    if (inviter) inviteHost.replaceChildren(el('div', { class: 'stack invite-box', 'data-testid': 'signup-invite' }, el('p', null, inviteIntro(inviter)), el('label', { class: 'switch' }, el('span', null, shareBackLabel(inviter)), shareBack)));
+    if (inviter) inviteHost.replaceChildren(el('div', { class: 'stack invite-box', 'data-testid': 'signup-invite' }, el('p', null, inviteIntro(inviter)), el('div', { class: 'switch-folded' }, el('label', { class: 'switch' }, el('span', null, shareBackLabel(inviter)), shareBack), foldHint('Birds and the last day seen', [el('p', null, inviteMore(inviter))], { testId: 'signup-invite-more' }))));
     else if (invite && inviteChecked) inviteHost.replaceChildren(el('p', { class: 'notice info', 'data-testid': 'signup-invite-expired' }, AUTH_TEXT.inviteExpired));
     else inviteHost.replaceChildren();
   };

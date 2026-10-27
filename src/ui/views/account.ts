@@ -188,7 +188,7 @@ export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { 
     if (isMember(u)) {
       // Friends are the point of this page, so they are open rather than folded (DECISIONS.md #79).
       const panel = friendsPanel(ctx);
-      const share = sharingRow(ctx, panel.sharingChanged);
+      const share = sharingRow(ctx, panel.sharingChanged, panel.consent);
       panels.push(share, panel);
       groups.push(rowGroup('Sharing', share.el), el('div', { class: 'row-group', 'data-testid': 'friends-section' }, el('h3', { class: 'row-group-title' }, 'Friends'), panel.el));
     }
