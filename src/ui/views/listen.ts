@@ -12,6 +12,7 @@ import type { View, ViewContext } from '../app';
 import { recentGroupCard, type RecentGroupCardHandle } from '../components/recent-group-card';
 import { resultCard, type ResultCardHandle } from '../components/result-card';
 import { keyedPool, syncChildren } from '../keyed';
+import { layoutBubble } from '../components/layout-bubble';
 import { birdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
 import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
@@ -193,8 +194,11 @@ export function listenView(ctx: ViewContext): View {
    * the canvases are untouched. The three layouts differ in the Ready state as well as
    * while listening, which is the whole point of the setting.
    */
+  // The layout bubble (DECISIONS.md #101): switch layouts from here, only while not listening.
+  const bubble = layoutBubble(layout, (listenLayout) => settings.update({ listenLayout }));
   const applyLayout = (next: ListenLayout) => {
     layout = next;
+    bubble.sync(next);
     root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : ''}`;
     root.dataset.layout = next;
     if (controller.welcomePending) {
@@ -216,18 +220,18 @@ export function listenView(ctx: ViewContext): View {
       moreList.appendChild(resultsList);
       focusBlock.appendChild(notUsualBox);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, focusBlock, credit, panel, dock);
+      root.replaceChildren(readyBlock, focusBlock, credit, panel, dock, bubble.el);
     } else if (next === 'dock') {
       resultsBlock.prepend(resultsList);
       lowLine.after(notUsualBox);
       recentInline.appendChild(recentBody);
       // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
-      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, credit, dock);
+      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, credit, dock, bubble.el);
     } else {
       resultsBlock.prepend(resultsList);
       lowLine.after(notUsualBox);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails, credit);
+      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails, credit, bubble.el);
     }
   };
   applyLayout(layout);
@@ -273,6 +277,10 @@ export function listenView(ctx: ViewContext): View {
     readyBlock.dataset.status = st.status;
     root.dataset.status = st.status;
     const listening = st.status === 'listening' || st.status === 'paused';
+    // Never next to Stop: the bubble shows before and after listening only.
+    setHidden(bubble.el, listening);
+    root.classList.toggle('has-layout-bubble', !listening);
+    if (listening) bubble.close();
     // The pipeline chips only animate while the mic is on (DESIGN_GUIDE.md §7).
     pipeline.setListening(st.status === 'listening');
     setHidden(modelBar, st.status !== 'loading');
@@ -616,7 +624,11 @@ export function listenView(ctx: ViewContext): View {
   }
 
   // Focus pins the panel or the start bar above the tab bar; keep that much room at the end of the page.
-  const updateBarSpace = () => root.style.setProperty('--focus-bar-h', `${Math.max(panel.offsetHeight, dock.offsetHeight)}px`);
+  const updateBarSpace = () => {
+    root.style.setProperty('--focus-bar-h', `${Math.max(panel.offsetHeight, dock.offsetHeight)}px`);
+    // The bubble floats just above the dock or Start bar when one is showing, else just above the tab bar.
+    root.style.setProperty('--bubble-lift', `${dock.offsetHeight}px`);
+  };
   const barObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateBarSpace);
   barObserver?.observe(panel);
   barObserver?.observe(dock);
@@ -642,6 +654,7 @@ export function listenView(ctx: ViewContext): View {
       resultCards.clear();
       recentCards.clear();
       pipeline.dispose();
+      bubble.dispose();
     },
   };
 }

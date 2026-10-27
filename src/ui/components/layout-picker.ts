@@ -49,6 +49,12 @@ const WIREFRAMES: Record<ListenLayout, string> = {
     '<rect class="wf-tabs" x="6" y="65" width="40" height="3" rx="1.5"/>',
 };
 
+/** One layout's wireframe as an SVG string at `width` px (the Listen layout bubble uses small ones, DECISIONS.md #101). */
+export function layoutWireframeSvg(value: ListenLayout, width: number): string {
+  const height = Math.round((width * 73) / 52);
+  return `<svg class="layout-wireframe" viewBox="0 0 52 73" width="${width}" height="${height}" focusable="false" aria-hidden="true">${WIREFRAMES[value]}</svg>`;
+}
+
 const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 export interface LayoutPicker {
