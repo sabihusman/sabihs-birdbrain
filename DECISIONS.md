@@ -2905,3 +2905,17 @@ other open branches, so this may be renumbered at merge.)
   the list shows only when it adds something (cut short, a search).
 - **Left alone:** Listen (no tick boxes; its extras are already folded or live status), the delete-account
   wipe box (a destructive step), bird descriptions and AI answers.
+
+## 101. Listen layout bubble
+
+- **Why (Sabih):** switch the Listen layout from the Listen page, not only in Settings. Chose version B of
+  three mockups (corner bubble, floating bubble, pill at the top).
+- **What:** `src/ui/components/layout-bubble.ts`, a 44 px round button at the bottom right showing the
+  current layout's wireframe (the Settings picture, `layoutWireframeSvg`). A tap opens a card upward with the
+  three layouts (picture, name, one line, a tick on the current one); a tap switches at once through the
+  same `listenLayout` setting, so Settings agrees. Escape, a tap outside or a choice closes it; arrow keys move.
+- **Only before and after listening (Sabih's choice):** hidden while listening or paused, so it is never next
+  to Stop. It sits above the tab bar, or above the dock / Start bar when the layout shows one
+  (`--bubble-lift`, the dock's height, from the existing ResizeObserver). The page gets 56 px of room at the
+  end so the last item can scroll clear of it.
+- **Known cost:** it floats over the right edge of whatever is under it in the Ready state.

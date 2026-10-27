@@ -2401,3 +2401,61 @@ test('extra text folds under one line: tapping the line opens it and never flips
   }
   await context.close();
 });
+
+test('Listen layout bubble: bottom right, opens upward, switches at once, never shown while listening; 320 px in both themes (DECISIONS.md #101)', async ({ playwright }) => {
+  const browser = await playwright.chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
+  });
+  const context = await browser.newContext({ viewport: { width: 320, height: 640 }, hasTouch: true, permissions: ['microphone'], baseURL: test.info().project.use.baseURL });
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+  });
+  const page = await context.newPage();
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await page.getByTestId('theme-toggle').click();
+    const bubble = page.getByTestId('layout-bubble');
+    await expect(bubble).toBeVisible();
+    await expect(bubble).toHaveAttribute('aria-label', /^Listen layout: (Consolidated|Bottom dock|Focus)\. Change$/);
+    const box = (await bubble.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    const tabsTop = (await page.locator('.tabs').boundingBox())!.y;
+    expect(box.y + box.height, 'above the tab bar').toBeLessThanOrEqual(tabsTop);
+    // Open: three layouts, the current one ticked; Escape closes and gives focus back.
+    await bubble.click();
+    await expect(bubble).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('radio', { checked: true })).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(bubble).toHaveAttribute('aria-expanded', 'false');
+    await expect(bubble).toBeFocused();
+    // Pick Bottom dock: the page switches at once and the bubble moves above the dock.
+    await bubble.click();
+    await page.getByTestId('layout-bubble-dock').click();
+    await expect(page.locator('main .listen')).toHaveAttribute('data-layout', 'dock');
+    await expect(bubble).toHaveAttribute('aria-label', 'Listen layout: Bottom dock. Change');
+    await expect(page.getByTestId('layout-bubble-dock')).toBeHidden();
+    const dockTop = (await page.getByTestId('dock').boundingBox())!.y;
+    await expect.poll(async () => (await bubble.boundingBox())!.y + (await bubble.boundingBox())!.height, { message: 'above the dock' }).toBeLessThanOrEqual(dockTop);
+    // A tap outside closes it.
+    await bubble.click();
+    await page.mouse.click(20, 120);
+    await expect(bubble).toHaveAttribute('aria-expanded', 'false');
+    // Back to Consolidated for the next theme; nothing wider than the screen.
+    await bubble.click();
+    await page.getByTestId('layout-bubble-consolidated').click();
+    await expect(page.locator('main .listen')).toHaveAttribute('data-layout', 'consolidated');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  }
+  // Settings shows the choice made here.
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
+  // Listening: no bubble. Stopped: back.
+  await page.goto('./#/listen');
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('layout-bubble')).toBeHidden({ timeout: 30_000 });
+  await page.getByTestId('stop').click();
+  await expect(page.getByTestId('layout-bubble')).toBeVisible();
+  await browser.close();
+});
