@@ -2886,3 +2886,7 @@ other open branches, so this may be renumbered at merge.)
   HTML; the app removed the tags but not the character references. `src/species/html-text.ts` removes tags
   and decodes them; summaries cached by earlier versions are cleaned when read. Checked on 2026-10-27:
   the REST summary for Swainson's thrush sends `Swainson&#039;s thrush`.
+- **Found on the way (CI):** after an import, "Analysed N windows" showed before the results were saved, and
+  the Recordings list did not redraw when they were, so going straight back could show the new recording under
+  "No bird found" until the next visit. "Analysed" now appears after the save, and the list redraws on
+  `detections-changed`.
