@@ -423,6 +423,7 @@ export class AppController extends Emitter<ControllerEvents> {
     this.saveWarned.clear();
     this.notUsual.clear();
     this.keptAgainstFilter.clear();
+    this.notUsualAudio.clear();
     this.lastAutoClip.clear();
     this.emit('not-usual', []);
     this.sessionStartedAt = Date.now();
@@ -508,7 +509,7 @@ export class AppController extends Emitter<ControllerEvents> {
       const hidden = res.geoApplied ? selectDetections(res.scores, this.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird }).filter((d) => !d.inRange) : [];
       const kept = hidden.filter((d) => this.keptAgainstFilter.has(this.species[d.index]?.scientific ?? ''));
       const detections = kept.length ? [...filtered, ...kept].sort((a, b) => b.prob - a.prob) : filtered;
-      this.noteNotUsual(hidden.filter((d) => !kept.includes(d)), time);
+      this.noteNotUsual(hidden.filter((d) => !kept.includes(d)), time, copy);
       this.stats = { ...this.stats, windows: this.stats.windows + 1, lastInferMs: res.inferMs };
       this.emit('stage', 'result');
       result = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, ephemeral: false, soundOnly: kept.map((d) => d.index) };
@@ -531,15 +532,23 @@ export class AppController extends Emitter<ControllerEvents> {
   private notUsual = new Map<string, NotUsualBird>();
   /** Species the user kept this session: later windows count as sightings, marked sound-only. */
   private keptAgainstFilter = new Set<string>();
+  /**
+   * The raw 3 s behind each hidden bird's best window (only with auto-save on), so "Keep this sighting" can
+   * save it to Recordings like any detection (DECISIONS.md #102). One window per species, this session only.
+   */
+  private notUsualAudio = new Map<string, { audio: Float32Array; scores: Score[] }>();
 
-  private noteNotUsual(hidden: Score[], time: number): void {
+  private noteNotUsual(hidden: Score[], time: number, raw: Float32Array | null): void {
     if (hidden.length === 0) return;
     const where = positionStamp(this.positions.current());
     for (const d of hidden) {
       const sp = this.species[d.index];
       if (!sp) continue;
       const seen = this.notUsual.get(sp.scientific);
-      if (!seen || d.prob > seen.prob) this.notUsual.set(sp.scientific, { index: d.index, scientific: sp.scientific, prob: d.prob, time, where, kept: false });
+      if (!seen || d.prob > seen.prob) {
+        this.notUsual.set(sp.scientific, { index: d.index, scientific: sp.scientific, prob: d.prob, time, where, kept: false });
+        if (raw) this.notUsualAudio.set(sp.scientific, { audio: raw.slice(), scores: [d] });
+      }
     }
     this.emit('not-usual', this.getNotUsual());
   }
@@ -558,6 +567,18 @@ export class AppController extends Emitter<ControllerEvents> {
     const bird = this.notUsual.get(scientific);
     const sp = bird ? this.species[bird.index] : undefined;
     if (!bird || !sp || bird.kept) return false;
+    // Its best window goes to Recordings as for any auto-saved detection; a clip that can't be stored never costs the sighting.
+    let recordingId: string | null = null;
+    const clip = this.notUsualAudio.get(scientific);
+    if (clip && this.settings.get().autoSaveClips) {
+      try {
+        recordingId = (await this.saveRecording(clip.audio, `${AUTO_SAVE_RECORDING_PREFIX}: ${sp.common}`, 'autoclip', clip.scores)).id;
+        this.lastAutoClip.set(sp.scientific, { time: Date.now(), confidence: bird.prob });
+      } catch (e) {
+        this.warnSaveFailed('clip', e);
+      }
+    }
+    this.notUsualAudio.delete(scientific);
     const record: DetectionRecord = {
       id: newId(),
       time: bird.time,
@@ -569,8 +590,8 @@ export class AppController extends Emitter<ControllerEvents> {
       lon: bird.where.lon,
       accuracy: bird.where.accuracy,
       fixTime: bird.where.fixTime,
-      recordingId: null,
-      offsetSec: null,
+      recordingId,
+      offsetSec: recordingId ? 0 : null,
       source: 'live',
       sessionId: this.sessionId,
       soundOnly: true,

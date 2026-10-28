@@ -2919,3 +2919,13 @@ other open branches, so this may be renumbered at merge.)
   (`--bubble-lift`, the dock's height, from the existing ResizeObserver). The page gets 56 px of room at the
   end so the last item can scroll clear of it.
 - **Known cost:** it floats over the right edge of whatever is under it in the Ready state.
+
+## 102. A kept "not usual here" bird is saved to Recordings too
+
+- **Why (Sabih):** a bird kept with "Keep this sighting" showed on the Species list but not in Recordings.
+- **Cause:** windows the location filter hid never reached the clip auto-save, and by the time of the tap the
+  audio was gone, so `keepNotUsual` saved the sighting with no recording.
+- **Now:** with auto-save on, the controller keeps the raw 3 s of each hidden bird's best window for the
+  session (one per species, cleared when listening starts again), and Keep saves it as an auto-saved clip
+  named like the others, linked to the sound-only sighting. A clip that can't be stored never costs the
+  sighting. With auto-save off, nothing changes. Not retroactive: birds kept before this have no audio to save.
