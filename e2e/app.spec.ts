@@ -2191,7 +2191,7 @@ test('the AI services are named from the server, asked only when shown, and kept
   await expect(page.getByTestId('help-ai-services')).toHaveText('Anthropic Claude, or Google Gemini as backup');
 });
 
-test('a bird matched by sound but not usual here is counted, can be kept, and is marked "sound only" (DECISIONS.md #93)', async ({ playwright }) => {
+test('a bird matched by sound but not usual here is counted, can be kept, is marked "sound only", and its clip is in Recordings (DECISIONS.md #93, #102)', async ({ playwright }) => {
   // The sample redpoll recording plays as the microphone; the location is Sydney, where redpolls do not occur,
   // so the location filter hides the match instead of showing it.
   const browser = await playwright.chromium.launch({
@@ -2226,6 +2226,9 @@ test('a bird matched by sound but not usual here is counted, can be kept, and is
   await page.goto('./#/species');
   await page.getByTestId('spotted-filter').click();
   await expect(page.getByTestId('species-list').locator(`[href*="${encodeURIComponent(kept)}"]`).first()).toBeVisible();
+  // And its 3 s window is in Recordings, like any auto-saved detection (DECISIONS.md #102).
+  await page.goto('./#/recordings');
+  await expect(page.locator(`[data-testid="recording-group"][data-species="${kept}"]`)).toBeVisible();
   await browser.close();
 });
 
