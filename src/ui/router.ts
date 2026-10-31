@@ -110,3 +110,20 @@ export function navigate(route: Route): void {
 export function speciesHref(scientific: string): string {
   return hrefFor({ name: 'species-detail', scientific });
 }
+
+/**
+ * "‹ Back" on the account pages (DECISIONS.md #106): back to the page the person came from inside the app, or to
+ * `fallback` when they arrived straight on this page (an emailed link, a bookmark), so Back never leaves the app.
+ */
+let movedInApp = false;
+export function noteInAppNavigation(): void {
+  movedInApp = true;
+}
+export function goBack(fallback: string, h: Pick<History, 'back'> = history, loc: Pick<Location, 'hash'> = location): void {
+  if (movedInApp) h.back();
+  else loc.hash = fallback;
+}
+/** Tests only. */
+export function resetInAppNavigationForTest(): void {
+  movedInApp = false;
+}

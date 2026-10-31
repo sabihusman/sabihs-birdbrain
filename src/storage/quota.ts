@@ -51,6 +51,13 @@ export const PERSIST_EXPLAINED =
 
 export type PersistOutcome = 'granted' | 'denied' | 'already' | 'asked-before' | 'unsupported';
 
+/** What the browser decided, in the same words as Settings › Storage; null when nothing was asked. */
+export function persistOutcomeText(outcome: PersistOutcome): string | null {
+  if (outcome === 'granted') return 'Storage is kept: the browser won’t delete the model or your sightings.';
+  if (outcome === 'denied') return 'The browser didn’t agree to keep storage, so it may delete the model and sightings if space runs low. Settings › Storage can ask again.';
+  return null;
+}
+
 type StorageManagerLike = Pick<StorageManager, 'persist' | 'persisted'>;
 
 /**

@@ -6,7 +6,7 @@ import { clearAllData } from '../../storage/db';
 import type { View, ViewContext } from '../app';
 import { friendsPanel, sharingRow } from '../components/friends-panel';
 import { actionRow, linkRow, rowGroup } from '../components/rows';
-import { SIGN_UP_PRIVACY_LINE, whatWeStoreFold } from '../components/what-we-store';
+import { SIGN_UP_PRIVACY_LINE } from '../components/what-we-store';
 import { el } from '../dom';
 
 type Step = 'signed-out' | 'signed-in' | 'delete' | 'deleted';
@@ -308,8 +308,8 @@ export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { 
       { class: 'stack' },
       el('p', { class: 'small' }, 'Optional. Adds Ask about this bird and sharing with friends. Sabih approves each account.'),
       el('div', { class: 'row' }, el('a', { class: 'btn primary', href: '#/signin', 'data-testid': 'account-signin' }, 'Sign in'), el('a', { class: 'btn', href: '#/signup', 'data-testid': 'account-signup' }, 'Create account')),
+      // One line here; the full "What we store" is once, at the end of Settings (UI/UX audit finding 10).
       el('p', { class: 'small muted', 'data-testid': 'signup-privacy' }, SIGN_UP_PRIVACY_LINE),
-      whatWeStoreFold('what-we-store-signup'),
     );
 
   const unsub = api.on('change', (u) => {

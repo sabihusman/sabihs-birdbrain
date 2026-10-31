@@ -3,6 +3,7 @@ import type { View, ViewContext } from '../app';
 import { SIGN_UP_PRIVACY_LINE, whatWeStoreFold } from '../components/what-we-store';
 import { setSharingOn } from '../../species/sharing';
 import { foldHint } from '../components/rows';
+import { goBack } from '../router';
 import { el } from '../dom';
 
 /**
@@ -78,7 +79,13 @@ export function forgetToken(kind: 'reset' | 'invite'): void {
 /** Back link, title and the page body in one card. */
 function page(title: string, testId: string, ...body: HTMLElement[]): { root: HTMLElement; card: HTMLElement } {
   const card = el('section', { class: 'card', 'data-testid': testId }, el('h2', null, title), ...body);
-  const root = el('div', null, el('div', { class: 'row' }, el('a', { class: 'btn small', href: ACCOUNT_HREF, 'data-testid': 'auth-back' }, '‹ Settings')), card);
+  // Back to where the person came from (the welcome layer, Settings…), not always Settings (UI/UX audit finding 8).
+  const back = el('a', { class: 'btn small', href: ACCOUNT_HREF, 'data-testid': 'auth-back' }, '‹ Back');
+  back.addEventListener('click', (e) => {
+    e.preventDefault();
+    goBack(ACCOUNT_HREF);
+  });
+  const root = el('div', null, el('div', { class: 'row' }, back), card);
   return { root, card };
 }
 

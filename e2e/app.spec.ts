@@ -2615,3 +2615,34 @@ test('Species with no location: one banner, Use my location, Pick a place by nam
   await expect(page.getByTestId('local-count')).toContainText(/local species/, { timeout: 30_000 });
   await context.close();
 });
+
+test('small fixes from the UI/UX audit: Back returns where you came from, What we store once, the empty map says so on the map (DECISIONS.md #106)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 760 }, serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
+  const page = await context.newPage();
+  await page.route(/bird-brain\.duckdns\.org\/models/, (route) => route.abort());
+  await page.route(/tile\.openstreetmap\.org/, (route) => route.abort());
+  // Finding 8: from the welcome layer to Sign in, "‹ Back" returns to it, not to Settings.
+  await page.goto('./');
+  await page.getByTestId('welcome-signin').click();
+  await page.waitForURL(/#\/signin$/);
+  await expect(page.getByTestId('auth-back')).toHaveText('‹ Back');
+  await page.getByTestId('auth-back').click();
+  await expect(page).not.toHaveURL(/#\/(signin|settings)/);
+  // Opened straight on Sign in (no earlier page in the app): Back goes to the account card in Settings.
+  const direct = await context.newPage();
+  await direct.goto('./#/signin');
+  await direct.getByTestId('auth-back').click();
+  await direct.waitForURL(/#\/settings\/account$/);
+  // Finding 10: signed out, "What we store" appears once in Settings, and the Account card keeps its one line.
+  await expect(direct.getByTestId('what-we-store')).toHaveCount(1);
+  await expect(direct.getByTestId('what-we-store-signup')).toHaveCount(0);
+  await expect(direct.getByTestId('signup-privacy')).toBeVisible();
+  // Finding 6: the map says it is loading instead of a blank box, and an empty map says so on itself with one next step.
+  await direct.goto('./#/map');
+  await expect(direct.getByTestId('map-loading')).toBeVisible();
+  const empty = direct.getByTestId('map-empty');
+  await expect(empty).toBeVisible();
+  await expect(empty).toContainText('No sightings with a location yet');
+  await expect(empty.getByRole('link', { name: 'Listen now' })).toHaveAttribute('href', '#/listen');
+  await context.close();
+});

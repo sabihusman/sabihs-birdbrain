@@ -232,6 +232,16 @@ export function mapView(ctx: ViewContext): View {
   const placesTab = el('button', { type: 'button', role: 'tab', id: 'map-tab-places', 'aria-controls': 'map-cards', 'data-testid': 'map-view-places' }, 'Places');
   const switcher = el('div', { class: 'segmented', role: 'tablist', 'aria-label': 'Cards under the map', 'data-testid': 'map-cards-switch' }, birdsTab, placesTab);
   const countLine = el('p', { class: 'map-count small muted', 'aria-live': 'polite', 'data-testid': 'map-count' });
+  // A wait is never a blank box, and an empty map says so on the map itself, with one next step (UI/UX audit finding 6).
+  const loadingNote = el('div', { class: 'map-overlay map-loading', role: 'status', 'data-testid': 'map-loading' }, 'Loading map…');
+  const emptyNote = el(
+    'div',
+    { class: 'map-overlay map-empty', 'data-testid': 'map-empty', hidden: true },
+    el('strong', null, 'No sightings with a location yet'),
+    el('span', { class: 'small' }, 'Birds you identify while location is on appear here.'),
+    el('a', { class: 'btn primary small', href: '#/listen' }, 'Listen now'),
+  );
+  container.append(loadingNote, emptyNote);
   const statusLine = el('div', { class: 'map-places-status', 'data-testid': 'map-places-status', hidden: true });
   const list = el('div', { class: 'map-cards', id: 'map-cards', role: 'tabpanel', 'data-testid': 'map-cards' });
   const credit = el('p', { class: 'source-credit', hidden: true, 'data-testid': 'places-credit' }, 'Place names: © ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener' }, 'OpenStreetMap'), ' contributors');
@@ -451,7 +461,7 @@ export function mapView(ctx: ViewContext): View {
     setStatus(null);
     credit.hidden = true;
     if (located.length === 0) {
-      countLine.textContent = 'No sightings with a location yet. Turn location on to add them.';
+      countLine.textContent = '';
       list.replaceChildren();
       return;
     }
@@ -467,7 +477,7 @@ export function mapView(ctx: ViewContext): View {
     credit.hidden = false;
     if (located.length === 0) {
       setStatus(null);
-      countLine.textContent = 'No sightings with a location yet. Turn location on to add them.';
+      countLine.textContent = '';
       list.replaceChildren();
       return;
     }
@@ -560,6 +570,7 @@ export function mapView(ctx: ViewContext): View {
     if (selection?.kind === 'bird' && !birds.some((b) => b.scientific === (selection as { scientific: string }).scientific)) selection = null;
     if (selection?.kind === 'place' && !areaFor(selection.key)) selection = null;
     drawMarkers();
+    emptyNote.hidden = located.length > 0;
     if (firstFit && located.length) {
       fitAll();
       firstFit = false;
@@ -576,6 +587,13 @@ export function mapView(ctx: ViewContext): View {
     if (disposed) return;
     map = baseMap(container);
     container.append(hint);
+    map.eachLayer((layer) => {
+      if (!(layer instanceof L.TileLayer)) return;
+      layer.once('load', () => loadingNote.remove());
+      layer.once('tileerror', () => {
+        if (loadingNote.isConnected) loadingNote.textContent = navigator.onLine === false ? 'The map needs a connection.' : 'Map tiles are slow to load…';
+      });
+    });
     map.on('popupopen', () => setHint(''));
     const loc = controller.location.get().location;
     map.setView(loc ? [loc.lat, loc.lon] : [20, 0], loc ? 11 : 2);
