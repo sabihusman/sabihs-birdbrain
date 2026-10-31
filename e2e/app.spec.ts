@@ -2206,11 +2206,16 @@ test('a bird matched by sound but not usual here is counted, can be kept, is mar
   await page.goto('./#/listen');
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
   await page.getByTestId('start-stop').click();
-  const toggle = page.getByTestId('not-usual-toggle');
-  await expect(toggle).toHaveText(/^\d+ birds? not usual here · show$/, { timeout: 90_000 });
+  // While listening the banner carries the count (DECISIONS.md #103); the old line is hidden.
+  const banner = page.getByTestId('location-banner');
+  const toggle = page.getByTestId('location-banner-count');
+  await expect(toggle).toHaveText(/^\d+ · show$/, { timeout: 90_000 });
+  await expect(banner).toContainText('Not usual here:');
+  await expect(page.getByTestId('not-usual-toggle')).toBeHidden();
   // Not shown as a detection: no card for it in the results.
   await expect(page.getByTestId('results').getByTestId('result-card')).toHaveCount(0);
   await toggle.click();
+  await expect(toggle).toHaveText(/^\d+ · hide$/);
   const row = page.getByTestId('not-usual-row').first();
   await expect(row).toContainText('Not usual here (location filter)');
   await expect(row).toContainText(/\d+%/);
@@ -2222,6 +2227,7 @@ test('a bird matched by sound but not usual here is counted, can be kept, is mar
   await expect(card).toBeVisible();
   await expect(card.getByTestId('sound-only-note')).toHaveText('Verified by sound only, not location: this bird isn’t usually here.');
   await page.getByTestId('stop').click();
+  await expect(banner).toBeHidden();
   // Saved: the Species tab ticks it as spotted.
   await page.goto('./#/species');
   await page.getByTestId('spotted-filter').click();
@@ -2460,5 +2466,50 @@ test('Listen layout bubble: bottom right, opens upward, switches at once, never 
   await expect(page.getByTestId('layout-bubble')).toBeHidden({ timeout: 30_000 });
   await page.getByTestId('stop').click();
   await expect(page.getByTestId('layout-bubble')).toBeVisible();
+  await browser.close();
+});
+
+test('a one-line location banner while listening, in each layout, grey with no location; hidden when stopped; 320 px (DECISIONS.md #103)', async ({ playwright }) => {
+  const browser = await playwright.chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
+  });
+  for (const [layout, where] of [['consolidated', 'listen-panel'], ['dock', 'results'], ['focus', 'focus-latest']] as const) {
+    for (const mode of ['off', 'manual'] as const) {
+      const context = await browser.newContext({ viewport: { width: 320, height: 640 }, permissions: ['microphone'], baseURL: test.info().project.use.baseURL });
+      await context.addInitScript(
+        ([l, m]) => {
+          localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: l, locationMode: m, manualLat: 42.44, manualLon: -76.5 }));
+          localStorage.setItem('birdbrain.model.v1', 'wanted');
+        },
+        [layout, mode],
+      );
+      const page = await context.newPage();
+      await page.goto('./#/listen');
+      await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+      const banner = page.getByTestId('location-banner');
+      await expect(banner).toBeHidden();
+      const start = page.getByTestId(layout === 'consolidated' ? 'start-stop' : 'dock-start');
+      if (await start.isVisible()) await start.click();
+      else await page.getByTestId('start-stop').click();
+      await expect(banner).toBeVisible({ timeout: 30_000 });
+      if (mode === 'off') {
+        await expect(banner).toHaveText('No location: every species can show');
+        await expect(banner).toHaveAttribute('data-kind', 'none');
+      } else {
+        await expect(banner).toHaveText(/^(Birds not usual here are held back|Not usual here:\d+ · show)$/);
+      }
+      // One line, in the place each layout reads first.
+      expect((await banner.boundingBox())!.height).toBeLessThanOrEqual(48);
+      const anchor = (await page.getByTestId(where).boundingBox())!;
+      const b = (await banner.boundingBox())!;
+      if (layout === 'consolidated') expect(b.y).toBeGreaterThanOrEqual(anchor.y);
+      else expect(b.y + b.height).toBeLessThanOrEqual(anchor.y + 1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      const stop = page.getByTestId(layout === 'dock' ? 'dock-stop' : 'stop');
+      await stop.click();
+      await expect(banner).toBeHidden();
+      await context.close();
+    }
+  }
   await browser.close();
 });

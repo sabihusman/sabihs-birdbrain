@@ -50,3 +50,21 @@ describe('birds kept against the location filter (DECISIONS.md #93)', () => {
     expect(compactWhen({ firstTime: Date.UTC(2026, 9, 25, 9, 0), peakConfidence: 0.83, soundOnly: true }, Date.UTC(2026, 9, 25, 12))).toMatch(/ · 83% · sound only$/);
   });
 });
+
+describe('the location banner while listening (DECISIONS.md #103)', () => {
+  it('says what the filter does, how many it held back, and when it is doing nothing', async () => {
+    const { locationBanner } = await import('../src/species/sound-only');
+    expect(locationBanner(true, 'ok', 0, false)).toEqual({ kind: 'filter', text: 'Birds not usual here are held back', count: null });
+    expect(locationBanner(true, 'ok', 2, false)).toEqual({ kind: 'held', text: 'Not usual here:', count: '2 · show' });
+    expect(locationBanner(true, 'ok', 1, true).count).toBe('1 · hide');
+    expect(locationBanner(false, 'locating', 3, false)).toEqual({ kind: 'locating', text: 'Finding your location…', count: null });
+    for (const status of ['off', 'denied', 'unavailable', 'manual-missing']) expect(locationBanner(false, status, 0, false)).toEqual({ kind: 'none', text: 'No location: every species can show', count: null });
+  });
+
+  it('every version fits one short line', async () => {
+    const { locationBanner } = await import('../src/species/sound-only');
+    for (const b of [locationBanner(true, 'ok', 0, false), locationBanner(true, 'ok', 99, false), locationBanner(false, 'idle', 0, false), locationBanner(false, 'off', 0, false)]) {
+      expect(`${b.text} ${b.count ?? ''}`.trim().length).toBeLessThanOrEqual(36);
+    }
+  });
+});
