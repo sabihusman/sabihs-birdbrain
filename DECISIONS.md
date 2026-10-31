@@ -2957,3 +2957,20 @@ other open branches, so this may be renumbered at merge.)
   to explain or look up.
 - **Not done:** the audit's "a thrush-like song" (family-level wording). BirdNET scores species, not families, so
   the closest names are given as species with their scores.
+
+## 105. Species with no location: one banner, "Use my location", and "Pick a place" by name
+
+- **Why (UI/UX audit finding 2, verified; option A chosen by Sabih from a mockup):** with location denied the
+  list became all 6,509 species, the note said "Enter coordinates manually in Settings", "Show all species" sat
+  greyed out with no reason, and nothing asked for location again.
+- **Now** (`src/ui/components/location-recovery.ts`): one banner, "Showing every species in the world. Share your
+  location, or pick a place, to see the birds found there.", with **Use my location** (switches to GPS and asks
+  again) and **Pick a place**. If the phone keeps refusing it says so and gives the Safari steps ("aA" › Website
+  Settings › Location) and the Chrome ones (iPhone Settings › Apps › Chrome › Location; not yet checked on a
+  device). A picked place becomes the manual location (`manualPlace` setting, cleared when coordinates are typed
+  in Settings) and shows as "📍 Ithaca, New York · change". The old coordinates note is hidden while the banner
+  shows, and "Show all species" is hidden while there is no local list.
+- **Place search** (`src/geo/place-search.ts`): Nominatim `/search`, only when Search is pressed, because the usage
+  policy forbids search-as-you-type from a client ("you must not implement such a service on the client side");
+  at least 1.1 s between requests; answers cached 180 days in the `wiki` store (`geosearch:`). What is sent: the
+  typed name. What we store says so.

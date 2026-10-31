@@ -62,7 +62,7 @@ export class LocationManager extends Emitter<{ change: LocationState }> {
           location: { lat: s.manualLat, lon: s.manualLon, accuracy: null, source: 'manual' },
           week,
           status: 'ok',
-          message: `Manual location ${s.manualLat.toFixed(3)}, ${s.manualLon.toFixed(3)}`,
+          message: s.manualPlace ? `Place: ${s.manualPlace}` : `Manual location ${s.manualLat.toFixed(3)}, ${s.manualLon.toFixed(3)}`,
         };
       }
       return { mode: 'manual', location: null, week, status: 'manual-missing', message: 'Enter latitude and longitude in Settings' };

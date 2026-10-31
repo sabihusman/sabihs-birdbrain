@@ -5,6 +5,7 @@ import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
 import { foldHint } from '../components/rows';
+import { locationRecovery } from '../components/location-recovery';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor, speciesHref } from '../router';
 import { createMiniMap } from './map';
@@ -39,6 +40,8 @@ export function speciesListView(ctx: ViewContext): View {
   const offlineLine = el('p', null, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.');
   const scopeFold = foldHint(localLine, [totalLine, offlineLine], { testId: 'species-about' });
   const statusNote = el('div', { class: 'small muted' });
+  // No location: one banner with the way back, in place of the note that asked for coordinates (DECISIONS.md #105).
+  const recovery = locationRecovery(controller);
   const showAll = el('input', { type: 'checkbox', checked: settings.get().speciesShowAll, 'data-testid': 'show-all-species' });
   showAll.addEventListener('change', () => {
     settings.update({ speciesShowAll: showAll.checked });
@@ -138,7 +141,10 @@ export function speciesListView(ctx: ViewContext): View {
     note.textContent = scope.note ?? '';
     if (scope.note && scope.noteKind === 'info') scopeFold.querySelector('.fold-hint-more')?.insertBefore(note, offlineLine);
     else statusNote.replaceChildren(...(scope.note ? [note] : []));
-    showAll.disabled = local.indices === null;
+    // The banner already says the list is the whole world and why; the note would repeat it.
+    statusNote.hidden = !controller.location.get().location && scope.note === local.note && scope.note != null && !recovery.el.hidden;
+    // No local list: nothing to switch between, so the switch goes rather than sitting greyed out.
+    toggle.hidden = local.indices === null;
     results = input.value.trim() ? searchSpecies(scope.shown, input.value, 500) : scope.shown;
     render(true);
   };
@@ -175,12 +181,13 @@ export function speciesListView(ctx: ViewContext): View {
   refreshSpotted();
   void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), friendsNote, shareBox, toggle, scopeFold, statusNote, count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), recovery.el, friendsNote, shareBox, toggle, scopeFold, statusNote, count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {
       for (const u of unsubs) u();
       shareRow?.dispose();
+      recovery.dispose();
     },
   };
 }
