@@ -2942,3 +2942,18 @@ other open branches, so this may be renumbered at merge.)
   cards. Focus: above the bird. The count opens the same list with "Keep this sighting" (and scrolls to it);
   the rest of the pill opens Settings. It replaces the "N birds not usual here · show" line while listening;
   that line comes back after Stop, so held-back birds can still be kept then.
+
+## 104. A recording with no confident match: saved as analysed, and it explains itself
+
+- **Why (UI/UX audit, Oct 31, findings 1 and 5; verified in the code):** an analysed recording kept only the
+  birds above the minimum. With none, reopening it said "Not analysed yet", and right after the analysis "Why
+  this ID" said "Analyse the recording first". The no-match screen said only "Nothing above the threshold".
+- **Now:** the state comes from `rec.analyzedAt`, so an analysed recording never says it isn't. A no-match says
+  "No confident match", then either "It heard something, but no bird reached your minimum of 70%. Closest:
+  A 45%, B 31%. Not sure enough to name." or "Nothing came close to your minimum of 70%", a tip ("move closer and
+  record for longer, 20 to 30 seconds") and one button, "Try a longer recording" (to Listen). The closest guesses
+  (best per species under the minimum, at least 10%, top 3; `src/species/no-match.ts`) are saved with the
+  recording (`closest`), so reopening shows the same thing. Why this ID and About this bird say there is nothing
+  to explain or look up.
+- **Not done:** the audit's "a thrush-like song" (family-level wording). BirdNET scores species, not families, so
+  the closest names are given as species with their scores.

@@ -2500,10 +2500,13 @@ test('a one-line location banner while listening, in each layout, grey with no l
       }
       // One line, in the place each layout reads first.
       expect((await banner.boundingBox())!.height).toBeLessThanOrEqual(48);
-      const anchor = (await page.getByTestId(where).boundingBox())!;
-      const b = (await banner.boundingBox())!;
-      if (layout === 'consolidated') expect(b.y).toBeGreaterThanOrEqual(anchor.y);
-      else expect(b.y + b.height).toBeLessThanOrEqual(anchor.y + 1);
+      // Read in one go from the page's order, so cards arriving or the page moving between two measurements can't flake it.
+      const placed = await page.evaluate((id) => {
+        const b = document.querySelector('[data-testid="location-banner"]')!;
+        const anchor = document.querySelector(`[data-testid="${id}"]`)!;
+        return id === 'listen-panel' ? anchor.contains(b) : !!(b.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING) && b.parentElement === anchor.parentElement;
+      }, where);
+      expect(placed, `banner placed for ${layout}`).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
       const stop = page.getByTestId(layout === 'dock' ? 'dock-stop' : 'stop');
       await stop.click();
@@ -2512,4 +2515,52 @@ test('a one-line location banner while listening, in each layout, grey with no l
     }
   }
   await browser.close();
+});
+
+/** A mono 16-bit WAV of quiet noise: something to analyse that holds no bird. */
+function noiseWav(seconds: number, rate = 48000): Buffer {
+  const n = seconds * rate;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + n * 2, 4);
+  buf.write('WAVEfmt ', 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(n * 2, 40);
+  let seed = 7;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    buf.writeInt16LE(Math.round(((seed / 0x7fffffff) * 2 - 1) * 300), 44 + i * 2);
+  }
+  return buf;
+}
+
+test('a recording with no confident match says so, gives one next step, and stays analysed when reopened (DECISIONS.md #104)', async ({ page }) => {
+  await page.goto('./#/recordings');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.locator('#import-file').setInputFiles({ name: 'quiet-noise.wav', mimeType: 'audio/wav', buffer: noiseWav(6) });
+  await page.waitForURL(/#\/recordings\/.+/, { timeout: 60_000 });
+  await expect(page.getByText(/Analysed \d+ windows/)).toBeVisible({ timeout: 120_000 });
+  const check = async () => {
+    const noMatch = page.getByTestId('no-match');
+    await expect(noMatch).toContainText('No confident match');
+    await expect(noMatch).toContainText(/minimum of \d+%/);
+    await expect(noMatch).toContainText('What helps: move closer and record for longer, 20 to 30 seconds.');
+    await expect(page.getByTestId('no-match-cta')).toHaveAttribute('href', '#/listen');
+    await expect(page.getByText('Nothing to explain: no bird matched confidently.')).toBeVisible();
+    await expect(page.getByTestId('about-empty')).toHaveText('No bird matched confidently, so there’s nothing to look up.');
+    await expect(page.getByText('Not analysed yet.')).toHaveCount(0);
+    await expect(page.getByText('Analyse the recording first.')).toHaveCount(0);
+  };
+  await check();
+  // Opened again later: the same saved result, not "Not analysed yet".
+  await page.reload();
+  await expect(page.getByTestId('reanalyze')).toHaveText('Re-analyse');
+  await check();
 });
