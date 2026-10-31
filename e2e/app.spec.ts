@@ -2382,11 +2382,7 @@ test('extra text folds under one line: tapping the line opens it and never flips
     await shareFold.locator('summary').click();
     await expect(page.getByTestId('share-status')).toHaveText('Sharing is off. Nothing is on the server.');
     await expect(sw, 'tapping the explanation does not flip the switch').not.toBeChecked();
-    const showAll = page.getByTestId('show-all-hint');
-    await expect(showAll).not.toHaveAttribute('open', /.*/);
-    await showAll.locator('summary').click();
-    await expect(showAll.getByText('Off: only birds found near you at any time of year.')).toBeVisible();
-    await expect(page.getByTestId('show-all-species')).not.toBeChecked();
+    // "Show all species" only shows with a local list (DECISIONS.md #105); its fold is checked in the #105 test.
     const about = page.getByTestId('species-about');
     await expect(about.getByText(/Works offline/)).toBeHidden();
     await about.locator('summary').click();
@@ -2563,4 +2559,59 @@ test('a recording with no confident match says so, gives one next step, and stay
   await page.reload();
   await expect(page.getByTestId('reanalyze')).toHaveText('Re-analyse');
   await check();
+});
+
+test('Species with no location: one banner, Use my location, Pick a place by name (search on Search only), 320 px (DECISIONS.md #105)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 }, serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
+  const page = await context.newPage();
+  await page.addInitScript(() => localStorage.setItem('birdbrain.model.v1', 'wanted'));
+  await page.addInitScript(returningVisitor);
+  const searches: string[] = [];
+  await page.route(/nominatim\.openstreetmap\.org\/search/, (route) => {
+    searches.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ name: 'Ithaca', lat: '42.4396', lon: '-76.4970', address: { city: 'Ithaca', state: 'New York', country: 'United States' } }]) });
+  });
+  await page.goto('./#/species');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  // Location is refused in this browser: one banner, no coordinates, no greyed-out switch.
+  const banner = page.getByTestId('species-location');
+  await expect(banner).toContainText('Your phone is blocking location for this site.');
+  await expect(banner).toContainText('Safari: tap “aA” in the address bar');
+  await expect(page.getByTestId('local-note')).toBeHidden();
+  await expect(page.getByTestId('show-all-species')).toBeHidden();
+  // Pick a place: typing alone sends nothing; Search does.
+  await page.getByTestId('pick-a-place').click();
+  await page.getByTestId('place-query').fill('Ithaca');
+  await page.waitForTimeout(500);
+  expect(searches).toHaveLength(0);
+  await expect(page.getByText('The name you type goes to OpenStreetMap to find the place.')).toBeVisible();
+  await page.getByTestId('place-search').click();
+  await page.getByTestId('place-result').first().click();
+  await expect(page.getByTestId('species-place')).toContainText('📍 Ithaca, New York');
+  await expect(page.getByTestId('local-count')).toContainText(/local species/, { timeout: 30_000 });
+  await expect(page.getByTestId('show-all-species')).toBeVisible();
+  // Its fold opens on tap and never flips the switch (DECISIONS.md #100).
+  const showAll = page.getByTestId('show-all-hint');
+  await expect(showAll).not.toHaveAttribute('open', /.*/);
+  await showAll.locator('summary').click();
+  await expect(showAll.getByText('Off: only birds found near you at any time of year.')).toBeVisible();
+  await expect(page.getByTestId('show-all-species')).not.toBeChecked();
+  expect(searches).toHaveLength(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  // Allowing location and tapping Use my location switches back to the phone's position.
+  await page.getByTestId('place-change').click();
+  await page.getByText('Cancel').click();
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 42.44, longitude: -76.5 });
+  await page.evaluate(() => {
+    const raw = localStorage.getItem('birdbrain.settings.v1');
+    const s = raw ? JSON.parse(raw) : {};
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ ...s, locationMode: 'off', manualPlace: null }));
+  });
+  await page.reload();
+  await expect(page.getByTestId('species-location')).toContainText('Showing every species in the world.');
+  await page.getByTestId('use-my-location').click();
+  await expect(page.getByTestId('species-location')).toBeHidden({ timeout: 15_000 });
+  await expect(page.getByTestId('local-count')).toContainText(/local species/, { timeout: 30_000 });
+  await context.close();
 });

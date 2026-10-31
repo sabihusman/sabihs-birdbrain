@@ -58,7 +58,7 @@ export function settingsView(ctx: ViewContext): View {
   // Manual location
   const latInput = el('input', { type: 'number', step: 'any', min: '-90', max: '90', placeholder: 'Latitude', value: s.manualLat ?? '' });
   const lonInput = el('input', { type: 'number', step: 'any', min: '-180', max: '180', placeholder: 'Longitude', value: s.manualLon ?? '' });
-  const applyManual = () => settings.update({ manualLat: latInput.value === '' ? null : Number(latInput.value), manualLon: lonInput.value === '' ? null : Number(lonInput.value) });
+  const applyManual = () => settings.update({ manualLat: latInput.value === '' ? null : Number(latInput.value), manualLon: lonInput.value === '' ? null : Number(lonInput.value), manualPlace: null });
   latInput.addEventListener('change', applyManual);
   lonInput.addEventListener('change', applyManual);
   const locationStatus = el('div', { class: 'small muted' }, controller.location.get().message);

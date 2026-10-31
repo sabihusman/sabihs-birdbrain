@@ -18,6 +18,8 @@ export interface Settings {
   locationMode: LocationMode;
   manualLat: number | null;
   manualLon: number | null;
+  /** The place picked by name for the manual location ("Ithaca, New York"); null when typed as numbers (DECISIONS.md #105). */
+  manualPlace: string | null;
   geoThreshold: number;
   useWeek: boolean;
   autoSaveClips: boolean;
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   locationMode: 'auto',
   manualLat: null,
   manualLon: null,
+  manualPlace: null,
   geoThreshold: GEO_FILTER_THRESHOLD,
   useWeek: true,
   autoSaveClips: true,
@@ -146,5 +149,6 @@ export function sanitize(s: Settings): Settings {
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),
     manualLon: s.manualLon == null || !Number.isFinite(s.manualLon) ? null : clamp(s.manualLon, -180, 180, 0),
+    manualPlace: typeof s.manualPlace === 'string' && s.manualPlace.trim() ? s.manualPlace.trim().slice(0, 80) : null,
   };
 }

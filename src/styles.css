@@ -629,3 +629,15 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .loc-banner-count[hidden] { display: none; }
 .listen-panel .loc-banner { background: color-mix(in srgb, var(--on-panel) 16%, transparent); color: var(--on-panel); margin: var(--space-2) 0; }
 .loc-banner:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* Species with no location (DECISIONS.md #105): one banner with the way back. */
+.loc-recovery { display: flex; flex-direction: column; gap: 6px; margin: var(--space-2) 0; padding: var(--space-3); border-radius: var(--radius-control); background: var(--warn-bg); color: var(--text); }
+.loc-recovery p { margin: 0; font-size: var(--text-sm); color: var(--muted); }
+.loc-recovery .row { flex-wrap: wrap; }
+.place-results { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; background: var(--surface); }
+.place-results:empty { display: none; }
+.place-result { display: flex; flex-direction: column; align-items: flex-start; min-height: 48px; padding: 8px var(--space-3); border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.place-result:first-child { border-top: 0; }
+.place-result small { color: var(--muted); font-size: var(--text-xs); }
+.place-result:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.place-line { display: flex; align-items: center; gap: 2px; margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--accent); font-weight: var(--weight-semibold); }
