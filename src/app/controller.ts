@@ -22,7 +22,7 @@ import { shouldAutoSaveClip, type LastAutoClip } from './autoclip';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
 import { isModelCached, markModelWanted, safeLocalStorage } from './first-visit';
-import { askToKeepStorageOnce, PERSIST_REASON } from '../storage/quota';
+import { askToKeepStorageOnce, PERSIST_REASON, persistOutcomeText } from '../storage/quota';
 
 export interface WindowResult {
   windowId: number;
@@ -300,7 +300,12 @@ export class AppController extends Emitter<ControllerEvents> {
         await this.pushGeo();
         void this.refreshLocalSpecies();
         // Right after the first download: ask the browser to keep the model and the sightings (DECISIONS.md #84).
-        if (!this.modelFromCache) void askToKeepStorageOnce(safeLocalStorage(), undefined, () => this.emit('notice', { kind: 'info', text: PERSIST_REASON }));
+        // The outcome is said too, so this never claims it is handled while Settings says it is off (UI/UX audit finding 11).
+        if (!this.modelFromCache)
+          void askToKeepStorageOnce(safeLocalStorage(), undefined, () => this.emit('notice', { kind: 'info', text: PERSIST_REASON })).then((outcome) => {
+            const text = persistOutcomeText(outcome);
+            if (text) this.emit('notice', { kind: outcome === 'denied' ? 'warn' : 'info', text });
+          });
         return true;
       } catch (e) {
         // The technical reason stays in the console; the member reads what to do about it.

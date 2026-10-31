@@ -53,3 +53,12 @@ describe('asking the browser to keep storage (DECISIONS.md #84)', () => {
     expect(PERSIST_EXPLAINED).toContain('Nothing leaves your phone.');
   });
 });
+
+describe('what the browser decided is said too (UI/UX audit finding 11)', () => {
+  it('says kept or not kept, in the same words as Settings, and nothing when nothing was asked', async () => {
+    const { persistOutcomeText } = await import('../src/storage/quota');
+    expect(persistOutcomeText('granted')).toMatch(/^Storage is kept/);
+    expect(persistOutcomeText('denied')).toMatch(/may delete the model and sightings if space runs low\. Settings › Storage can ask again\.$/);
+    for (const o of ['already', 'asked-before', 'unsupported'] as const) expect(persistOutcomeText(o)).toBeNull();
+  });
+});

@@ -1,6 +1,6 @@
 import type { AppController, Notice } from '../app/controller';
 import { el, clear } from './dom';
-import { hrefFor, parseHash, type Route } from './router';
+import { hrefFor, noteInAppNavigation, parseHash, type Route } from './router';
 import { listenView } from './views/listen';
 import { recordingsView, recordingDetailView } from './views/recordings';
 import { speciesListView, speciesDetailView } from './views/species';
@@ -228,6 +228,9 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
       }
     }
   };
-  window.addEventListener('hashchange', render);
+  window.addEventListener('hashchange', () => {
+    noteInAppNavigation();
+    render();
+  });
   render();
 }

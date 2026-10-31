@@ -2974,3 +2974,21 @@ other open branches, so this may be renumbered at merge.)
   policy forbids search-as-you-type from a client ("you must not implement such a service on the client side");
   at least 1.1 s between requests; answers cached 180 days in the `wiki` store (`geosearch:`). What is sent: the
   typed name. What we store says so.
+
+## 106. Small fixes from the UI/UX audit (findings 6, 8, 10, 11, 12)
+
+Each finding was checked against the code first.
+- **Back links (8):** Sign in, Create account and the other account pages said "‹ Settings" wherever they were opened
+  from. Now "‹ Back" returns to the previous page in the app (`goBack` in `src/ui/router.ts`), or to Settings ›
+  Account when the page was opened directly (an emailed link), so Back never leaves the app.
+- **"What we store" once (10):** signed out, it appeared under Account and at the end of Settings. The Account card
+  keeps its one line; the full list stays at the end (and on the Create account page).
+- **Storage, one truthful state (11):** after the first download the app said "Asking your browser to keep…" and
+  never what the browser decided, while Settings could say "off". It now also says the outcome
+  (`persistOutcomeText`), in the same words as Settings.
+- **Species ID card (12):** "No sightings of this species yet" sat under a friend's sighting. The card is about this
+  phone's sightings, so it now says "You haven't recorded it on this phone yet."
+- **Map (6):** "Loading map…" instead of a blank box until the tiles arrive (or why they don't), and an empty map
+  says "No sightings with a location yet" on the map itself with one button, "Listen now". The map already opened
+  on the person's area when it has a location; the world view is only for no location, so that part was not
+  changed.
