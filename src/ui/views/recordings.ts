@@ -11,6 +11,7 @@ import type { DetectionRecord, RecordingRecord } from '../../storage/types';
 import { downloadBlob } from '../../export/download';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
+import { closestCandidates, NO_MATCH_TIP, NO_MATCH_TITLE, noMatchLines } from '../../species/no-match';
 import { el, fmtDateTime, fmtDuration, pct } from '../dom';
 import { whyExplanationText } from '../why-text';
 import { hrefFor } from '../router';
@@ -101,6 +102,8 @@ export function recordingsView(ctx: ViewContext): View {
   };
 }
 
+const NO_BIRD_TO_LOOK_UP = 'No bird matched confidently, so there’s nothing to look up.';
+
 export function recordingDetailView(ctx: ViewContext, id: string): View {
   const { controller } = ctx;
   const root = el('div', null, el('section', { class: 'card' }, el('p', { class: 'muted' }, 'Loading recording…')));
@@ -155,7 +158,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       sciName.style.display = sp ? '' : 'none';
       preview?.setColor(sp ? speciesColor(sp.scientific).css : cssToken('accent', '#5FCB97'));
       if (!sp) {
-        aboutSlot.replaceChildren(el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted' }, 'Analyse to see which bird this is.')));
+        aboutSlot.replaceChildren(el('section', { class: 'card' }, el('h2', null, 'About this bird'), el('p', { class: 'small muted', 'data-testid': 'about-empty' }, rec.analyzedAt != null ? NO_BIRD_TO_LOOK_UP : 'Analyse to see which bird this is.')));
         askSlot.replaceChildren();
         return;
       }
@@ -231,11 +234,29 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         }
       }
       if (perSpecies.size === 0) {
-        detectionsBox.appendChild(el('p', { class: 'muted' }, windows.length ? 'Nothing above the threshold.' : 'Not analysed yet.'));
-        whyBox.replaceChildren(el('p', { class: 'muted' }, 'Analyse the recording first.'));
-        confidenceBox.replaceChildren(el('p', { class: 'small muted' }, windows.length ? `Nothing above your minimum of ${pct(s.threshold)}.` : 'Not analysed yet.'));
+        // Analysed with no match is a result, saved with the recording, not "Not analysed yet" (DECISIONS.md #104).
+        const analysed = windows.length > 0 || rec.analyzedAt != null;
+        if (!analysed) {
+          detectionsBox.appendChild(el('p', { class: 'muted' }, 'Not analysed yet.'));
+          whyBox.replaceChildren(el('p', { class: 'muted' }, 'Analyse the recording first.'));
+          confidenceBox.replaceChildren(el('p', { class: 'small muted' }, 'Not analysed yet.'));
+        } else {
+          // While windows arrive, the near misses so far; once settled, the saved ones.
+          const near = cancelCurrent ? closestCandidates(windows, controller.species, s.threshold, s.includeNonBird) : (rec.closest ?? []);
+          const named = near.map((n) => ({ common: controller.speciesByScientific(n.scientific)?.common ?? n.scientific, prob: n.prob }));
+          const listenAgain = el('a', { class: 'btn primary', href: '#/listen', 'data-testid': 'no-match-cta' }, 'Try a longer recording');
+          detectionsBox.append(
+            el('div', { class: 'stack no-match', 'data-testid': 'no-match' }, el('p', { style: 'margin:0', class: 'no-match-title' }, NO_MATCH_TITLE), ...noMatchLines(named, s.threshold).map((t) => el('p', { class: 'small', style: 'margin:0' }, t)), el('p', { class: 'small muted', style: 'margin:0' }, NO_MATCH_TIP), el('div', { class: 'row' }, listenAgain)),
+          );
+          whyBox.replaceChildren(el('p', { class: 'muted' }, 'Nothing to explain: no bird matched confidently.'));
+          confidenceBox.replaceChildren(el('p', { class: 'small muted' }, `${NO_MATCH_TITLE}: nothing reached your minimum of ${pct(s.threshold)}.`));
+        }
         // Keep the title while windows are still arriving; the final render after the analysis settles it.
-        if (!cancelCurrent) setTopSpecies(null);
+        if (!cancelCurrent) {
+          setTopSpecies(null);
+          const aboutEmpty = aboutSlot.querySelector('[data-testid="about-empty"]');
+          if (aboutEmpty && analysed) aboutEmpty.textContent = NO_BIRD_TO_LOOK_UP;
+        }
         return;
       }
       // Coarse on a phone without WebGL, with a switch to the chosen level (DECISIONS.md #85).
@@ -341,7 +362,11 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       progress.style.display = 'none';
       // "Analysed" only once the results are saved, so the Recordings list can already group it by bird.
       try {
-        if (!cancelled) await persist(s.threshold, s.includeNonBird);
+        if (!cancelled) {
+          await persist(s.threshold, s.includeNonBird);
+          // Drawn from what was saved, the same as when the recording is opened again.
+          renderDetections();
+        }
       } finally {
         progressText.textContent = cancelled ? 'Cancelled.' : `Analysed ${windows.length} windows.`;
         analyzeBtn.disabled = false;
@@ -362,6 +387,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       }
       await recordDetections(records);
       rec.summary = controller.summarize(summaryEntries);
+      rec.closest = summaryEntries.length ? [] : closestCandidates(windows, controller.species, threshold, includeNonBird);
       rec.analyzedAt = Date.now();
       await putRecording(rec);
       controller.emit('detections-changed', undefined);

@@ -25,6 +25,8 @@ export interface RecordingRecord {
   /** Species seen in the most recent analysis of this recording. */
   summary: SpeciesSummary[];
   analyzedAt: number | null;
+  /** The best guesses under the minimum from the last analysis, highest first (DECISIONS.md #104). Absent on older rows. */
+  closest?: Array<{ scientific: string; prob: number }>;
 }
 
 /** A recording's details without its audio, as lists return them (DECISIONS.md #87). */
