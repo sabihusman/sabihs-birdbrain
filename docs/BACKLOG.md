@@ -18,7 +18,11 @@ wording in 12) are being fixed as work; these are the findings that needed a dec
 4. **Wording** (finding 9): the welcome button becomes "Start listening" (option B, replacing the
    "Start identifying" chosen in #94); "windows" is replaced with plain words in everyday text (option A).
 5. **Layout bubble stays as it is** (finding 13, option A). No change.
-6. **No location on Species: how to pick a place** (finding 2). Mockup of the options requested; not decided.
+6. **No location on Species: pick a place by name** (finding 2, option A, decided Oct 31 from a mockup). The banner
+   ("Showing every species in the world.") offers **Use my location** and **Pick a place**: a town search through
+   OpenStreetMap's Nominatim (already used to name Places on the Map), and the chosen place becomes the manual
+   location. The privacy text must say that a typed name goes to OpenStreetMap. If the phone keeps blocking
+   location, the banner gives the Safari / Chrome steps (the Chrome steps still need checking on a device).
 7. **Conservation status on the member ID card** (finding 12, option A): one line, "Conservation: [rank] in
    [state/province] — NatureServe", through a new members-only API call (the server already fetches
    NatureServe for Ask).
