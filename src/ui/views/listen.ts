@@ -1,4 +1,4 @@
-import { KEEP_SIGHTING, KEPT_SIGHTING, NOT_USUAL_SUBTITLE, notUsualToggleText, SOUND_ONLY_NOTE } from '../../species/sound-only';
+import { KEEP_SIGHTING, KEPT_SIGHTING, locationBanner, NOT_USUAL_SUBTITLE, notUsualToggleText, SOUND_ONLY_NOTE } from '../../species/sound-only';
 import { BROWSER_UNSUPPORTED_HINT, BROWSER_UNSUPPORTED_TITLE } from '../../app/browser-support';
 import type { WindowResult } from '../../app/controller';
 import type { ListenLayout } from '../../app/settings';
@@ -127,6 +127,29 @@ export function listenView(ctx: ViewContext): View {
   let showNotUsual = false;
   /** Placed per layout: under the results elsewhere, under the earlier birds in Focus. */
   const notUsualBox = el('div', { class: 'stack not-usual' }, notUsualLine, notUsualList);
+  // While listening, one line says what the location filter does and carries the held-back count (DECISIONS.md #103);
+  // the separate "N birds not usual here · show" line takes over again once listening stops.
+  const PIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+  const bannerIcon = el('span', { class: 'loc-banner-icon' });
+  bannerIcon.innerHTML = PIN;
+  const bannerText = el('span', null, '');
+  const bannerCount = el('button', { class: 'loc-banner-count', type: 'button', 'data-testid': 'location-banner-count' }, '');
+  const banner = el('div', { class: 'loc-banner', 'data-testid': 'location-banner', role: 'status' }, el('a', { class: 'loc-banner-text', href: '#/settings' }, bannerIcon, bannerText), bannerCount);
+  const renderBanner = () => {
+    const l = controller.location.get();
+    const held = controller.getNotUsual().filter((b) => !b.kept).length;
+    const b = locationBanner(!!l.location, l.status, held, showNotUsual);
+    banner.dataset.kind = b.kind;
+    bannerText.textContent = b.text;
+    bannerCount.textContent = b.count ?? '';
+    bannerCount.hidden = !b.count;
+  };
+  bannerCount.addEventListener('click', () => {
+    showNotUsual = !showNotUsual;
+    renderNotUsual();
+    // The list sits with the results, which can be further down than the banner.
+    if (showNotUsual) notUsualList.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  });
   const resultsEmpty = el('p', { class: 'muted', 'data-testid': 'results-empty' }, 'Nothing above your minimum yet. Dawn is best.');
   const recentList = el('div', { class: 'recent-list', 'data-testid': 'recent' });
   const recentEmpty = el('p', { class: 'small muted', 'data-testid': 'recent-empty' }, 'Birds you hear appear here, one card each.');
@@ -212,23 +235,27 @@ export function listenView(ctx: ViewContext): View {
     recentBody.remove();
     dock.remove();
     notUsualBox.remove();
+    banner.remove();
     // Focus moves the conditions note out of the panel; every other layout keeps it above Stop and Record.
     if (conditionsLine.parentElement !== panel) panel.insertBefore(conditionsLine, panel.lastElementChild);
     if (next === 'focus') {
       // The conditions note reads above the bird; the panel with Stop and Record is pinned above the tab bar.
       focusBlock.prepend(conditionsLine);
+      focusBlock.prepend(banner);
       moreList.appendChild(resultsList);
       focusBlock.appendChild(notUsualBox);
       recentDetails.appendChild(recentBody);
       root.replaceChildren(readyBlock, focusBlock, credit, panel, dock, bubble.el);
     } else if (next === 'dock') {
       resultsBlock.prepend(resultsList);
+      resultsBlock.prepend(banner);
       lowLine.after(notUsualBox);
       recentInline.appendChild(recentBody);
       // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
       root.replaceChildren(readyBlock, recentInline, resultsBlock, how, credit, dock, bubble.el);
     } else {
       resultsBlock.prepend(resultsList);
+      panel.insertBefore(banner, panel.lastElementChild);
       lowLine.after(notUsualBox);
       recentDetails.appendChild(recentBody);
       root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails, credit, bubble.el);
@@ -277,6 +304,9 @@ export function listenView(ctx: ViewContext): View {
     readyBlock.dataset.status = st.status;
     root.dataset.status = st.status;
     const listening = st.status === 'listening' || st.status === 'paused';
+    setHidden(banner, !listening);
+    renderBanner();
+    setHidden(notUsualLine, listening || controller.getNotUsual().every((b) => b.kept));
     // Never next to Stop: the bubble shows before and after listening only.
     setHidden(bubble.el, listening);
     root.classList.toggle('has-layout-bubble', !listening);
@@ -396,7 +426,9 @@ export function listenView(ctx: ViewContext): View {
   const renderNotUsual = () => {
     const birds = controller.getNotUsual().filter((b) => !b.kept);
     notUsualLine.textContent = notUsualToggleText(birds.length, showNotUsual);
-    setHidden(notUsualLine, birds.length === 0);
+    // While listening the banner carries the count; the line is for after Stop.
+    setHidden(notUsualLine, birds.length === 0 || controller.listening);
+    renderBanner();
     setHidden(notUsualList, !showNotUsual || birds.length === 0);
     if (!showNotUsual) return;
     notUsualList.replaceChildren(
@@ -600,6 +632,7 @@ export function listenView(ctx: ViewContext): View {
     }),
     controller.on('location', () => {
       renderChips();
+      renderBanner();
       renderState(); // the no-location note depends on the location and on the layout
     }),
     settings.on('change', (s) => {

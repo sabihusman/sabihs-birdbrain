@@ -2929,3 +2929,16 @@ other open branches, so this may be renumbered at merge.)
   session (one per species, cleared when listening starts again), and Keep saves it as an auto-saved clip
   named like the others, linked to the sound-only sighting. A clip that can't be stored never costs the
   sighting. With auto-save off, nothing changes. Not retroactive: birds kept before this have no audio to save.
+
+## 103. A one-line location banner while listening
+
+- **Why (Sabih):** while listening, say that the location is taken into account, so a strong sound match can
+  still be held back. As small as possible; approved from a mockup of all three layouts.
+- **Wording** (`locationBanner` in `src/species/sound-only.ts`, one line at 320 px): "Birds not usual here are
+  held back"; with held-back birds "Not usual here: 2 · show"; while GPS looks "Finding your location…"; and,
+  grey, "No location: every species can show" when the filter does nothing (denied, no fix, or turned off).
+  No "Location on": it is the default, so the words say what the filter does instead (Sabih's call).
+- **Where:** only while listening. Consolidated: inside the panel above Stop and Record. Bottom dock: above the
+  cards. Focus: above the bird. The count opens the same list with "Keep this sighting" (and scrolls to it);
+  the rest of the pill opens Settings. It replaces the "N birds not usual here · show" line while listening;
+  that line comes back after Stop, so held-back birds can still be kept then.
