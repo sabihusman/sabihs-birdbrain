@@ -2500,10 +2500,13 @@ test('a one-line location banner while listening, in each layout, grey with no l
       }
       // One line, in the place each layout reads first.
       expect((await banner.boundingBox())!.height).toBeLessThanOrEqual(48);
-      const anchor = (await page.getByTestId(where).boundingBox())!;
-      const b = (await banner.boundingBox())!;
-      if (layout === 'consolidated') expect(b.y).toBeGreaterThanOrEqual(anchor.y);
-      else expect(b.y + b.height).toBeLessThanOrEqual(anchor.y + 1);
+      // Read in one go from the page's order, so cards arriving or the page moving between two measurements can't flake it.
+      const placed = await page.evaluate((id) => {
+        const b = document.querySelector('[data-testid="location-banner"]')!;
+        const anchor = document.querySelector(`[data-testid="${id}"]`)!;
+        return id === 'listen-panel' ? anchor.contains(b) : !!(b.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING) && b.parentElement === anchor.parentElement;
+      }, where);
+      expect(placed, `banner placed for ${layout}`).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
       const stop = page.getByTestId(layout === 'dock' ? 'dock-stop' : 'stop');
       await stop.click();
