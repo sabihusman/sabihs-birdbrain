@@ -12,7 +12,7 @@ export interface BirdAmpWindows {
 
 export const BIRDAMP_WINDOWS_KEY = 'birdbrain.birdamp.v1';
 export const WINDOW_IDS: readonly BirdAmpWindow[] = ['player', 'confidence', 'library'];
-export const WINDOW_TITLES: Record<BirdAmpWindow, string> = { player: 'BirdbrainAmp', confidence: 'Confidence', library: 'BirdAmp Library' };
+export const WINDOW_TITLES: Record<BirdAmpWindow, string> = { player: 'BirdbrainAmp', confidence: 'Confidence', library: 'BirdAmp Playlist' };
 const STATES: readonly WindowState[] = ['open', 'min', 'closed'];
 
 export function defaultWindows(): BirdAmpWindows {

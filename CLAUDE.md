@@ -47,7 +47,7 @@ Key modules:
   and the raw sample ring (see DECISIONS.md #24–26).
 - BirdAmp Hybrid (`src/ui/birdamp/`, DECISIONS.md #110): a fourth Listen layout for approved members
   (`effectiveLayout` in `src/app/access.ts` shows Focus to anyone else). `view.ts` builds the player, confidence and
-  library windows and borrows Listen's canvases; `windows.ts` (order/state, `birdbrain.birdamp.v1`), `library.ts`
+  library windows and borrows Listen's canvases; `windows.ts` (order/state, `birdbrain.birdamp.v1`), `library.ts` (the "BirdAmp Playlist", Winamp look #111)
   (HEARD / TODAY / ALL BIRDS / NEAR YOU rows), `lcd.ts`, `icon.ts` (gold bolt). `src/ui/skin.ts` sets
   `html[data-skin="birdamp"]`, which skins the header and tab bar on Listen only. Pause is
   `AppController.pauseListening()` (mic released, session and clock kept; `startListening()` carries on).

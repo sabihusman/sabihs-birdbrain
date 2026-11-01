@@ -3066,3 +3066,23 @@ Each finding was checked against the code first.
   place). Rows link to the species page, 44 pt+, newest first, no durations. Up to 120 rows; search narrows.
 - **Limits:** LCD spec text is about 9–10 pt on a phone. With the full player open no Library row fits on an iPhone
   screen; minimising the player gives the birds the room (as the design doc intends). The skin is dark in both themes.
+
+## 111. BirdAmp, closer to classic Winamp 2.x
+
+- **Why (Sabih, Nov 1):** "as true to the Winamp media player look and design philosophy as can be integrated";
+  the before/after mockup was approved.
+- **Now:** gold ridged stripes either side of a centred title on every window; the windows dock (no gaps, square
+  corners) like Winamp's snapped main window, equalizer and playlist; the main window puts the play-state symbol and
+  big clock over the oscilloscope (the live waveform) on the left, and the scrolling title with *** separators, LCD
+  info boxes (48 kHz, BirdNET 2.4, MONO lit, STEREO dim; all true) and a volume-style meter on the right. The meter
+  shows the mic level with the automatic gain written on it, with no knob: display only. One row of flat keys with EQ
+  and PL beside them; the small words under the icons stay for the plain-language rule (Winamp has none). The
+  Library is the **BirdAmp Playlist**, drawn like Winamp's playlist editor: green on black, the bird in the marquee in
+  white on a navy bar, the percentage where the track length goes, and a foot with search and a total box ("2 birds ·
+  5 det") where Winamp shows total time; an empty list says why. Windowshade turns the whole window into one thin bar
+  (the player keeps clock, bird and ▶ ❚❚ ■; ▢ restores). The dB range is no longer repeated on the LCD: the
+  spectrogram prints it.
+- **Left out:** controls with no job here (seek bar, volume and balance knobs, shuffle and repeat, the clutterbar, the
+  playlist's ADD / REM / SEL / MISC, the 10-band EQ sliders) and a bitmap pixel font. The navy selection colour is an
+  example value from a published skin guide, not confirmed as Winamp's shipped default.
+- **At 320 px** the info boxes take two lines; at iPhone widths (390–430 px) one.
