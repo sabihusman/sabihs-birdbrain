@@ -3030,6 +3030,8 @@ Each finding was checked against the code first.
   (`#/help`, section `how-birdnet-decides`), and Listen keeps one "How BirdNET decides ›" link. The step chips, the
   three pictures and the legend are unchanged. With three or more birds the legend wraps, so Bottom dock and Focus
   can still push the chart's bottom under the Stop bar.
+- **Follow-up (Sabih, Nov 1, iPhone screenshot):** the ⓘ sat on top of "● Listening" while listening, and the line
+  repeated the header's own "Listening". The title row now holds only the title, ⓘ and Hide.
 - **Consolidated** shows the result cards only (they are the list). **Bottom dock**'s sighting cards start open; a
   tap closes one. **Focus**'s big card reads "Very likely · best 93%": 90% and up Very likely, 70–89% Likely, else
   Possible (`confidenceWords`, judged on the rounded percentage shown so the two always agree). These words describe

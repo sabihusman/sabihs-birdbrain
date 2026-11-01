@@ -1150,7 +1150,18 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     if (layout === 'consolidated') {
       // Live pipeline chips (DECISIONS.md #57): the stages light in order while the mic is on.
       await page.getByTestId('pipeline').getByText('See the sound').click();
-      await expect(page.getByTestId('pipeline-live')).toBeVisible();
+      // The header says Listening; the title row has only the title, ⓘ and Hide, and they never overlap (#109).
+      await expect(page.getByTestId('model-status')).toContainText('Listening');
+      await expect(page.getByTestId('pipeline').locator('summary')).not.toContainText('Listening');
+      const clash = await page.evaluate(() => {
+        const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+        const info = r('[data-testid="see-info"]');
+        const range = document.createRange();
+        range.selectNodeContents(document.querySelector('.pipeline-fold .fold-title')!);
+        const title = range.getBoundingClientRect();
+        return title.right > info.left && title.left < info.right && title.bottom > info.top && title.top < info.bottom;
+      });
+      expect(clash, 'ⓘ clear of the title').toBe(false);
       const chips = page.getByTestId('pipeline-chips');
       await expect(chips.locator('.pchip.active, .pchip.done')).not.toHaveCount(0, { timeout: 15_000 });
       // Mic runs before Result, so it is lit (active or done) before Result ever is.
@@ -1164,7 +1175,6 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       // Stopped: every chip plain again.
       const chips = page.getByTestId('pipeline-chips');
       await expect(chips.locator('.pchip.active, .pchip.done')).toHaveCount(0);
-      await expect(page.getByTestId('pipeline-live')).toBeHidden();
       // Reduce motion: no stepping, only a finished window lights Result.
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await start.click();

@@ -475,7 +475,6 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
    stage takes the accent fill, stages already done in this window a soft tint. */
 .pipeline-fold > summary { flex-wrap: wrap; row-gap: var(--space-1); }
 .pipeline-summary { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; width: 100%; }
-.pipeline-live { color: var(--live); font-size: var(--text-xs); font-weight: var(--weight-semibold); }
 .chip-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .chip-sep { color: var(--muted); font-size: var(--text-xs); }
 .pchip { padding: 2px 8px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: var(--text-xs); font-weight: var(--weight-regular); transition: background var(--motion), color var(--motion), border-color var(--motion); }
@@ -658,7 +657,7 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .listen-dock-layout .ready-extras { align-items: stretch; }
 .listen-dock-layout .listen-status-line { text-align: left; }
 
-/* "See the sound" (DECISIONS.md #109): title, "● Listening" and "Hide" share one row, the chips below,
+/* "See the sound" (DECISIONS.md #109): title, ⓘ and "Hide" share one row, the chips below,
    the ⓘ for the captions on the same row (it lives in the body, so tapping it never toggles the section). */
 /* The ⓘ button cannot sit inside <summary> (a tap would also toggle the fold), so it is placed over the title row, centred on it. */
 .pipeline-fold { position: relative; }

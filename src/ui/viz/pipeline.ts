@@ -21,7 +21,6 @@ function prefersReducedMotion(): boolean {
 export class PipelineView {
   readonly el: HTMLDetailsElement;
   private readonly chips = new Map<PipelineStage, HTMLElement>();
-  private readonly live: HTMLElement;
   private state: PipelineState = emptyPipelineState;
   private queue: PipelineStage[] = [];
   private timer: number | null = null;
@@ -37,7 +36,6 @@ export class PipelineView {
       strip.append(chip);
     });
 
-    this.live = el('span', { class: 'pipeline-live', 'data-testid': 'pipeline-live', hidden: true }, '● Listening');
     this.el = disclosure(
       {
         title: 'See the sound',
@@ -52,8 +50,7 @@ export class PipelineView {
       opts.info ?? null,
       opts.lead ?? null,
     );
-    // "● Listening" shares the title row instead of a line of its own.
-    this.el.querySelector('.fold-head')?.append(this.live);
+    // No "● Listening" of its own: the header already says so, and it collided with the ⓘ (DECISIONS.md #109).
     this.paint();
   }
 
@@ -77,7 +74,6 @@ export class PipelineView {
   setListening(on: boolean): void {
     if (this.listening === on) return;
     this.listening = on;
-    this.live.hidden = !on;
     if (!on) {
       this.queue = [];
       if (this.timer !== null) clearTimeout(this.timer);
