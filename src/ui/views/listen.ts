@@ -3,10 +3,9 @@ import { BROWSER_UNSUPPORTED_HINT, BROWSER_UNSUPPORTED_TITLE } from '../../app/b
 import type { WindowResult } from '../../app/controller';
 import type { ListenLayout } from '../../app/settings';
 import { WINDOW_SECONDS } from '../../model/constants';
-import type { Species } from '../../model/labels';
 import { selectDetections } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
-import { groupRecent, LUMP_GAP_SECONDS, toggleExpanded, type KeyedHit } from '../../species/recent';
+import { groupRecent, LUMP_GAP_SECONDS, toggleExpanded } from '../../species/recent';
 import { plusCode } from '../../geo/pluscode';
 import type { View, ViewContext } from '../app';
 import { recentGroupCard, type RecentGroupCardHandle } from '../components/recent-group-card';
@@ -44,8 +43,6 @@ export const STATE_TEXT: Record<ListenStatus, { title: string; hint: string }> =
   unsupported: { title: BROWSER_UNSUPPORTED_TITLE, hint: BROWSER_UNSUPPORTED_HINT },
 };
 
-/** Hits kept for the Listen screen (this view's session). Grouping and lumping happen at render time (src/species/recent.ts). */
-const MAX_RECENT_HITS = 400;
 
 export function listenView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -264,8 +261,8 @@ export function listenView(ctx: ViewContext): View {
   applyLayout(layout);
 
   // ---- state -----------------------------------------------------------------
-  let lastResult: WindowResult | null = null;
-  const hits: KeyedHit<Species>[] = [];
+  // This session's birds live in the controller, so they survive leaving Listen (DECISIONS.md #107).
+  let lastResult: WindowResult | null = controller.getLastWindow();
   const expanded = new Set<string>();
   // Cards are kept per species and updated in place, so each window doesn't rebuild them (no flicker).
   const resultCards = keyedPool<ResultCardHandle>();
@@ -290,7 +287,7 @@ export function listenView(ctx: ViewContext): View {
   };
   /** The highlighted spot before any bird: what to do next, in plain words. */
   const renderFocusLatestEmpty = (listening: boolean) => {
-    if (hits.length > 0) return;
+    if (controller.getSessionHits().length > 0) return;
     const text = listening ? 'Listening… the latest bird appears here.' : 'No birds yet. Tap Start listening below.';
     if (focusLatest.textContent !== text) focusLatest.replaceChildren(el('p', { class: 'muted focus-empty' }, text));
   };
@@ -387,7 +384,7 @@ export function listenView(ctx: ViewContext): View {
       const shown = new Set(dets.map((d) => d.index));
       low = lastResult.scores.filter((x) => x.prob < s.threshold && x.prob >= LOW_FLOOR && x.inRange && (controller.species[x.index]?.isBird || s.includeNonBird)).length;
       // One card per species, newest first; a new hit moves its species to the top (src/species/recent.ts).
-      const items = groupRecent(hits);
+      const items = groupRecent(controller.getSessionHits());
       const cardFor = (g: (typeof items)[number], large = false) => {
         const opts = { confidence: g.best, time: g.lastHeard, heardTimes: g.detections.length, large, conditions: large ? conditionsText : undefined, soundOnly: g.soundOnly };
         const card = resultCards.take(g.key, () => resultCard(ctx, g.species, opts));
@@ -418,7 +415,7 @@ export function listenView(ctx: ViewContext): View {
     syncChildren(resultsList, listNodes);
     lowLine.textContent = showLow ? 'Hide sounds below your minimum' : `${low} more sound${low === 1 ? '' : 's'} below your minimum · show`;
     setHidden(lowLine, low === 0);
-    setHidden(resultsEmpty, hits.length > 0 || showLow);
+    setHidden(resultsEmpty, controller.getSessionHits().length > 0 || showLow);
     timeline.setThreshold(s.threshold);
     dirty = true;
   };
@@ -444,7 +441,6 @@ export function listenView(ctx: ViewContext): View {
             keep.textContent = KEEP_SIGHTING;
             return;
           }
-          hits.push({ key: sp.scientific, species: sp, time: b.time, confidence: b.prob, soundOnly: true });
           ctx.notify({ kind: 'info', text: `${sp.common} kept. ${SOUND_ONLY_NOTE}` });
           renderResults();
           renderRecent();
@@ -455,7 +451,7 @@ export function listenView(ctx: ViewContext): View {
   };
 
   const renderRecent = () => {
-    const groups = groupRecent(hits);
+    const groups = groupRecent(controller.getSessionHits());
     setHidden(recentEmpty, groups.length > 0);
     const detections = groups.reduce((n, g) => n + g.detections.length, 0);
     recentSummary.textContent = groups.length ? `${groups.length} bird${groups.length === 1 ? '' : 's'} · ${detections} detection${detections === 1 ? '' : 's'}` : '';
@@ -490,12 +486,6 @@ export function listenView(ctx: ViewContext): View {
     const colors = r.detections.map((d) => speciesColor(controller.species[d.index]?.scientific ?? ''));
     const names = r.detections.map((d) => controller.species[d.index]?.common ?? '');
     spectrogram.addMark({ startSec: r.offsetSec, endSec: r.offsetSec + WINDOW_SECONDS, colors, labels: names });
-    for (const d of r.detections) {
-      const sp = controller.species[d.index];
-      if (!sp) continue;
-      hits.push({ key: sp.scientific, species: sp, time: r.time, confidence: d.prob, ...(r.soundOnly?.includes(d.index) ? { soundOnly: true } : {}) });
-    }
-    if (hits.length > MAX_RECENT_HITS) hits.splice(0, hits.length - MAX_RECENT_HITS);
     renderResults();
     renderRecent();
   };
@@ -676,6 +666,7 @@ export function listenView(ctx: ViewContext): View {
     if (controller.listening) status.textContent = 'Listening…';
     renderState();
     renderResults();
+    renderRecent();
     renderNotUsual();
   }
 

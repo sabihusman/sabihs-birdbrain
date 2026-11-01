@@ -21,6 +21,7 @@ import { PositionWatch, positionStamp, type PositionStamp } from './position-wat
 import { shouldAutoSaveClip, type LastAutoClip } from './autoclip';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
+import type { KeyedHit } from '../species/recent';
 import { isModelCached, markModelWanted, safeLocalStorage } from './first-visit';
 import { askToKeepStorageOnce, PERSIST_REASON, persistOutcomeText } from '../storage/quota';
 
@@ -518,7 +519,7 @@ export class AppController extends Emitter<ControllerEvents> {
       this.stats = { ...this.stats, windows: this.stats.windows + 1, lastInferMs: res.inferMs };
       this.emit('stage', 'result');
       result = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, ephemeral: false, soundOnly: kept.map((d) => d.index) };
-      this.emit('window-result', result);
+      this.publish(result);
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Analysis failed: ${(e as Error).message}` });
       return;
@@ -531,6 +532,33 @@ export class AppController extends Emitter<ControllerEvents> {
     } catch (e) {
       this.warnSaveFailed('sighting', e);
     }
+  }
+
+  /**
+   * The birds Listen shows, kept here rather than in the view so they are still there after another tab or a
+   * layout change in Settings (DECISIONS.md #107). Kept for the page's life, as the view did; capped.
+   */
+  private sessionHits: KeyedHit<Species>[] = [];
+  private lastWindow: WindowResult | null = null;
+  static readonly MAX_SESSION_HITS = 400;
+
+  getSessionHits(): readonly KeyedHit<Species>[] {
+    return this.sessionHits;
+  }
+  getLastWindow(): WindowResult | null {
+    return this.lastWindow;
+  }
+
+  /** Record a window's birds, then tell the views. */
+  private publish(result: WindowResult): void {
+    this.lastWindow = result;
+    for (const d of result.detections) {
+      const sp = this.species[d.index];
+      if (!sp) continue;
+      this.sessionHits.push({ key: sp.scientific, species: sp, time: result.time, confidence: d.prob, ...(result.soundOnly?.includes(d.index) ? { soundOnly: true } : {}) });
+    }
+    if (this.sessionHits.length > AppController.MAX_SESSION_HITS) this.sessionHits.splice(0, this.sessionHits.length - AppController.MAX_SESSION_HITS);
+    this.emit('window-result', result);
   }
 
   /** Birds hidden by the location filter this session, best window each, by scientific name (DECISIONS.md #93). */
@@ -609,6 +637,7 @@ export class AppController extends Emitter<ControllerEvents> {
     }
     bird.kept = true;
     this.keptAgainstFilter.add(scientific);
+    this.sessionHits.push({ key: sp.scientific, species: sp, time: bird.time, confidence: bird.prob, soundOnly: true });
     this.emit('detections-changed', undefined);
     this.emit('not-usual', this.getNotUsual());
     return true;
@@ -845,7 +874,7 @@ export class AppController extends Emitter<ControllerEvents> {
     const detections = selectDetections(out.scores, this.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird });
     this.emit('stage', 'result');
     const result: WindowResult = { windowId: ++this.windowCounter, time: Date.now(), offsetSec: 0, scores: out.scores, detections, inferMs: out.inferMs, geoApplied: false, ephemeral: true };
-    this.emit('window-result', result);
+    this.publish(result);
     return result;
   }
 

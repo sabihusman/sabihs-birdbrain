@@ -2992,3 +2992,12 @@ Each finding was checked against the code first.
   says "No sightings with a location yet" on the map itself with one button, "Listen now". The map already opened
   on the person's area when it has a location; the world view is only for no location, so that part was not
   changed.
+
+## 107. The birds heard this session stay on Listen when you leave it
+
+- **Why (Listen layouts audit, Nov 1; verified in the code):** Listen kept the birds it showed in the view itself,
+  so visiting another tab, or changing the layout in Settings, built a new view with none, while the microphone
+  kept listening. (The layout bubble kept them because it changes the layout without leaving the page.)
+- **Now:** the controller keeps them (`getSessionHits`, `getLastWindow`), recorded as each window is published and
+  when a "not usual here" bird is kept, capped at 400 hits; Listen draws from there whenever it opens. Kept for the
+  page's life, as the view did when it was never left (so Stop keeps the birds, #83).
