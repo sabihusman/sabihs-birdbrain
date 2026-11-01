@@ -213,6 +213,9 @@ See DECISIONS.md for the full list. The ones that bite:
   (`scripts/serve-models.mts`); a local `npm run build` for a preview needs
   `VITE_MODEL_BASE_URL=/models/birdnet-v2.4/`, which is what CI uses.
 - Playwright here runs Chromium only; iOS behaviour must be tested on a device.
+- Chrome on iPhone (seen on Sabih's phone, Oct 28) lets the fixed bottom tab bar scroll with the page, so it
+  floats mid-screen; Safari is fine. A Chrome iOS bug (reported in WebKit bug 297779, comment 41, iOS 26.6.1 /
+  Chrome 154), not the app's CSS. Sabih chose to leave it (Nov 1): no Chrome-only workaround.
 - `el()` sets styles through `style.cssText` (CSSOM), never the `style`
   attribute, because the CSP has no `'unsafe-inline'`. Keep it that way.
 - Changing the API domain later: `VITE_API_BASE_URL` (or the default in
