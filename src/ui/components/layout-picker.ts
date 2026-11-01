@@ -1,5 +1,6 @@
 import type { ListenLayout } from '../../app/settings';
 import { el } from '../dom';
+import { birdAmpBolt } from '../birdamp/icon';
 
 /**
  * Settings → Listen layout: three preview tiles in one row (Consolidated, Bottom dock, Focus),
@@ -13,10 +14,12 @@ import { el } from '../dom';
  */
 
 /** `label` is the visible text (may hold a soft hyphen for 320 px screens); `name` is the accessible one. */
-export const LAYOUT_OPTIONS: ReadonlyArray<{ value: ListenLayout; name: string; label?: string; description: string }> = [
+export const LAYOUT_OPTIONS: ReadonlyArray<{ value: ListenLayout; name: string; label?: string; description: string; membersOnly?: boolean }> = [
   { value: 'consolidated', name: 'Consolidated', label: 'Consoli\u00ADdated', description: 'Panel on top, results below' },
   { value: 'dock', name: 'Bottom dock', description: 'Results fill the screen, controls above the tabs' },
   { value: 'focus', name: 'Focus', description: 'One large card for the latest bird' },
+  // Approved members only (Sabih's 3A, DECISIONS.md #110): signed out or waiting, the tile is not shown.
+  { value: 'birdamp', name: 'BirdAmp', description: 'Winamp player + library', membersOnly: true },
 ];
 
 /** Phone wireframes (52×73 viewBox). Classes are coloured in styles.css: wf-frame, wf-panel, wf-row, wf-tabs. */
@@ -47,7 +50,15 @@ const WIREFRAMES: Record<ListenLayout, string> = {
     '<rect class="wf-row" x="10" y="43" width="16" height="3" rx="1.5"/>' +
     '<rect class="wf-panel" x="6" y="55" width="40" height="7" rx="3"/>' +
     '<rect class="wf-tabs" x="6" y="65" width="40" height="3" rx="1.5"/>',
+  // Not a wireframe: BirdAmp is drawn with its gold bolt (layoutArt()).
+  birdamp: '',
 };
+
+/** A layout's picture: the wireframe, or BirdAmp's bolt on its white tile. */
+export function layoutArt(value: ListenLayout, width: number): string {
+  if (value === 'birdamp') return birdAmpBolt(Math.round(width * 0.85));
+  return layoutWireframeSvg(value, width);
+}
 
 /** One layout's wireframe as an SVG string at `width` px (the Listen layout bubble uses small ones, DECISIONS.md #101). */
 export function layoutWireframeSvg(value: ListenLayout, width: number): string {
@@ -61,10 +72,14 @@ export interface LayoutPicker {
   el: HTMLElement;
   /** Reflect a value chosen elsewhere (settings change) without emitting. */
   sync(value: ListenLayout): void;
+  /** Show or hide the members-only tiles (the signed-in state changed). */
+  setMember(member: boolean): void;
 }
 
-export function layoutPicker(initial: ListenLayout, onChange: (value: ListenLayout) => void): LayoutPicker {
+export function layoutPicker(initial: ListenLayout, onChange: (value: ListenLayout) => void, member = false): LayoutPicker {
   let current: ListenLayout = initial;
+  let isMember = member;
+  const shown = () => LAYOUT_OPTIONS.filter((o) => isMember || !o.membersOnly).map((o) => o.value);
   const tiles = new Map<ListenLayout, HTMLButtonElement>();
 
   const render = () => {
@@ -73,6 +88,7 @@ export function layoutPicker(initial: ListenLayout, onChange: (value: ListenLayo
       tile.setAttribute('aria-checked', on ? 'true' : 'false');
       tile.tabIndex = on ? 0 : -1;
       tile.classList.toggle('selected', on);
+      tile.hidden = !shown().includes(value);
     }
   };
 
@@ -88,7 +104,7 @@ export function layoutPicker(initial: ListenLayout, onChange: (value: ListenLayo
   const group = el('div', { class: 'layout-picker', role: 'radiogroup', 'aria-label': 'Listen layout', 'data-testid': 'listen-layout' });
   for (const opt of LAYOUT_OPTIONS) {
     const art = el('span', { class: 'layout-tile-art', 'aria-hidden': 'true' });
-    art.innerHTML = `<svg class="layout-wireframe" viewBox="0 0 52 73" width="52" height="73" focusable="false">${WIREFRAMES[opt.value]}</svg><span class="layout-tile-check">${CHECK}</span>`;
+    art.innerHTML = `${opt.value === 'birdamp' ? `<span class="layout-bolt">${layoutArt('birdamp', 52)}</span>` : `<svg class="layout-wireframe" viewBox="0 0 52 73" width="52" height="73" focusable="false">${WIREFRAMES[opt.value]}</svg>`}<span class="layout-tile-check">${CHECK}</span>`;
     const tile = el(
       'button',
       {
@@ -112,7 +128,7 @@ export function layoutPicker(initial: ListenLayout, onChange: (value: ListenLayo
     const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : e.key === 'Home' ? -Infinity : e.key === 'End' ? Infinity : 0;
     if (step === 0) return;
     e.preventDefault();
-    const order = LAYOUT_OPTIONS.map((o) => o.value);
+    const order = shown();
     // Step from the focused tile (normally the selected one, since selecting moves focus).
     const from = (e.target as HTMLElement).closest<HTMLElement>('.layout-tile')?.dataset.layout as ListenLayout | undefined;
     const i = Math.max(0, order.indexOf(from ?? current));
@@ -126,6 +142,11 @@ export function layoutPicker(initial: ListenLayout, onChange: (value: ListenLayo
     sync(value) {
       if (value === current) return;
       current = value;
+      render();
+    },
+    setMember(m) {
+      if (m === isMember) return;
+      isMember = m;
       render();
     },
   };

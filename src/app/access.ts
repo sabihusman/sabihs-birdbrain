@@ -1,4 +1,5 @@
 import type { AuthUser } from '../api/client';
+import type { ListenLayout } from './settings';
 
 /**
  * Member gating for on-device features (species ID card, sighting history,
@@ -43,3 +44,11 @@ export function canManageUsers(user: AuthUser | null | undefined): boolean {
 
 /** What a non-admin sees on the admin pages. */
 export const ADMIN_ONLY_MESSAGE = 'Only the admin can open this page.';
+
+/**
+ * The Listen layout actually shown (DECISIONS.md #110): BirdAmp is for approved members, so for anyone else a
+ * saved BirdAmp choice shows Focus. The choice itself is kept, so signing back in brings BirdAmp back.
+ */
+export function effectiveLayout(layout: ListenLayout, user: AuthUser | null | undefined): ListenLayout {
+  return layout === 'birdamp' && !isMember(user) ? 'focus' : layout;
+}

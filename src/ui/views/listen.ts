@@ -26,6 +26,9 @@ import { PipelineView } from '../viz/pipeline';
 import { SpectrogramView } from '../viz/spectrogram';
 import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { WaveformView } from '../viz/waveform';
+import { effectiveLayout, isMember } from '../../app/access';
+import { birdAmpView, type BirdAmpView } from '../birdamp/view';
+import { setShellSkin } from '../skin';
 
 /** "How BirdNET decides" stays open for the session once opened (DESIGN_GUIDE.md §5, §6). */
 let howItWorksOpen = false;
@@ -49,7 +52,9 @@ export function listenView(ctx: ViewContext): View {
   const { controller } = ctx;
   const settings = controller.settings;
   const subs: Array<() => void> = [];
-  let layout: ListenLayout = settings.get().listenLayout;
+  // BirdAmp is for approved members; for anyone else a saved BirdAmp choice shows Focus (DECISIONS.md #110).
+  const chosenLayout = () => effectiveLayout(settings.get().listenLayout, ctx.api.user);
+  let layout: ListenLayout = chosenLayout();
 
   // ---- shared pieces -------------------------------------------------------
   const MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
@@ -118,6 +123,7 @@ export function listenView(ctx: ViewContext): View {
     statusText.textContent = line.text;
     statusLink.textContent = line.link ?? '';
     statusLink.hidden = !line.link;
+    amp?.render(); // BirdAmp's area line is this line
   };
   const resolvePlace = () => {
     const l = controller.location.get();
@@ -264,16 +270,43 @@ export function listenView(ctx: ViewContext): View {
    * while listening, which is the whole point of the setting.
    */
   // The layout bubble (DECISIONS.md #101): switch layouts from here, only while not listening.
-  const bubble = layoutBubble(layout, (listenLayout) => settings.update({ listenLayout }));
+  const bubble = layoutBubble(layout, (listenLayout) => settings.update({ listenLayout }), isMember(ctx.api.user));
+  /** BirdAmp's windows, built the first time it is the layout (DECISIONS.md #110). */
+  let amp: BirdAmpView | null = null;
+  /** Where the confidence chart's and the spectrogram marks' clock stood when this stretch of listening began (BirdAmp's pause restarts the engine's count). */
+  let segmentBase = 0;
+  const getAmp = (): BirdAmpView =>
+    (amp ??= birdAmpView({
+      controller,
+      waveCanvas,
+      specBox,
+      timelineCanvas,
+      legend,
+      notUsualBox,
+      waveform,
+      spectrogram,
+      status: () => listenStatus(controller).status,
+      areaText: () => statusText.textContent ?? '',
+      place: () => nearPlace,
+      start: () => void start(),
+      pause: () => void controller.pauseListening().then(renderState),
+      stop: () => void stop(),
+      sample: () => void runSample(),
+    }));
   const applyLayout = (next: ListenLayout) => {
     layout = next;
     bubble.sync(next);
-    root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : ''}`;
+    root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : next === 'birdamp' ? ' listen-birdamp-layout' : ''}`;
     root.dataset.layout = next;
     if (controller.welcomePending) {
+      setShellSkin(null);
       root.replaceChildren(welcome);
       return;
     }
+    // The header and tab bar wear BirdAmp's skin only while it is the layout here (DECISIONS.md #110).
+    setShellSkin(next === 'birdamp' ? 'birdamp' : null);
+    // The live views go back into "See the sound" when BirdAmp had them.
+    if (next !== 'birdamp' && waveCanvas.parentElement !== liveViews) liveViews.prepend(waveCanvas, specBox, timelineCanvas, legend);
     // These three nodes live in a different parent per layout; a node has one parent, so
     // detach them first and let each branch place them.
     panel.remove();
@@ -286,7 +319,12 @@ export function listenView(ctx: ViewContext): View {
     if (readyExtras.parentElement !== readyBlock) readyBlock.insertBefore(readyExtras, lastBirdLine);
     // Focus moves the conditions note out of the panel; every other layout keeps it above Stop and Record.
     if (conditionsLine.parentElement !== panel) panel.insertBefore(conditionsLine, panel.lastElementChild);
-    if (next === 'focus') {
+    if (next === 'birdamp') {
+      const a = getAmp();
+      a.mount();
+      // The Ready block stays for the states that need words (download, mic blocked, an error); the player does the rest.
+      root.replaceChildren(readyBlock, a.el, credit, bubble.el);
+    } else if (next === 'focus') {
       // The conditions note reads above the bird; the panel with Stop and Record is pinned above the tab bar.
       focusBlock.prepend(conditionsLine);
       focusBlock.prepend(banner);
@@ -326,6 +364,7 @@ export function listenView(ctx: ViewContext): View {
   let raf = 0;
   let dirty = true;
   let conditionsText: string | null = null;
+  let wasPaused = controller.paused;
 
   const setHidden = (node: HTMLElement, hidden: boolean) => {
     node.style.display = hidden ? 'none' : '';
@@ -359,10 +398,11 @@ export function listenView(ctx: ViewContext): View {
     setHidden(banner, !listening);
     renderBanner();
     setHidden(notUsualLine, listening || controller.getNotUsual().every((b) => b.kept));
-    // Never next to Stop: the bubble shows before and after listening only.
-    setHidden(bubble.el, listening);
-    root.classList.toggle('has-layout-bubble', !listening);
-    if (listening) bubble.close();
+    // Never next to Stop: the bubble shows before and after listening only (and not while BirdAmp is paused).
+    const bubbleOff = listening || controller.paused;
+    setHidden(bubble.el, bubbleOff);
+    root.classList.toggle('has-layout-bubble', !bubbleOff);
+    if (bubbleOff) bubble.close();
     // The pipeline chips only animate while the mic is on (DESIGN_GUIDE.md §7).
     pipeline.setListening(st.status === 'listening');
     setHidden(modelBar, st.status !== 'loading');
@@ -428,6 +468,17 @@ export function listenView(ctx: ViewContext): View {
       (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.pill;
       setHidden(dockTimer, !listening);
       dock.dataset.status = st.status;
+    }
+    if (layout === 'birdamp') {
+      // The player has Listen and Sample; the block only speaks when there is something to say.
+      const words = st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || st.status === 'unsupported' || st.status === 'paused';
+      setHidden(readyBlock, !words);
+      setHidden(startBtn, true);
+      setHidden(readyExtras, true);
+      setHidden(panel, true);
+      setHidden(dock, true);
+      setHidden(focusBlock, true);
+      amp?.render();
     }
     startBtn.disabled = !canStart;
     demoBtn.disabled = !canStart;
@@ -542,19 +593,21 @@ export function listenView(ctx: ViewContext): View {
 
   const onResult = (r: WindowResult) => {
     lastResult = r;
-    const point: TimelinePoint = { sec: r.offsetSec, probs: new Map(r.scores.slice(0, 20).map((s) => [s.index, s.prob])) };
+    const point: TimelinePoint = { sec: segmentBase + r.offsetSec, probs: new Map(r.scores.slice(0, 20).map((s) => [s.index, s.prob])) };
     timeline.push(point);
     const colors = r.detections.map((d) => speciesColor(controller.species[d.index]?.scientific ?? ''));
     const names = r.detections.map((d) => controller.species[d.index]?.common ?? '');
-    spectrogram.addMark({ startSec: r.offsetSec, endSec: r.offsetSec + WINDOW_SECONDS, colors, labels: names });
+    spectrogram.addMark({ startSec: segmentBase + r.offsetSec, endSec: segmentBase + r.offsetSec + WINDOW_SECONDS, colors, labels: names });
     renderResults();
     renderRecent();
+    if (layout === 'birdamp') amp?.onResult();
   };
 
   const loop = () => {
     const now = spectrogram.currentTime;
     if (controller.listening) spectrogram.setLiveWindow(Math.max(0, now - WINDOW_SECONDS), now);
-    if (how.open && (dirty || controller.listening)) {
+    // BirdAmp always shows the pictures; elsewhere they draw only while "See the sound" is open.
+    if ((how.open || layout === 'birdamp') && (dirty || controller.listening)) {
       waveform.draw();
       spectrogram.draw();
       timeline.draw();
@@ -562,6 +615,7 @@ export function listenView(ctx: ViewContext): View {
       const label = `Waveform, last 3 s (auto-scaled): gain ×${waveform.gain}`;
       if (waveLabel.textContent !== label) waveLabel.textContent = label;
     }
+    if (layout === 'birdamp') amp?.tick();
     raf = requestAnimationFrame(loop);
   };
   raf = requestAnimationFrame(loop);
@@ -571,9 +625,14 @@ export function listenView(ctx: ViewContext): View {
     startBtn.disabled = true;
     dockStartBtn.disabled = true;
     try {
-      waveform.reset();
-      spectrogram.reset();
-      timeline.reset();
+      // After BirdAmp's pause the session carries on, so the pictures keep their history (DECISIONS.md #110).
+      if (controller.paused) segmentBase = spectrogram.currentTime;
+      else {
+        segmentBase = 0;
+        waveform.reset();
+        spectrogram.reset();
+        timeline.reset();
+      }
       status.textContent = controller.inference.getStatus().state === 'ready' ? 'Starting microphone…' : 'Loading the model, then the mic…';
       markFocusIntroDone(); // the Focus introduction has done its job for this session (DECISIONS.md #83)
       await controller.startListening();
@@ -616,7 +675,7 @@ export function listenView(ctx: ViewContext): View {
     } else controller.startRecording();
     renderState();
   });
-  demoBtn.addEventListener('click', async () => {
+  const runSample = async () => {
     demoBtn.disabled = true;
     status.textContent = controller.inference.getStatus().state === 'ready' ? 'Analysing the sample clip…' : 'Loading the model, then the sample…';
     waveform.reset();
@@ -627,9 +686,11 @@ export function listenView(ctx: ViewContext): View {
     } catch (e) {
       status.textContent = `Sample failed: ${(e as Error).message}`;
     } finally {
+      amp?.setReadout(status.textContent ?? '');
       renderState();
     }
-  });
+  };
+  demoBtn.addEventListener('click', () => void runSample());
   notUsualLine.addEventListener('click', () => {
     showNotUsual = !showNotUsual;
     renderNotUsual();
@@ -652,6 +713,7 @@ export function listenView(ctx: ViewContext): View {
     }),
     controller.on('level', (l) => {
       (level.firstElementChild as HTMLElement).style.width = `${Math.min(100, Math.round(Math.sqrt(l) * 140))}%`;
+      if (layout === 'birdamp') amp?.setLevel(l);
     }),
     controller.on('window-result', onResult),
     controller.on('not-usual', renderNotUsual),
@@ -666,6 +728,11 @@ export function listenView(ctx: ViewContext): View {
     }),
     controller.on('stats', (st) => {
       timer.textContent = fmtDuration(st.elapsedSec);
+      amp?.setClock(st.elapsedSec);
+      if (st.paused !== wasPaused) {
+        wasPaused = st.paused;
+        renderState();
+      }
       (dock.querySelector('[data-testid="dock-timer"]') as HTMLElement).textContent = fmtDuration(st.elapsedSec);
       if (controller.getRecordingState().recording) renderState();
     }),
@@ -686,14 +753,26 @@ export function listenView(ctx: ViewContext): View {
       renderBanner();
       renderState(); // the no-location note depends on the location and on the layout
     }),
-    settings.on('change', (s) => {
+    settings.on('change', () => {
       // Switching layout rearranges the same nodes; the mic and the analysis keep running.
-      if (s.listenLayout !== layout) {
-        applyLayout(s.listenLayout);
+      if (chosenLayout() !== layout) {
+        applyLayout(chosenLayout());
         renderRecent();
       }
       resolvePlace();
       renderResults();
+      renderState();
+    }),
+  );
+  // Signing in or out (or being approved) shows or hides BirdAmp (DECISIONS.md #110).
+  subs.push(
+    ctx.api.on('change', (u) => {
+      bubble.setMember(isMember(u));
+      if (chosenLayout() !== layout) {
+        applyLayout(chosenLayout());
+        renderRecent();
+        renderResults();
+      }
       renderState();
     }),
   );
@@ -741,6 +820,8 @@ export function listenView(ctx: ViewContext): View {
       recentCards.clear();
       pipeline.dispose();
       bubble.dispose();
+      amp?.dispose();
+      setShellSkin(null);
     },
   };
 }

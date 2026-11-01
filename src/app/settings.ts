@@ -5,8 +5,9 @@ export type { BackendPreference } from '../model/protocol';
 import type { BackendPreference } from '../model/protocol';
 export type LocationMode = 'auto' | 'manual' | 'off';
 export type OcclusionResolution = 'coarse' | 'medium' | 'fine';
-/** Listen screen arrangement (docs/DESIGN_GUIDE.md §6). */
-export type ListenLayout = 'consolidated' | 'dock' | 'focus';
+/** Listen screen arrangement (docs/DESIGN_GUIDE.md §6). BirdAmp is for approved members (DECISIONS.md #110). */
+export type ListenLayout = 'consolidated' | 'dock' | 'focus' | 'birdamp';
+const LAYOUTS: readonly ListenLayout[] = ['consolidated', 'dock', 'focus', 'birdamp'];
 /** Map tab: cards under the map, one per bird or one per place (DECISIONS.md #72). */
 export type MapCardsView = 'birds' | 'places';
 
@@ -143,7 +144,7 @@ export function sanitize(s: Settings): Settings {
     threshold,
     overlapSeconds: clamp(s.overlapSeconds, 0, 2.5, DEFAULT_SETTINGS.overlapSeconds),
     geoThreshold: clamp(s.geoThreshold, 0, 1, DEFAULT_SETTINGS.geoThreshold),
-    listenLayout: s.listenLayout === 'dock' || s.listenLayout === 'consolidated' || s.listenLayout === 'focus' ? s.listenLayout : DEFAULT_SETTINGS.listenLayout,
+    listenLayout: LAYOUTS.includes(s.listenLayout) ? s.listenLayout : DEFAULT_SETTINGS.listenLayout,
     mapCardsView: s.mapCardsView === 'places' ? 'places' : 'birds',
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
