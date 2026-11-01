@@ -4,8 +4,8 @@ Decided work not built yet. Each item names who decided and when; DECISIONS.md g
 
 ## From the UI/UX audit (Oct 31, 2026), decided by Sabih on Oct 31
 
-The audit's factual bugs (findings 1, 2 except the place search, 5, 6, 8, 10, 11, and the "No sightings"
-wording in 12) are being fixed as work; these are the findings that needed a decision.
+The audit's factual bugs (findings 1, 2, 5, 6, 8, 10, 11, and the "No sightings" wording in 12) were fixed in
+DECISIONS.md #104–#106 (PRs #94–#96); these are the findings that needed a decision.
 
 1. **Settings: move the expert controls into one folded "Advanced" section** (audit finding 3, option C).
    Window overlap, Species range threshold, Compute backend and "Why this ID" resolution go inside it;
@@ -18,11 +18,8 @@ wording in 12) are being fixed as work; these are the findings that needed a dec
 4. **Wording** (finding 9): the welcome button becomes "Start listening" (option B, replacing the
    "Start identifying" chosen in #94); "windows" is replaced with plain words in everyday text (option A).
 5. **Layout bubble stays as it is** (finding 13, option A). No change.
-6. **No location on Species: pick a place by name** (finding 2, option A, decided Oct 31 from a mockup). The banner
-   ("Showing every species in the world.") offers **Use my location** and **Pick a place**: a town search through
-   OpenStreetMap's Nominatim (already used to name Places on the Map), and the chosen place becomes the manual
-   location. The privacy text must say that a typed name goes to OpenStreetMap. If the phone keeps blocking
-   location, the banner gives the Safari / Chrome steps (the Chrome steps still need checking on a device).
+6. ~~No location on Species: pick a place by name~~ **Built** (DECISIONS.md #105, PR #95). Shown only when the app
+   has no location; with GPS working there is no place picker on Species (Sabih kept it that way on Nov 1).
 7. **Conservation status on the member ID card** (finding 12, option A): one line, "Conservation: [rank] in
    [state/province] — NatureServe", through a new members-only API call (the server already fetches
    NatureServe for Ask).
