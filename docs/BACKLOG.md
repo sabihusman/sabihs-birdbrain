@@ -13,7 +13,7 @@ DECISIONS.md #104–#106 (PRs #94–#96); these are the findings that needed a d
 2. **Sign-in lands on Listen, and a small initial in the header shows you're signed in** (finding 4, A + A).
    The initial opens My account and must fit the 320 px header (DECISIONS.md #84).
 3. **"Stay signed in on this device", ticked by default** (finding 7, option A): a long session so the emailed
-   code is rare. Open: the session length (30 to 90 days was offered). Server change; security trade-off
+   code is rare. Session length: **30 days** (Sabih, Nov 1). Server change; security trade-off
    accepted by Sabih (an unlocked lost phone stays signed in that long).
 4. **Wording** (finding 9): the welcome button becomes "Start listening" (option B, replacing the
    "Start identifying" chosen in #94); "windows" is replaced with plain words in everyday text (option A).
