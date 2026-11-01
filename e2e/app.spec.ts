@@ -2646,3 +2646,33 @@ test('small fixes from the UI/UX audit: Back returns where you came from, What w
   await expect(empty.getByRole('link', { name: 'Listen now' })).toHaveAttribute('href', '#/listen');
   await context.close();
 });
+
+test('the birds heard this session are still on Listen after visiting another tab or changing layout in Settings (DECISIONS.md #107)', async ({ playwright }) => {
+  const browser = await playwright.chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
+  });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['microphone'], baseURL: test.info().project.use.baseURL });
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+  });
+  const page = await context.newPage();
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.getByTestId('start-stop').click();
+  const cards = page.getByTestId('results').getByTestId('result-card');
+  await expect(cards.first()).toBeVisible({ timeout: 60_000 });
+  const species = await cards.first().locator('.result-common').textContent();
+  // Stopped first, so no new window can put a bird back: what shows must be what was kept.
+  await page.getByTestId('stop').click();
+  // Another tab and back: the same bird.
+  await page.goto('./#/species');
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('results').getByTestId('result-card').first()).toContainText(species!, { timeout: 2_000 });
+  // A layout change in Settings and back: still there.
+  await page.goto('./#/settings');
+  await page.getByTestId('listen-layout-dock').click();
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('recent-inline').getByTestId('recent-card').first()).toContainText(species!, { timeout: 2_000 });
+  await browser.close();
+});
