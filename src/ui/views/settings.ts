@@ -10,6 +10,7 @@ import { foldHint } from '../components/rows';
 import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
 import { layoutPicker } from '../components/layout-picker';
+import { effectiveLayout, isMember } from '../../app/access';
 import { describeVoiceProcessing } from '../../audio/mic-constraints';
 
 export function settingsView(ctx: ViewContext): View {
@@ -38,8 +39,14 @@ export function settingsView(ctx: ViewContext): View {
   });
 
   // Listen layout: preview tiles (DECISIONS.md #45). A tap switches immediately; the store change is mirrored back.
-  const picker = layoutPicker(s.listenLayout, (listenLayout) => settings.update({ listenLayout }));
-  syncs.push(() => picker.sync(settings.get().listenLayout));
+  // BirdAmp is a fourth tile for approved members; anyone else sees Focus picked if BirdAmp was saved (#110).
+  const shownLayout = () => effectiveLayout(settings.get().listenLayout, ctx.api.user);
+  const picker = layoutPicker(shownLayout(), (listenLayout) => settings.update({ listenLayout }), isMember(ctx.api.user));
+  syncs.push(() => picker.sync(shownLayout()));
+  const unsubMember = ctx.api.on('change', (u) => {
+    picker.setMember(isMember(u));
+    picker.sync(shownLayout());
+  });
 
   // A tick box keeps one short line; the rest opens under it, outside the label, so tapping it never flips the box (DECISIONS.md #100).
   const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut', line: string, more: string) => {
@@ -220,6 +227,7 @@ export function settingsView(ctx: ViewContext): View {
   return {
     el: root,
     dispose() {
+      unsubMember();
       unsubSettings();
       unsubLoc();
       unsubMic();

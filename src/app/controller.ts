@@ -56,6 +56,8 @@ export interface NotUsualBird {
 
 export interface SessionStats {
   listening: boolean;
+  /** BirdAmp's pause (DECISIONS.md #110): the mic is released, the session and its clock are kept. */
+  paused: boolean;
   startedAt: number | null;
   elapsedSec: number;
   windows: number;
@@ -144,7 +146,12 @@ export class AppController extends Emitter<ControllerEvents> {
   private sessionId = newId();
   private sessionStartedAt: number | null = null;
   private windowCounter = 0;
-  private stats: SessionStats = { listening: false, startedAt: null, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: null };
+  /** Listening time before the current stretch, so a paused session's clock carries on where it stopped. */
+  private elapsedBefore = 0;
+  /** When the current stretch of listening began; window times are counted from here (the engine restarts at 0). */
+  private segmentStartedAt: number | null = null;
+  private held = false;
+  private stats: SessionStats = { listening: false, paused: false, startedAt: null, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: null };
   private timer: number | null = null;
   private recorder: Recorder | null = null;
   private wakeLock: WakeLockSentinel | null = null;
@@ -422,33 +429,80 @@ export class AppController extends Emitter<ControllerEvents> {
     } catch (err) {
       const e = describeMicError(err);
       this.micError = e;
+      this.positions.stop();
       this.emit('notice', { kind: 'error', text: e.message });
       throw err;
     }
-    this.sessionId = newId();
-    this.saveWarned.clear();
-    this.notUsual.clear();
-    this.keptAgainstFilter.clear();
-    this.notUsualAudio.clear();
-    this.lastAutoClip.clear();
-    this.emit('not-usual', []);
-    this.sessionStartedAt = Date.now();
-    this.windowCounter = 0;
+    const now = Date.now();
+    // After BirdAmp's pause the same session carries on: same birds, same session id, the clock resumes.
+    const resuming = this.held;
+    this.held = false;
+    if (!resuming) {
+      this.sessionId = newId();
+      this.saveWarned.clear();
+      this.notUsual.clear();
+      this.keptAgainstFilter.clear();
+      this.notUsualAudio.clear();
+      this.lastAutoClip.clear();
+      this.emit('not-usual', []);
+      this.sessionStartedAt = now;
+      this.elapsedBefore = 0;
+      this.windowCounter = 0;
+    }
+    this.segmentStartedAt = now;
     this.conditions.reset();
+    // The engine starts its sample count again at 0, so the clip ring and its window list start afresh too.
     this.liveRing.reset();
     this.pendingClips.clear();
     this.liveWindows.clear();
-    this.stats = { listening: true, startedAt: this.sessionStartedAt, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: this.engine.contextSampleRate };
+    this.stats = resuming
+      ? { ...this.stats, listening: true, paused: false, contextSampleRate: this.engine.contextSampleRate }
+      : { listening: true, paused: false, startedAt: this.sessionStartedAt, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: this.engine.contextSampleRate };
     this.emit('stats', this.stats);
     this.timer = window.setInterval(() => {
-      this.stats = { ...this.stats, elapsedSec: (Date.now() - (this.sessionStartedAt ?? Date.now())) / 1000 };
+      this.stats = { ...this.stats, elapsedSec: this.elapsedNow() };
       this.emit('stats', this.stats);
       if (this.recorder) this.emit('recording', this.getRecordingState());
     }, 1000);
     await this.requestWakeLock();
   }
 
+  private elapsedNow(): number {
+    return this.elapsedBefore + (this.segmentStartedAt == null ? 0 : (Date.now() - this.segmentStartedAt) / 1000);
+  }
+
+  /**
+   * BirdAmp's pause (Sabih's 1A, DECISIONS.md #110): the microphone is released and nothing is analysed, but the
+   * session stays open. The clock stops; startListening() carries on in the same session, stopListening() ends it.
+   * A recording in progress is saved, as Stop does.
+   */
+  async pauseListening(): Promise<void> {
+    if (!this.listening) return;
+    const elapsed = this.elapsedNow();
+    await this.endStretch();
+    this.elapsedBefore = elapsed;
+    this.segmentStartedAt = null;
+    this.held = true;
+    this.stats = { ...this.stats, listening: false, paused: true, elapsedSec: elapsed };
+    this.emit('stats', this.stats);
+  }
+
+  /** True between pauseListening() and the next start or stop. */
+  get paused(): boolean {
+    return this.held;
+  }
+
   async stopListening(): Promise<void> {
+    const elapsed = this.listening ? this.elapsedNow() : this.stats.elapsedSec;
+    await this.endStretch();
+    this.held = false;
+    this.segmentStartedAt = null;
+    this.stats = { ...this.stats, listening: false, paused: false, elapsedSec: elapsed };
+    this.emit('stats', this.stats);
+  }
+
+  /** Release the mic, the GPS and the wake lock, and save what the stretch left pending. */
+  private async endStretch(): Promise<void> {
     this.positions.stop();
     await this.engine.stop();
     await this.flushPendingClips(true);
@@ -457,8 +511,6 @@ export class AppController extends Emitter<ControllerEvents> {
       this.timer = null;
     }
     if (this.recorder) await this.stopRecording();
-    this.stats = { ...this.stats, listening: false };
-    this.emit('stats', this.stats);
     await this.releaseWakeLock();
   }
 
@@ -505,7 +557,7 @@ export class AppController extends Emitter<ControllerEvents> {
     const copy = s.autoSaveClips ? raw : null;
     const windowId = ++this.windowCounter;
     const offsetSec = offsetSamples / SAMPLE_RATE;
-    const time = (this.sessionStartedAt ?? Date.now()) + offsetSec * 1000;
+    const time = (this.segmentStartedAt ?? this.sessionStartedAt ?? Date.now()) + offsetSec * 1000;
     let result: WindowResult;
     try {
       const res = await this.inference.analyze(audio);

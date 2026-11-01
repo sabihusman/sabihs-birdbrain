@@ -1150,7 +1150,18 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     if (layout === 'consolidated') {
       // Live pipeline chips (DECISIONS.md #57): the stages light in order while the mic is on.
       await page.getByTestId('pipeline').getByText('See the sound').click();
-      await expect(page.getByTestId('pipeline-live')).toBeVisible();
+      // The header says Listening; the title row has only the title, ⓘ and Hide, and they never overlap (#109).
+      await expect(page.getByTestId('model-status')).toContainText('Listening');
+      await expect(page.getByTestId('pipeline').locator('summary')).not.toContainText('Listening');
+      const clash = await page.evaluate(() => {
+        const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+        const info = r('[data-testid="see-info"]');
+        const range = document.createRange();
+        range.selectNodeContents(document.querySelector('.pipeline-fold .fold-title')!);
+        const title = range.getBoundingClientRect();
+        return title.right > info.left && title.left < info.right && title.bottom > info.top && title.top < info.bottom;
+      });
+      expect(clash, 'ⓘ clear of the title').toBe(false);
       const chips = page.getByTestId('pipeline-chips');
       await expect(chips.locator('.pchip.active, .pchip.done')).not.toHaveCount(0, { timeout: 15_000 });
       // Mic runs before Result, so it is lit (active or done) before Result ever is.
@@ -1164,7 +1175,6 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       // Stopped: every chip plain again.
       const chips = page.getByTestId('pipeline-chips');
       await expect(chips.locator('.pchip.active, .pchip.done')).toHaveCount(0);
-      await expect(page.getByTestId('pipeline-live')).toBeHidden();
       // Reduce motion: no stepping, only a finished window lights Result.
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await start.click();
@@ -2711,4 +2721,98 @@ test('Listen: one plain status line with the town, in every layout; the dock tip
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await context.close();
   }
+});
+
+test('BirdAmp: members only; the player listens, pauses (clock held, same birds) and carries on; windows minimise, close, restore and move; skin on Listen only; 320 px (DECISIONS.md #110)', async ({ playwright }) => {
+  const browser = await playwright.chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
+  });
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true, permissions: ['microphone'], serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'birdamp', locationMode: 'off' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+  });
+  const page = await context.newPage();
+  // Signed out: a saved BirdAmp choice shows Focus, with no skin, and Settings has no BirdAmp tile.
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'focus');
+  await expect(page.getByTestId('birdamp')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.dataset.skin ?? null)).toBeNull();
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('listen-layout-birdamp')).toBeHidden();
+  // An approved member: the fourth tile, and BirdAmp on Listen.
+  await page.evaluate(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Sam', status: 'approved', role: 'member' } })));
+  await page.reload();
+  await expect(page.getByTestId('listen-layout-birdamp')).toBeVisible();
+  await expect(page.getByTestId('listen-layout-birdamp')).toHaveAttribute('aria-checked', 'true');
+  await page.goto('./#/listen');
+  const amp = page.getByTestId('birdamp');
+  await expect(amp).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.dataset.skin)).toBe('birdamp');
+  await expect(page.getByTestId('model-status')).toHaveText('Ready', { timeout: 200_000 });
+  await expect(page.getByTestId('ba-clock')).toHaveText('00:00');
+  await expect(page.getByTestId('ba-pause')).toBeDisabled();
+  await expect(page.getByTestId('ba-area')).toContainText('No location');
+  // Listen: the clock runs, the marquee and the Library get the bird.
+  await page.getByTestId('ba-listen').click();
+  await expect(page.getByTestId('model-status')).toHaveText('Live');
+  const rows = page.getByTestId('ba-row');
+  await expect(rows.first()).toBeVisible({ timeout: 90_000 });
+  await expect(rows.first()).toContainText(/1\. .+Acanthis/);
+  await expect(rows.first()).toContainText(/best \d+% · Heard (once|\d+ times) · last/);
+  await expect(page.getByTestId('ba-marquee')).toContainText(/ — Acanthis .+ — \d+% — (Very likely|Likely|Possible)/);
+  await expect(page.getByTestId('ba-libcount')).toContainText('repeats within 30 s count once');
+  // Pause: the mic is released, the clock holds, the birds stay.
+  await page.getByTestId('ba-pause').click();
+  await expect(page.getByTestId('model-status')).toHaveText('Paused');
+  await expect(page.getByTestId('ba-state')).toContainText('Paused');
+  await expect(page.getByTestId('ba-marquee')).toContainText('Paused · ▶ to go on · Last:');
+  const held = await page.getByTestId('ba-clock').textContent();
+  await page.waitForTimeout(2500);
+  await expect(page.getByTestId('ba-clock')).toHaveText(held!);
+  const birdsBefore = await rows.count();
+  await expect(page.getByTestId('layout-bubble')).toBeHidden();
+  // Carry on: same session, the clock resumes from where it stopped.
+  await expect(page.getByTestId('ba-listen')).toHaveAttribute('aria-label', 'Carry on listening');
+  await page.getByTestId('ba-listen').click();
+  await expect(page.getByTestId('model-status')).toHaveText('Live');
+  await expect.poll(async () => (await page.getByTestId('ba-clock').textContent()) ?? '', { timeout: 10_000 }).not.toBe(held);
+  const [m, s] = held!.split(':').map(Number);
+  const [m2, s2] = ((await page.getByTestId('ba-clock').textContent()) ?? '').split(':').map(Number);
+  expect(m2 * 60 + s2).toBeGreaterThan(m * 60 + s);
+  expect(m2 * 60 + s2).toBeLessThan(m * 60 + s + 8);
+  expect(await rows.count()).toBeGreaterThanOrEqual(birdsBefore);
+  // Minimise the player: the windowshade mini-player keeps the clock, the bird and pause/stop.
+  await page.getByTestId('ba-min-player').click();
+  await expect(page.getByTestId('ba-shade')).toBeVisible();
+  await expect(page.getByTestId('ba-shade-bird')).toContainText('%');
+  await page.getByTestId('ba-shade-stop').click();
+  await expect(page.getByTestId('model-status')).toHaveText('Ready');
+  await page.getByTestId('ba-max-player').click();
+  await expect(page.getByTestId('ba-shade')).toBeHidden();
+  // EQ hides the Confidence window; it comes back from the "hidden" bar.
+  await page.getByTestId('ba-eq').click();
+  await expect(page.getByTestId('ba-win-confidence')).toHaveCount(0);
+  await expect(page.getByTestId('ba-hidden-bar')).toContainText('Confidence');
+  await page.getByTestId('ba-restore-confidence').click();
+  await expect(page.getByTestId('ba-win-confidence')).toBeVisible();
+  // The grip moves a window from the keyboard; the order is kept after a reload.
+  await page.getByTestId('ba-grip-library').focus();
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  const order = () => page.locator('.ba-win').evaluateAll((els) => els.map((e) => e.getAttribute('data-win')));
+  expect(await order()).toEqual(['library', 'player', 'confidence']);
+  // NEAR YOU with location off says so instead of a list.
+  await page.getByTestId('ba-tab-near').click();
+  await expect(page.getByTestId('ba-libcount')).toContainText('location filter off');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.reload();
+  await expect(amp).toBeVisible();
+  expect(await order()).toEqual(['library', 'player', 'confidence']);
+  // Other tabs keep the normal look.
+  await page.goto('./#/species');
+  expect(await page.evaluate(() => document.documentElement.dataset.skin ?? null)).toBeNull();
+  await expect(page.getByTestId('model-status')).not.toHaveText('Ready');
+  await browser.close();
 });

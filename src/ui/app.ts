@@ -16,6 +16,7 @@ import { FriendsCache } from '../species/friends';
 import { SpeciesSharer } from '../species/sharing';
 import { applyTheme, currentTheme, otherTheme, storeTheme } from '../theme/theme';
 import { listenStatus } from './status';
+import { onShellSkin, shellSkin } from './skin';
 
 export interface View {
   el: HTMLElement;
@@ -138,13 +139,18 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   const renderPill = () => {
     const st = listenStatus(controller);
     const model = controller.inference.getStatus();
-    pillText.textContent = st.status === 'ready' && model.backend ? `${st.pill} · ${model.backend}` : st.pill;
+    // BirdAmp's header light says LIVE, PAUSED or READY (DECISIONS.md #110).
+    const amp = shellSkin() === 'birdamp' ? (st.status === 'listening' ? 'Live' : controller.paused || st.status === 'paused' ? 'Paused' : st.status === 'ready' || st.status === 'offline' || st.status === 'idle' ? 'Ready' : null) : null;
+    pillText.textContent = amp ?? (st.status === 'ready' && model.backend ? `${st.pill} · ${model.backend}` : st.pill);
+    modelPill.dataset.amp = amp ? amp.toLowerCase() : '';
     modelPill.title = pillText.textContent;
     modelPill.className = `model-pill ${st.status} tone-${st.tone}`;
   };
   controller.on('model', renderPill);
   controller.on('engine', renderPill);
   controller.on('notice', renderPill);
+  controller.on('stats', renderPill);
+  onShellSkin(renderPill);
   window.addEventListener('online', renderPill);
   window.addEventListener('offline', renderPill);
   renderPill();

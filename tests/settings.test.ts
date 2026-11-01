@@ -91,6 +91,8 @@ describe('Listen layout default (DECISIONS.md #63)', () => {
     expect(new SettingsStore(storage).get().listenLayout).toBe('dock');
     new SettingsStore(storage).update({ listenLayout: 'consolidated' });
     expect(new SettingsStore(storage).get().listenLayout).toBe('consolidated');
+    new SettingsStore(storage).update({ listenLayout: 'birdamp' });
+    expect(new SettingsStore(storage).get().listenLayout).toBe('birdamp');
   });
   it('falls back to Focus for an unknown stored value', () => {
     expect(sanitize({ ...DEFAULT_SETTINGS, listenLayout: 'grid' as never }).listenLayout).toBe('focus');

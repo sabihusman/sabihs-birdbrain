@@ -3030,7 +3030,39 @@ Each finding was checked against the code first.
   (`#/help`, section `how-birdnet-decides`), and Listen keeps one "How BirdNET decides ›" link. The step chips, the
   three pictures and the legend are unchanged. With three or more birds the legend wraps, so Bottom dock and Focus
   can still push the chart's bottom under the Stop bar.
+- **Follow-up (Sabih, Nov 1, iPhone screenshot):** the ⓘ sat on top of "● Listening" while listening, and the line
+  repeated the header's own "Listening". The title row now holds only the title, ⓘ and Hide.
 - **Consolidated** shows the result cards only (they are the list). **Bottom dock**'s sighting cards start open; a
   tap closes one. **Focus**'s big card reads "Very likely · best 93%": 90% and up Very likely, 70–89% Likely, else
   Possible (`confidenceWords`, judged on the rounded percentage shown so the two always agree). These words describe
   BirdNET's score, not a calibrated probability.
+
+## 110. BirdAmp Hybrid: a Winamp-style Listen layout for approved members
+
+- **Why (Sabih, Nov 1):** a fun opt-in layout from the BirdAmp design doc: the classic player window on top, the
+  Library's tabs and rows below, a confidence strip between them. Chosen from the iPhone mockups: **3A** approved
+  members only; **1A** a real pause; **2B** library tabs HEARD / TODAY / ALL BIRDS / NEAR YOU; the header and tab bar
+  wear the skin, but only on Listen while BirdAmp is the layout (Recordings, Species, Map and Settings keep the normal
+  look); the supplied gold bolt on a white tile is its picker icon.
+- **Members only:** the fourth tile (Settings › Listen layout) and bubble row show for approved members. Signed out
+  or waiting for approval, a saved BirdAmp choice shows Focus (`effectiveLayout`, `src/app/access.ts`); the choice is
+  kept, so signing in brings it back.
+- **Presentation only** (`src/ui/birdamp/`): the same waveform, spectrogram and confidence canvases are moved in, not
+  copied; the same session birds, Stop and sample clip. LCD readouts are real values only: the session clock, the
+  newest bird in the marquee with its confidence words (#109), "48K · MONO · BIRDNET V2.4" plus the spectrogram's own
+  dB range, "Sample analysed in N ms". The waveform gain is an LED meter (display only, BirdNET auto-scales it); the
+  area line is the status line (#108), edited in Settings. EQ / PL show or hide the Confidence and Library windows.
+  PREV / NEXT step the marquee through this session's birds. The step chips are left out (as in the mockup).
+- **Pause (1A, `AppController.pauseListening`):** the microphone, GPS and wake lock are released and nothing is
+  analysed, but the session stays: the clock holds (amber PAUSED), and Listen carries on with the same birds and
+  session id; Stop ends it. A recording in progress is saved, as Stop does. The engine restarts its sample count, so
+  window times count from the new stretch and the clip ring starts afresh; the confidence chart and spectrogram marks
+  carry on from where they were.
+- **Windows:** each has ⠿ (drag, or focus and ↑/↓), _ (strip; the player's is the windowshade mini-player with clock,
+  bird and ▶ ❚❚ ■), ▢ (full size) and × (closed; a "Windows hidden" bar brings it back). Order and state are saved per
+  phone (`birdbrain.birdamp.v1`).
+- **Library:** HEARD = this session (`groupRecent`); TODAY and ALL BIRDS = saved sightings on this phone, one row per
+  species; NEAR YOU = the Species tab's local list, alphabetical, ✓ when spotted (no "yard list": the app has no home
+  place). Rows link to the species page, 44 pt+, newest first, no durations. Up to 120 rows; search narrows.
+- **Limits:** LCD spec text is about 9–10 pt on a phone. With the full player open no Library row fits on an iPhone
+  screen; minimising the player gives the birds the room (as the design doc intends). The skin is dark in both themes.
