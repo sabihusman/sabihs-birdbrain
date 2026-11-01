@@ -6,7 +6,8 @@ import { WINDOW_SECONDS } from '../../model/constants';
 import { selectDetections } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
 import { groupRecent, LUMP_GAP_SECONDS, toggleExpanded } from '../../species/recent';
-import { plusCode } from '../../geo/pluscode';
+import { geocoder } from '../../geo/geocode';
+import { nearCell, nearName, pickedName, statusLine } from '../../app/status-line';
 import type { View, ViewContext } from '../app';
 import { recentGroupCard, type RecentGroupCardHandle } from '../components/recent-group-card';
 import { resultCard, type ResultCardHandle } from '../components/result-card';
@@ -16,7 +17,7 @@ import { birdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
 import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
 import { focusIntroDone, markFocusIntroDone } from '../focus-intro';
-import { el, fmtDuration, pct } from '../dom';
+import { el, fmtDuration } from '../dom';
 import { hrefFor } from '../router';
 import { describeModelProgress } from '../model-progress';
 import { listenStatus, type ListenStatus } from '../status';
@@ -102,18 +103,48 @@ export function listenView(ctx: ViewContext): View {
   };
   const panel = el('section', { class: 'listen-panel', 'data-testid': 'listen-panel' }, el('div', { class: 'row between' }, el('span', null, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' Listening · ', timer), wakeLine), level, conditionsLine, el('div', { class: 'row' }, stopBtn, recordBtn));
 
-  const chips = el('div', { class: 'chip-row', 'data-testid': 'context-chips' });
-  const renderChips = () => {
+  // One plain status line before listening, in every layout, instead of the three pills (DECISIONS.md #108).
+  const statusText = el('span', null, '');
+  const statusLink = el('a', { href: '#/settings', 'data-testid': 'listen-status-link' }, '');
+  const statusLineEl = el('p', { class: 'small muted listen-status-line', 'data-testid': 'listen-status-line' }, statusText, ' ', statusLink);
+  /** "Near …": the town for the current position (rounded, looked up once and cached) or the place picked by name. */
+  let nearPlace: string | null = null;
+  let nearKey = '';
+  let disposed = false;
+  const renderStatusLine = () => {
     const l = controller.location.get();
     const s = settings.get();
-    chips.replaceChildren(
-      el('span', { class: 'ctx-chip' }, l.location ? `📍 ${plusCode(l.location.lat, l.location.lon)}` : 'No location'),
-      el('span', { class: 'ctx-chip' }, l.location && l.week > 0 ? `Week ${l.week} birds` : 'All weeks'),
-      el('a', { class: 'ctx-chip', href: '#/settings' }, `Min. ${pct(s.threshold)}`),
-    );
-    // renderState() owns whether this note is shown: it also depends on the layout.
+    const line = statusLine({ hasLocation: !!l.location, place: nearPlace, useWeek: s.useWeek, threshold: s.threshold, now: new Date() });
+    statusText.textContent = line.text;
+    statusLink.textContent = line.link ?? '';
+    statusLink.hidden = !line.link;
   };
-  const noLocationNote = el('p', { class: 'small muted', 'data-testid': 'no-location-note' }, 'No location: results are not filtered for your area. Settings › Location.');
+  const resolvePlace = () => {
+    const l = controller.location.get();
+    const s = settings.get();
+    if (!l.location) {
+      nearPlace = null;
+      nearKey = '';
+    } else if (s.locationMode === 'manual' && s.manualPlace) {
+      nearPlace = pickedName(s.manualPlace);
+      nearKey = '';
+    } else {
+      const cell = nearCell(l.location.lat, l.location.lon);
+      if (cell.key !== nearKey) {
+        nearKey = cell.key;
+        nearPlace = null;
+        // Rounded to ~1 km and cached for 180 days; only while Listen is open (src/geo/geocode.ts).
+        void geocoder.lookup(cell, () => !disposed && nearKey === cell.key).then((r) => {
+          if (disposed || nearKey !== cell.key || r.status !== 'ok') return;
+          nearPlace = nearName(r.label);
+          renderStatusLine();
+        });
+      }
+    }
+    renderStatusLine();
+  };
+  /** The status line and the sample clip, in the Ready block (or under the bird in Focus after its first page). */
+  const readyExtras = el('div', { class: 'ready-extras' }, statusLineEl, el('div', { class: 'row' }, demoBtn));
 
   // Results
   const resultsList = el('div', { class: 'result-list', 'data-testid': 'results' });
@@ -183,7 +214,7 @@ export function listenView(ctx: ViewContext): View {
 
   // ---- layout ----------------------------------------------------------------
   const stateRow = el('div', { class: 'state-row' }, stateIcon, stateTitle);
-  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), chips, noLocationNote, el('div', { class: 'row' }, demoBtn), lastBirdLine, status);
+  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), readyExtras, lastBirdLine, status);
   const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, notUsualBox, resultsEmpty);
   const dockTimer = el('span', { class: 'dock-time' }, ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00'));
   const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn);
@@ -233,6 +264,8 @@ export function listenView(ctx: ViewContext): View {
     dock.remove();
     notUsualBox.remove();
     banner.remove();
+    // Focus may have moved the status line under the bird; every other layout keeps it in the Ready block.
+    if (readyExtras.parentElement !== readyBlock) readyBlock.insertBefore(readyExtras, lastBirdLine);
     // Focus moves the conditions note out of the panel; every other layout keeps it above Stop and Record.
     if (conditionsLine.parentElement !== panel) panel.insertBefore(conditionsLine, panel.lastElementChild);
     if (next === 'focus') {
@@ -322,15 +355,15 @@ export function listenView(ctx: ViewContext): View {
     const canStart = st.status === 'ready' || st.status === 'offline' || st.status === 'idle';
     const noModel = st.status === 'unsupported';
     setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || noModel || layout === 'dock');
-    setHidden(chips, listening || layout === 'focus' || (layout === 'dock' && plainReady));
-    setHidden(noLocationNote, listening || !!controller.location.get().location || layout === 'focus' || (layout === 'dock' && plainReady));
-    setHidden(demoBtn, listening || st.status === 'loading' || noModel || layout === 'focus');
+    setHidden(readyExtras, listening || noModel);
+    setHidden(demoBtn, listening || st.status === 'loading' || noModel);
     setHidden(readyBlock, listening);
     if (layout === 'dock') {
       // Cards fill the screen, so the state row only appears when there is something to say
       // (loading, mic blocked, paused, an error). The sample-clip button stays reachable.
       setHidden(stateRow, plainReady);
-      setHidden(stateHint, plainReady);
+      // "Point the bottom of your phone toward the sound." until the first bird (DECISIONS.md #108).
+      setHidden(stateHint, plainReady && controller.getSessionHits().length > 0);
     } else {
       setHidden(stateRow, false);
       setHidden(stateHint, false);
@@ -343,6 +376,12 @@ export function listenView(ctx: ViewContext): View {
       // The big Start page is an introduction, once per session and day (DECISIONS.md #83). After
       // it, the bird stays on screen and the controls sit above the tab bar, listening or not.
       const intro = !listening && !focusIntroDone();
+      // The status line and the sample clip sit on the big Start page, or under the bird after it (DECISIONS.md #108).
+      const home = intro ? readyBlock : focusBlock;
+      if (readyExtras.parentElement !== home) {
+        if (intro) readyBlock.insertBefore(readyExtras, lastBirdLine);
+        else focusBlock.appendChild(readyExtras);
+      }
       root.classList.toggle('focus-intro', intro);
       // States that need words (loading, mic blocked, an error) still show the state block.
       setHidden(readyBlock, listening || (!intro && (canStart || plainReady)));
@@ -621,7 +660,7 @@ export function listenView(ctx: ViewContext): View {
       wakeLine.textContent = w === 'active' ? 'Screen stays on' : w === 'unsupported' ? 'Keep the screen on yourself' : w === 'failed' ? 'Could not keep the screen on' : '';
     }),
     controller.on('location', () => {
-      renderChips();
+      resolvePlace();
       renderBanner();
       renderState(); // the no-location note depends on the location and on the layout
     }),
@@ -631,7 +670,7 @@ export function listenView(ctx: ViewContext): View {
         applyLayout(s.listenLayout);
         renderRecent();
       }
-      renderChips();
+      resolvePlace();
       renderResults();
       renderState();
     }),
@@ -661,7 +700,7 @@ export function listenView(ctx: ViewContext): View {
   {
     renderMoreBtn();
     renderModelProgress(controller.inference.getStatus());
-    renderChips();
+    resolvePlace();
     renderConditions(controller.getConditions());
     if (controller.listening) status.textContent = 'Listening…';
     renderState();
@@ -673,6 +712,7 @@ export function listenView(ctx: ViewContext): View {
   return {
     el: root,
     dispose() {
+      disposed = true;
       cancelAnimationFrame(raf);
       for (const u of subs) u();
       resultCards.clear();

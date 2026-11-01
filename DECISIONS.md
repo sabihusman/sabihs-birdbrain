@@ -3001,3 +3001,18 @@ Each finding was checked against the code first.
 - **Now:** the controller keeps them (`getSessionHits`, `getLastWindow`), recorded as each window is published and
   when a "not usual here" bird is kept, capped at 400 hits; Listen draws from there whenever it opens. Kept for the
   page's life, as the view did when it was never left (so Stop keeps the birds, #83).
+
+## 108. Listen: one plain status line instead of three pills; the dock tip; Focus gets the sample clip
+
+- **Why (Listen layouts audit, Nov 1; Sabih chose 2A and 5A):** under Start listening, three pill-shaped chips (a plus
+  code, "Week 41 birds", "Min. 70%") looked like buttons, but two did nothing and one was a hidden link to
+  Settings, and they used codes, not words. Bottom dock showed no status at all; Focus had no sample clip.
+- **Now** (`src/app/status-line.ts`): one line of small grey text before listening, the same in every layout:
+  "Near Johnston · October birds · Only matches 70% or more", or "No location · All year · Only matches 70% or
+  more" with a real link, "Turn on location to filter for your area ›". The month is only the word: the filter
+  still uses BirdNET's 48 weeks. With a place picked by name (#105), that name is used.
+- **The town:** the position rounded to 2 decimals (~1 km) is reverse-geocoded once through the existing Nominatim
+  queue (`geocoder.lookup`, 1.1 s spacing, cached 180 days under `geocode:near:<lat>,<lon>`), and only while Listen is
+  open. Until it answers (or offline) the line says "Your area". What we store says so.
+- **Bottom dock** shows the state's tip ("Point the bottom of your phone toward the sound.") until the first bird.
+  **Focus** has the status line and "Try the sample clip" on its Start page, and under the bird afterwards.

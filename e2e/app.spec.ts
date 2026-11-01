@@ -248,7 +248,7 @@ test('tabs, settings and map render', async ({ page }) => {
   await expect(page.getByTestId('threshold-help')).toContainText('Lower catches faint or distant birds but adds false IDs.');
   await page.goto('./#/listen');
   await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
-  await expect(page.getByTestId('context-chips')).toContainText('Min. 70%');
+  await expect(page.getByTestId('listen-status-line')).toContainText('Only matches 70% or more');
   await page.goto('./#/map');
   await expect(page.getByTestId('map')).toBeVisible();
   await expect(page.locator('.leaflet-control-attribution')).toContainText('OpenStreetMap');
@@ -1275,7 +1275,9 @@ test('Listen layouts: the picker switches at once, each Ready state differs, and
   await expect(page.getByTestId('dock')).toBeHidden();
   await expect(page.getByTestId('recent-fold')).toHaveCount(0); // no lists on the Focus screen
   await expect(page.getByTestId('pipeline')).toHaveCount(0);
-  await expect(page.getByTestId('context-chips')).toBeHidden();
+  // Focus has the same status line and sample clip as the other layouts (DECISIONS.md #108).
+  await expect(page.getByTestId('listen-status-line')).toBeVisible();
+  await expect(page.getByTestId('demo')).toBeVisible();
 
   // 2. The choice survives a reload and is right on the first paint, with no flash.
   await page.reload();
@@ -2675,4 +2677,45 @@ test('the birds heard this session are still on Listen after visiting another ta
   await page.goto('./#/listen');
   await expect(page.getByTestId('recent-inline').getByTestId('recent-card').first()).toContainText(species!, { timeout: 2_000 });
   await browser.close();
+});
+
+test('Listen: one plain status line with the town, in every layout; the dock tip; Focus has the sample clip (DECISIONS.md #108)', async ({ browser }) => {
+  const month = new Date().toLocaleString('en-US', { month: 'long' });
+  for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+    const context = await browser.newContext({ viewport: { width: 320, height: 700 }, serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
+    await context.route(/bird-brain\.duckdns\.org\/models/, (route) => route.abort());
+    const reverse: string[] = [];
+    await context.route(/nominatim\.openstreetmap\.org\/reverse/, (route) => {
+      reverse.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ name: 'Merle Hay Road', address: { road: 'Merle Hay Road', town: 'Johnston', state: 'Iowa' } }) });
+    });
+    await context.addInitScript((l) => {
+      if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: l, locationMode: 'off' }));
+    }, layout);
+    const page = await context.newPage();
+    await page.goto('./#/listen');
+    const line = page.getByTestId('listen-status-line');
+    // No location: words, not codes, and a real link to fix it.
+    await expect(line).toContainText('No location · All year · Only matches 70% or more');
+    await expect(page.getByTestId('listen-status-link')).toHaveText('Turn on location to filter for your area ›');
+    await expect(page.getByTestId('demo')).toBeVisible();
+    expect((await page.getByTestId('demo').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    // Bottom dock now shows the state's tip until the first bird ("Point the bottom…" once the model is ready).
+    if (layout === 'dock') await expect(page.locator('.state-hint')).toBeVisible();
+    // With a position: the nearest town, asked once with a position rounded to ~1 km.
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 41.67349, longitude: -93.69812 });
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('birdbrain.settings.v1')!);
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ ...s, locationMode: 'auto' }));
+    });
+    await page.reload();
+    await expect(line).toHaveText(`Near Johnston · ${month} birds · Only matches 70% or more`, { timeout: 15_000 });
+    await expect(page.getByTestId('listen-status-link')).toBeHidden();
+    expect(reverse.length).toBeGreaterThanOrEqual(1);
+    expect(reverse[0]).toContain('lat=41.670&lon=-93.700');
+    await expect(page.getByText('86H8M7PV+QW')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await context.close();
+  }
 });
