@@ -40,6 +40,8 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
       'Sightings, recordings, clips and ticks never leave this phone.',
       // src/geo/geocode.ts (DECISIONS.md #73): rounded area centres only, and only from the Map tab's Places view.
       'Map › Places sends each 1 km area’s centre, rounded to ~100 m, to OpenStreetMap’s Nominatim for its name. Nothing else.',
+      // src/app/status-line.ts (DECISIONS.md #108): the town for "Near …" on Listen, once per ~1 km square.
+      'Listen sends your position, rounded to about 1 km, to OpenStreetMap’s Nominatim to name the nearest town. The name is kept on this phone.',
       // src/geo/place-search.ts (DECISIONS.md #105): only when someone presses Search in Species › Pick a place.
       'Species › Pick a place sends the town name you type to OpenStreetMap’s Nominatim to find it. Nothing else.',
     ],

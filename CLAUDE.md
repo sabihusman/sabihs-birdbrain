@@ -65,7 +65,8 @@ Key modules:
   (`src/geo/areas.ts`, leader clustering, centres ≥ 1 km apart) named by
   OpenStreetMap's Nominatim reverse geocoder (`src/geo/geocode.ts`: 1.1 s serial
   queue, `geocode:` entries in the `wiki` store, 180 days, `VITE_GEOCODER_URL`),
-  only while Places is open. See DECISIONS.md #73 (Overpass, #72, is gone).
+  only while Places is open; Listen's status line also names the nearest town through it (position rounded to
+  ~1 km, `src/app/status-line.ts`, #108). See DECISIONS.md #73 (Overpass, #72, is gone).
 - Member-only, on-device: `src/app/access.ts` (gating from the cached
   session), `src/species/clips.ts` (one raw clip per species, replace-if-higher,
   10 s cap), `src/ui/components/{member-gate,species-id-card,clip-player}.ts`,
