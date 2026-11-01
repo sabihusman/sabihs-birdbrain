@@ -657,3 +657,23 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .focus-block .ready-extras { margin-top: var(--space-3); }
 .listen-dock-layout .ready-extras { align-items: stretch; }
 .listen-dock-layout .listen-status-line { text-align: left; }
+
+/* "See the sound" (DECISIONS.md #109): title, "● Listening" and "Hide" share one row, the chips below,
+   the ⓘ for the captions on the same row (it lives in the body, so tapping it never toggles the section). */
+/* The ⓘ button cannot sit inside <summary> (a tap would also toggle the fold), so it is placed over the title row, centred on it. */
+.pipeline-fold { position: relative; }
+.pipeline-fold > summary { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "head chev" "chips chips"; align-items: center; row-gap: var(--space-1); }
+.pipeline-fold > summary > .fold-head { grid-area: head; flex-direction: row; align-items: baseline; gap: var(--space-2); }
+.pipeline-fold > summary > .pipeline-summary { grid-area: chips; }
+.pipeline-fold > summary::after { grid-area: chev; }
+.pipeline-fold[open] > summary::after { content: "Hide ⌃"; transform: none; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--accent); margin-right: 0; }
+.see-info { position: absolute; top: -4px; right: 64px; width: 44px; height: 32px; line-height: 1; border: 0; background: none; color: var(--accent); font-size: 1.15rem; cursor: pointer; border-radius: var(--radius-control); }
+.see-info[aria-expanded="true"] { background: var(--surface-2); }
+.see-info:focus-visible { outline: 3px solid var(--focus); outline-offset: 0; }
+.see-views { gap: var(--space-2); }
+.see-captions { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2); border-radius: var(--radius-control); background: var(--surface-2); }
+.see-captions[hidden] { display: none; }
+.see-captions p { margin: 0; }
+.listen-help-link { margin: var(--space-2) 0 0; }
+.listen-help-link a { color: var(--accent); font-weight: var(--weight-semibold); }
+.help-steps { margin: 0 0 var(--space-2); padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }

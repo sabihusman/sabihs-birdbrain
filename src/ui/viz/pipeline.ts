@@ -8,10 +8,10 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * "How BirdNET decides": one collapsed section instead of seven step cards.
- *
- * Closed, it shows the chip strip Mic › Resample › Window › Spectrogram › Network ›
- * Location › Result; open, a compact numbered list with the limits note at the end.
+ * "See the sound" (DECISIONS.md #109): one collapsed section on Listen. Closed, it shows the chip strip
+ * Mic › Resample › Window › Spectrogram › Network › Location › Result; open, the live views (`lead`)
+ * with their captions behind an ⓘ button, so all four fit on a phone. The 1–7 explanation of the steps
+ * lives on the help page (`PIPELINE_STAGES`, rendered there).
  * While the mic is on, the chips and the number badges light up as each stage runs,
  * driven by the controller's existing `stage` events: the running stage takes the
  * accent fill, the ones already done in this 3-second window a soft tint, and the next
@@ -21,7 +21,6 @@ function prefersReducedMotion(): boolean {
 export class PipelineView {
   readonly el: HTMLDetailsElement;
   private readonly chips = new Map<PipelineStage, HTMLElement>();
-  private readonly badges = new Map<PipelineStage, HTMLElement>();
   private readonly live: HTMLElement;
   private state: PipelineState = emptyPipelineState;
   private queue: PipelineStage[] = [];
@@ -29,36 +28,32 @@ export class PipelineView {
   private listening = false;
   private resampling = true;
 
-  constructor(opts: { open?: boolean; onToggle?: (open: boolean) => void; lead?: Node | null } = {}) {
+  constructor(opts: { open?: boolean; onToggle?: (open: boolean) => void; lead?: Node | null; info?: HTMLElement | null } = {}) {
     const strip = el('span', { class: 'chip-strip', 'data-testid': 'pipeline-chips', 'aria-hidden': 'true' });
-    const items: HTMLElement[] = [];
     PIPELINE_STAGES.forEach((s, i) => {
       const chip = el('span', { class: 'pchip', dataset: { stage: s.id } }, s.chip);
       this.chips.set(s.id, chip);
       if (i > 0) strip.append(el('span', { class: 'chip-sep' }, '›'));
       strip.append(chip);
-
-      const badge = el('span', { class: 'pnum', dataset: { stage: s.id }, 'aria-hidden': 'true' }, String(i + 1));
-      this.badges.set(s.id, badge);
-      items.push(el('li', { class: 'pstep', dataset: { stage: s.id } }, badge, el('span', null, el('strong', null, s.title), el('span', { class: 'small muted pstep-text' }, s.text))));
     });
 
     this.live = el('span', { class: 'pipeline-live', 'data-testid': 'pipeline-live', hidden: true }, '● Listening');
     this.el = disclosure(
       {
-        title: 'How BirdNET decides',
-        summaryExtra: el('span', { class: 'pipeline-summary' }, this.live, strip),
+        title: 'See the sound',
+        summaryExtra: el('span', { class: 'pipeline-summary' }, strip),
         className: 'pipeline-fold',
         testId: 'pipeline',
         open: opts.open,
         onToggle: opts.onToggle,
       },
-      // The live waveform, spectrogram and timeline go above the steps: they show the same
-      // stages happening (DECISIONS.md #59).
+      // The ⓘ for the captions sits on the title row (positioned there by CSS) but lives in the body,
+      // so tapping it never opens or closes the section.
+      opts.info ?? null,
       opts.lead ?? null,
-      el('ol', { class: 'pipeline-list', 'data-testid': 'pipeline-list' }, ...items),
-      el('p', { class: 'small muted' }, 'BirdNET says which species are in each 3 s window. It can’t separate overlapping calls or count birds. ', el('a', { href: '#/help' }, 'More about limits')),
     );
+    // "● Listening" shares the title row instead of a line of its own.
+    this.el.querySelector('.fold-head')?.append(this.live);
     this.paint();
   }
 
@@ -120,15 +115,13 @@ export class PipelineView {
     }, MIN_LIT_MS);
   }
 
-  /** The only DOM write: the class of each chip and each number badge. */
+  /** The only DOM write: the class of each chip. */
   private paint(): void {
     for (const s of PIPELINE_STAGES) {
       const cls = stageClass(this.state, s.id);
       const bypassed = s.id === 'resample' && !this.resampling ? ' bypassed' : '';
       const chip = this.chips.get(s.id);
       if (chip) chip.className = `pchip${cls ? ` ${cls}` : ''}${bypassed}`;
-      const badge = this.badges.get(s.id);
-      if (badge) badge.className = `pnum${cls ? ` ${cls}` : ''}${bypassed}`;
     }
   }
 }

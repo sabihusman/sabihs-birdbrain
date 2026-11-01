@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confidenceLine, windowLine, windowLines } from '../src/ui/confidence-text';
+import { confidenceLine, confidenceWords, windowLine, windowLines } from '../src/ui/confidence-text';
 
 describe('sighting card confidence text', () => {
   it('states the best confidence against the user minimum', () => {
@@ -11,5 +11,14 @@ describe('sighting card confidence text', () => {
   });
   it('clips the last window to the recording length and lists windows in time order', () => {
     expect(windowLines([{ offsetSec: 3, confidence: 0.7 }, { offsetSec: 0, confidence: 0.9 }], 4.5)).toEqual(['0:00–0:03 · 90%', '0:03–0:04 · 70%']);
+  });
+  it('puts the Focus card confidence in words: 90%+ Very likely, 70–89% Likely, else Possible (DECISIONS.md #109)', () => {
+    expect(confidenceWords(1)).toBe('Very likely');
+    expect(confidenceWords(0.9)).toBe('Very likely');
+    expect(confidenceWords(0.896)).toBe('Very likely'); // shown as 90%
+    expect(confidenceWords(0.894)).toBe('Likely'); // shown as 89%
+    expect(confidenceWords(0.7)).toBe('Likely');
+    expect(confidenceWords(0.694)).toBe('Possible'); // shown as 69%
+    expect(confidenceWords(0.1)).toBe('Possible');
   });
 });

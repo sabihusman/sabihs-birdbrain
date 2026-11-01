@@ -3016,3 +3016,21 @@ Each finding was checked against the code first.
   open. Until it answers (or offline) the line says "Your area". What we store says so.
 - **Bottom dock** shows the state's tip ("Point the bottom of your phone toward the sound.") until the first bird.
   **Focus** has the status line and "Try the sample clip" on its Start page, and under the bird afterwards.
+
+## 109. Listen: "See the sound" with captions behind ⓘ; the 1–7 steps move to Help; no Recent dropdown in Consolidated; words on Focus's card; Bottom dock cards open
+
+- **Why (Listen layouts audit, Nov 1; Sabih chose 3A, 4A, 5A, 6A, then the ⓘ idea for the captions):** the four live
+  views (steps, waveform, spectrogram, confidence chart) did not fit between the header and the Stop bar on an
+  iPhone, mostly because of three always-on captions and a numbered 1–7 list. Consolidated repeated its result
+  cards in a "Recent sightings" dropdown. Focus's big card showed a percentage only. Bottom dock's sighting cards
+  opened closed, so the detections took a tap each.
+- **Now:** the fold is called "See the sound". Its title row holds "● Listening" (while the mic is on), an ⓘ
+  button ("What am I seeing?") and "Hide ⌃"; the captions sit in one panel under the pictures, closed each time
+  Listen opens, with "How BirdNET decides ›". The numbered steps and the limits line live on Help
+  (`#/help`, section `how-birdnet-decides`), and Listen keeps one "How BirdNET decides ›" link. The step chips, the
+  three pictures and the legend are unchanged. With three or more birds the legend wraps, so Bottom dock and Focus
+  can still push the chart's bottom under the Stop bar.
+- **Consolidated** shows the result cards only (they are the list). **Bottom dock**'s sighting cards start open; a
+  tap closes one. **Focus**'s big card reads "Very likely · best 93%": 90% and up Very likely, 70–89% Likely, else
+  Possible (`confidenceWords`, judged on the rounded percentage shown so the two always agree). These words describe
+  BirdNET's score, not a calibrated probability.

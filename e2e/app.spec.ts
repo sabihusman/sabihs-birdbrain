@@ -1149,7 +1149,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     await page.waitForTimeout(1500);
     if (layout === 'consolidated') {
       // Live pipeline chips (DECISIONS.md #57): the stages light in order while the mic is on.
-      await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
+      await page.getByTestId('pipeline').getByText('See the sound').click();
       await expect(page.getByTestId('pipeline-live')).toBeVisible();
       const chips = page.getByTestId('pipeline-chips');
       await expect(chips.locator('.pchip.active, .pchip.done')).not.toHaveCount(0, { timeout: 15_000 });
@@ -1220,13 +1220,18 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   await expect(page.getByText('Only on this phone')).toBeVisible();
   await noScroll('what we store open at 320px');
   await page.goto('./#/listen');
-  await page.getByTestId('pipeline').getByText('How BirdNET decides').click();
-  await expect(page.getByTestId('pipeline-list')).toBeVisible();
-  await expect(page.getByTestId('pipeline-list')).toContainText('A neural network scores all 6,522 classes');
-  // The limits note sits after the list, inside the same section.
-  await expect(page.getByTestId('pipeline')).toContainText('It can’t separate overlapping calls or count birds.');
-  await expect(page.getByTestId('pipeline').getByRole('link', { name: 'More about limits' })).toBeVisible();
+  // "See the sound" (DECISIONS.md #109): the views without their captions; ⓘ opens them; the 1–7 steps are on the help page.
+  await page.getByTestId('pipeline').getByText('See the sound').click();
+  await expect(page.getByTestId('see-captions')).toBeHidden();
+  await page.getByTestId('see-info').click();
+  await expect(page.getByTestId('see-captions')).toBeVisible();
+  await expect(page.getByTestId('pipeline')).toHaveAttribute('open', '');
+  await expect(page.getByTestId('see-captions')).toContainText('Dashed box: the 3 s being analysed.');
   await noScroll('pipeline open at 320px');
+  await page.getByTestId('listen-help-link').click();
+  await expect(page.getByTestId('help-steps')).toContainText('A neural network scores all 6,522 classes');
+  await expect(page.getByTestId('help-steps')).toContainText('It can’t separate overlapping calls or count birds.');
+  await page.goto('./#/listen');
   // The summary is a real tap target and keeps the focus ring.
   const box = await page.getByTestId('pipeline').locator('summary').boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(44);
@@ -1337,7 +1342,7 @@ test('mic blocked state explains the iPhone steps and offers Try again and impor
 
 
 for (const layout of ['consolidated', 'dock', 'focus'] as const) {
-  test(`Recent sightings (${layout}): one card per species, best + Heard once + last, expands to the lumped detections and collapses`, async ({ page }) => {
+  test(`Recent sightings (${layout}): one card per species with best + Heard once + last; Bottom dock opens them, Consolidated has no extra dropdown, Focus says it in words (DECISIONS.md #109)`, async ({ page }) => {
     await page.addInitScript((l) => {
       const raw = localStorage.getItem('birdbrain.settings.v1');
       const s = raw ? JSON.parse(raw) : {};
@@ -1346,35 +1351,26 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     }, layout);
     await page.goto('./#/listen');
     await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-    // Consolidated keeps the cards behind the collapsed row, Bottom dock shows them on the page,
-    // and Focus has no list at all (DECISIONS.md #59).
-    if (layout === 'focus') await expect(page.getByTestId('recent-fold')).toHaveCount(0);
+    // Bottom dock lists the birds on the page; Consolidated's result cards are the list (no "Recent sightings"
+    // dropdown any more); Focus shows the latest bird (DECISIONS.md #59, #109).
+    if (layout !== 'dock') await expect(page.getByTestId('recent-fold')).toHaveCount(0);
     else await expect(page.getByTestId('recent-empty')).toBeAttached();
-    if (layout === 'focus') await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
-    else await page.getByTestId('demo').click();
+    await page.getByTestId('demo').click();
     await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
     // The live results list shows the best confidence labelled "best" and the count.
-    if (layout !== 'focus') {
-      const result = page.getByTestId('result-card').first();
-      await expect(result).toContainText(/best\s*\d+%/);
-      await expect(result).toContainText('Heard once');
-    } else {
-      await expect(page.getByTestId('focus-latest')).toContainText('Heard once');
-    }
-    // Recent sightings: one card per species, a real button with aria-expanded, at least 44 px tall.
     if (layout === 'focus') {
-      // Nothing more to check here: Focus shows the hero card and "N more birds" instead.
+      await expect(page.getByTestId('focus-latest')).toContainText('Heard once');
+      // The big card says it in words too: 90%+ Very likely, 70–89% Likely, else Possible.
+      await expect(page.getByTestId('focus-latest').getByTestId('result-words')).toHaveText(/^(Very likely|Likely|Possible) · $/);
       await expect(page.getByTestId('more-birds')).toBeAttached();
       return;
     }
-    const summaryId = layout === 'dock' ? 'recent-inline-summary' : 'recent-summary';
-    await expect(page.getByTestId(summaryId)).toHaveText(/^\d+ birds? · \d+ detections?$/);
-    if (layout === 'dock') {
-      // The cards are already on the page in this layout.
-      await expect(page.getByTestId('recent-inline')).toBeVisible();
-    } else {
-      await page.getByTestId('recent-fold').locator('summary').click();
-    }
+    const result = page.getByTestId('result-card').first();
+    await expect(result).toContainText(/best\s*\d+%/);
+    await expect(result).toContainText('Heard once');
+    if (layout === 'consolidated') return;
+    await expect(page.getByTestId('recent-inline-summary')).toHaveText(/^\d+ birds? · \d+ detections?$/);
+    await expect(page.getByTestId('recent-inline')).toBeVisible();
     await expect(page.getByTestId('recent-empty')).toBeHidden();
     const cards = page.getByTestId('recent-card');
     const n = await cards.count();
@@ -1382,7 +1378,6 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     const keys = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-species')));
     expect(new Set(keys).size, 'no duplicate species cards').toBe(keys.length);
     const card = cards.first();
-    await expect(card).toHaveAttribute('aria-expanded', 'false');
     await expect(card).toHaveAttribute('aria-label', /^.+, heard once, best \d+%, last at .+$/);
     await expect(card).toContainText(/Acanthis/);
     await expect(card).toContainText(/best\s*\d+%/);
@@ -1391,19 +1386,18 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     const box = await card.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
     expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    await expect(page.getByTestId('recent-rows').first()).toBeHidden();
-    // Tap expands: the lumped detections, newest first, each with time (or range), hit count and best.
-    await card.click();
-    const expandedCard = page.getByTestId('recent-card').first();
-    await expect(expandedCard).toHaveAttribute('aria-expanded', 'true');
+    // Open from the start in Bottom dock: the lumped detections, each with time (or range), hit count and best.
+    await expect(card).toHaveAttribute('aria-expanded', 'true');
     const rows = page.getByTestId('recent-rows').first();
     await expect(rows).toBeVisible();
     await expect(rows.locator('.recent-row').first()).toContainText(/\d{1,2}:\d{2}:\d{2}/);
     await expect(rows.locator('.recent-row').first()).toContainText(/\d+ hits? · best \d+%/);
-    // Tap again collapses.
-    await expandedCard.click();
+    // A tap closes it, and another opens it again.
+    await card.click();
     await expect(page.getByTestId('recent-card').first()).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByTestId('recent-rows').first()).toBeHidden();
+    await page.getByTestId('recent-card').first().click();
+    await expect(page.getByTestId('recent-card').first()).toHaveAttribute('aria-expanded', 'true');
     // Nothing on the screen overflows the phone width.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
@@ -2319,7 +2313,7 @@ test('the Species tab has the "Share my species list" switch for members, the sa
   await context.close();
 });
 
-test('live listening updates the result and recent cards in place, so they do not flicker (DECISIONS.md #99)', async ({ playwright }) => {
+test('live listening updates the result cards in place, so they do not flicker (DECISIONS.md #99, #109)', async ({ playwright }) => {
   // The sample redpoll recording loops as the microphone with no location filter, so the same bird is matched window after window.
   const browser = await playwright.chromium.launch({
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
@@ -2335,31 +2329,30 @@ test('live listening updates the result and recent cards in place, so they do no
   await page.getByTestId('start-stop').click();
   const card = page.getByTestId('results').getByTestId('result-card').first();
   await expect(card).toBeVisible({ timeout: 90_000 });
-  await page.getByTestId('recent-fold').locator('summary').click();
-  const recent = page.getByTestId('recent-fold').getByTestId('recent-card').first();
-  await expect(recent).toBeVisible();
-  await recent.click();
-  await expect(recent).toHaveAttribute('aria-expanded', 'true');
-  // Mark today's nodes and count every card the page throws away from now on.
+  // Mark today's card and count every card the page throws away from now on, and every window that reaches
+  // the Result step (its chip lights up once per window). The "Recent sightings" dropdown is gone (#109).
   await page.evaluate(() => {
-    const w = window as unknown as { removedCards: number; marked: Element[] };
+    const w = window as unknown as { removedCards: number; marked: Element[]; results: number };
     w.removedCards = 0;
-    w.marked = [document.querySelector('[data-testid="results"] .result-wrap')!, document.querySelector('[data-testid="recent-fold"] .recent-card')!];
+    w.results = 0;
+    w.marked = [document.querySelector('[data-testid="results"] .result-wrap')!];
     new MutationObserver((records) => {
       for (const r of records) for (const n of r.removedNodes) if (n instanceof Element && (n.matches('.result-wrap, .recent-card') || n.querySelector('.result-wrap, .recent-card'))) w.removedCards++;
     }).observe(document.body, { childList: true, subtree: true });
+    const chip = document.querySelector('.pchip[data-stage="result"]')!;
+    new MutationObserver(() => {
+      if (chip.classList.contains('active')) w.results++;
+    }).observe(chip, { attributes: true, attributeFilter: ['class'] });
   });
-  const hits = async () => Number((await page.getByTestId('recent-fold').getByTestId('recent-rows').first().locator('.recent-row').first().textContent())?.match(/(\d+) hits?/)?.[1] ?? 0);
-  const before = await hits();
-  // Several more windows arrive and are counted in the same open card.
-  await expect.poll(hits, { timeout: 60_000 }).toBeGreaterThanOrEqual(before + 2);
+  // Several more windows arrive and update the same card.
+  await expect.poll(() => page.evaluate(() => (window as unknown as { results: number }).results), { timeout: 60_000 }).toBeGreaterThanOrEqual(3);
   const state = await page.evaluate(() => {
     const w = window as unknown as { removedCards: number; marked: Element[] };
     return { removed: w.removedCards, connected: w.marked.map((m) => m.isConnected) };
   });
   expect(state.removed, 'no card is rebuilt between windows').toBe(0);
-  expect(state.connected).toEqual([true, true]);
-  await expect(recent).toHaveAttribute('aria-expanded', 'true');
+  expect(state.connected).toEqual([true]);
+  await expect(card).toBeVisible();
   await expect(card.getByTestId('sound-only-note')).toBeHidden();
   await page.getByTestId('stop').click();
   await browser.close();
