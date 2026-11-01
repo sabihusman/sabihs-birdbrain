@@ -198,15 +198,33 @@ export function listenView(ctx: ViewContext): View {
   const timelineCanvas = el('canvas', { class: 'timeline', 'aria-label': 'Per-species confidence over time' });
   const legend = el('div', { class: 'legend' });
   const waveform = new WaveformView(waveCanvas);
-  const waveLabel = el('div', { class: 'viz-label', 'data-testid': 'waveform-label' }, 'Waveform, last 3 s (auto-scaled)');
+  const waveLabel = el('p', { 'data-testid': 'waveform-label' }, 'Waveform, last 3 s (auto-scaled)');
   const spectrogram = new SpectrogramView(specCanvas, specOverlay, 10);
   const timeline = new TimelineView(timelineCanvas, legend, () => controller.species);
   timeline.setThreshold(settings.get().threshold);
-  const liveViews = el('div', { class: 'stack' }, waveCanvas, waveLabel, specBox, el('div', { class: 'viz-label' }, 'Spectrogram (auto-scaled), close to what BirdNET sees. Dashed box: the 3 s being analysed.'), timelineCanvas, legend, el('div', { class: 'viz-label' }, 'Confidence per bird over time. Dashed line: your minimum.'));
+  // The four live views stack without their captions, so all of them fit on a phone; the captions open from
+  // the ⓘ on the title row (DECISIONS.md #109). The waveform's gain stays on the canvas itself.
+  const captions = el(
+    'div',
+    { class: 'see-captions small muted', id: 'see-captions', hidden: true, 'data-testid': 'see-captions' },
+    el('p', null, el('strong', null, 'Steps'), ': where the sound is now, from the mic to the result.'),
+    waveLabel,
+    el('p', null, el('strong', null, 'Spectrogram'), ': auto-scaled, close to what BirdNET sees. Dashed box: the 3 s being analysed.'),
+    el('p', null, el('strong', null, 'Confidence'), ': per bird over time. Dashed line: your minimum.'),
+    el('a', { href: '#/help', 'data-testid': 'see-help-link' }, 'How BirdNET decides ›'),
+  );
+  const infoBtn = el('button', { class: 'see-info', type: 'button', 'aria-label': 'What am I seeing?', 'aria-expanded': 'false', 'aria-controls': 'see-captions', 'data-testid': 'see-info' }, 'ⓘ');
+  infoBtn.addEventListener('click', () => {
+    captions.hidden = !captions.hidden;
+    infoBtn.setAttribute('aria-expanded', String(!captions.hidden));
+  });
+  const liveViews = el('div', { class: 'stack see-views' }, waveCanvas, specBox, timelineCanvas, legend, captions);
   // One row on the Listen screen, as in the layout spec: the chips in its summary, the live
   // views and the steps inside. The old separate "How it works" row is gone.
-  const pipeline = new PipelineView({ open: howItWorksOpen, onToggle: (open) => (howItWorksOpen = open), lead: liveViews });
+  const pipeline = new PipelineView({ open: howItWorksOpen, onToggle: (open) => (howItWorksOpen = open), lead: liveViews, info: infoBtn });
   const how = pipeline.el;
+  // The 1–7 steps moved to the help page (DECISIONS.md #109); Listen keeps one quiet link to them.
+  const helpLink = el('p', { class: 'small listen-help-link' }, el('a', { href: '#/help', 'data-testid': 'listen-help-link' }, 'How BirdNET decides ›'));
   how.addEventListener('toggle', () => {
     if (how.open) howItWorksOpen = true;
     dirty = true;
@@ -275,20 +293,21 @@ export function listenView(ctx: ViewContext): View {
       moreList.appendChild(resultsList);
       focusBlock.appendChild(notUsualBox);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, focusBlock, credit, panel, dock, bubble.el);
+      root.replaceChildren(readyBlock, focusBlock, helpLink, credit, panel, dock, bubble.el);
     } else if (next === 'dock') {
       resultsBlock.prepend(resultsList);
       resultsBlock.prepend(banner);
       lowLine.after(notUsualBox);
       recentInline.appendChild(recentBody);
       // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
-      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, credit, dock, bubble.el);
+      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, helpLink, credit, dock, bubble.el);
     } else {
       resultsBlock.prepend(resultsList);
       panel.insertBefore(banner, panel.lastElementChild);
       lowLine.after(notUsualBox);
       recentDetails.appendChild(recentBody);
-      root.replaceChildren(readyBlock, panel, resultsBlock, how, recentDetails, credit, bubble.el);
+      // The result cards under the panel are the list; the "Recent sightings" dropdown repeated them (#109).
+      root.replaceChildren(readyBlock, panel, resultsBlock, how, helpLink, credit, bubble.el);
     }
   };
   applyLayout(layout);
@@ -297,6 +316,9 @@ export function listenView(ctx: ViewContext): View {
   // This session's birds live in the controller, so they survive leaving Listen (DECISIONS.md #107).
   let lastResult: WindowResult | null = controller.getLastWindow();
   const expanded = new Set<string>();
+  /** Bottom dock opens every card (DECISIONS.md #109); this holds the ones closed by hand. Elsewhere `expanded` holds the open ones. */
+  const collapsed = new Set<string>();
+  const isOpen = (key: string) => (layout === 'dock' ? !collapsed.has(key) : expanded.has(key));
   // Cards are kept per species and updated in place, so each window doesn't rebuild them (no flicker).
   const resultCards = keyedPool<ResultCardHandle>();
   const recentCards = keyedPool<RecentGroupCardHandle>();
@@ -504,14 +526,14 @@ export function listenView(ctx: ViewContext): View {
       groups.map((g) => {
         const card = recentCards.take(g.key, () =>
           recentGroupCard(ctx, g, {
-            expanded: expanded.has(g.key),
+            expanded: isOpen(g.key),
             onToggle: (key) => {
-              toggleExpanded(expanded, key);
+              toggleExpanded(layout === 'dock' ? collapsed : expanded, key);
               renderRecent();
             },
           }),
         );
-        card.update(g, expanded.has(g.key));
+        card.update(g, isOpen(g.key));
         return card.el;
       }),
     );

@@ -1,6 +1,7 @@
 import { describeAiServices, refreshAiServices, storedAiServices } from '../../api/ai-services';
 import type { View, ViewContext } from '../app';
 import { el } from '../dom';
+import { PIPELINE_STAGES } from '../viz/pipeline-state';
 
 export function helpView(_ctx: ViewContext): View {
   // Named from the server's list (DECISIONS.md #90): the stored copy at once, the server's answer when it arrives.
@@ -17,6 +18,14 @@ export function helpView(_ctx: ViewContext): View {
       el('p', null, 'Nothing is uploaded: audio and sightings stay in this browser. Recordings are saved as 16-bit WAV at 48 kHz.'),
       el('p', null, 'Map › Places groups sightings into areas about 1 km across (a sighting joins an area within 1 km of its centre, or starts one). To name each, it sends the centre, rounded to ~100 m, to OpenStreetMap’s Nominatim, one at a time. Names are saved for 180 days.'),
       el('p', null, 'On Species, ✓ marks birds you’ve spotted and “Spotted by me” lists them. Members tap ✓ for the ID card. Ticks never leave this phone.'),
+    ),
+    // The 1–7 steps, moved here from the Listen screen (DECISIONS.md #109); the chips on Listen light up in this order.
+    el(
+      'section',
+      { class: 'card', id: 'how-birdnet-decides', 'data-testid': 'help-steps' },
+      el('h2', null, 'How BirdNET decides'),
+      el('ol', { class: 'help-steps' }, ...PIPELINE_STAGES.map((s) => el('li', null, el('strong', null, s.title), ': ', s.text))),
+      el('p', { class: 'small muted' }, 'BirdNET says which species are in each 3 s window. It can’t separate overlapping calls or count birds.'),
     ),
     el(
       'section',

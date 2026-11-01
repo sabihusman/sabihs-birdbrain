@@ -5,6 +5,7 @@ import { heardLabel } from '../../species/recent';
 import { getClip, getClipMeta } from '../../storage/db';
 import type { ViewContext } from '../app';
 import { el, pct } from '../dom';
+import { confidenceWords } from '../confidence-text';
 import { speciesHref } from '../router';
 import { timeAgo } from '../status';
 import { clipSlot } from './clip-player';
@@ -78,7 +79,8 @@ export function resultCard(ctx: ViewContext, species: Species, opts: ResultCardO
     const grouped = o.heardTimes != null;
     link.classList.toggle('large', !!o.large);
     conf.setAttribute('aria-label', `${grouped ? 'best ' : ''}confidence ${pct(o.confidence)}`);
-    conf.replaceChildren(...(grouped ? [el('span', { class: 'muted result-best-label' }, 'best ')] : []), pct(o.confidence));
+    // Focus's big card says it in words too: "Very likely · best 95%" (DECISIONS.md #109).
+    conf.replaceChildren(...(o.large ? [el('span', { class: 'result-words', 'data-testid': 'result-words' }, `${confidenceWords(o.confidence)} · `)] : []), ...(grouped ? [el('span', { class: 'muted result-best-label' }, 'best ')] : []), pct(o.confidence));
     heard.textContent = grouped ? heardLabel(o.heardTimes as number) : '';
     heard.hidden = !grouped;
     heardSep.hidden = !grouped;
