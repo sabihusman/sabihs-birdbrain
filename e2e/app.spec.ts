@@ -2723,7 +2723,7 @@ test('Listen: one plain status line with the town, in every layout; the dock tip
   }
 });
 
-test('BirdAmp: members only; the player listens, pauses (clock held, same birds) and carries on; windows minimise, close, restore and move; skin on Listen only; 320 px (DECISIONS.md #110)', async ({ playwright }) => {
+test('BirdAmp: members only; the player listens, pauses (clock held, same birds) and carries on; windows windowshade, close, restore and move; Winamp look; skin on Listen only; 320 px (DECISIONS.md #110, #111)', async ({ playwright }) => {
   const browser = await playwright.chromium.launch({
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
   });
@@ -2759,10 +2759,16 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('model-status')).toHaveText('Live');
   const rows = page.getByTestId('ba-row');
   await expect(rows.first()).toBeVisible({ timeout: 90_000 });
-  await expect(rows.first()).toContainText(/1\. .+Acanthis/);
-  await expect(rows.first()).toContainText(/best \d+% · Heard (once|\d+ times) · last/);
+  await expect(rows.first()).toContainText(/^1\. .+Redpoll/);
+  await expect(rows.first()).toContainText(/best \d+% · Heard (once|\d+ times) · \d/);
+  // Winamp's playlist: the bird in the marquee is the current row (white on navy); the total box sits in the foot.
+  await expect(rows.first()).toHaveClass(/current/);
+  await expect(page.getByTestId('ba-libcount')).toHaveText(/^\d+ birds? · \d+ det$/);
+  // Winamp's info boxes and ridged title bars.
+  await expect(page.getByTestId('ba-info')).toContainText('48');
+  await expect(page.getByTestId('ba-info')).toContainText('Mono');
+  await expect(page.getByTestId('ba-win-player').locator('.ba-ridges')).toHaveCount(2);
   await expect(page.getByTestId('ba-marquee')).toContainText(/ — Acanthis .+ — \d+% — (Very likely|Likely|Possible)/);
-  await expect(page.getByTestId('ba-libcount')).toContainText('repeats within 30 s count once');
   // Pause: the mic is released, the clock holds, the birds stay.
   await page.getByTestId('ba-pause').click();
   await expect(page.getByTestId('model-status')).toHaveText('Paused');
@@ -2789,8 +2795,10 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('ba-shade-bird')).toContainText('%');
   await page.getByTestId('ba-shade-stop').click();
   await expect(page.getByTestId('model-status')).toHaveText('Ready');
-  await page.getByTestId('ba-max-player').click();
+  await expect(page.getByTestId('ba-win-player').locator('.ba-titlebar')).toBeHidden();
+  await page.getByTestId('ba-unshade-player').click();
   await expect(page.getByTestId('ba-shade')).toBeHidden();
+  await expect(page.getByTestId('ba-clock')).toBeVisible();
   // EQ hides the Confidence window; it comes back from the "hidden" bar.
   await page.getByTestId('ba-eq').click();
   await expect(page.getByTestId('ba-win-confidence')).toHaveCount(0);
@@ -2805,7 +2813,7 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   expect(await order()).toEqual(['library', 'player', 'confidence']);
   // NEAR YOU with location off says so instead of a list.
   await page.getByTestId('ba-tab-near').click();
-  await expect(page.getByTestId('ba-libcount')).toContainText('location filter off');
+  await expect(page.getByTestId('ba-libnote')).toContainText('location filter off');
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   await page.reload();
   await expect(amp).toBeVisible();

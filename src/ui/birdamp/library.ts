@@ -17,7 +17,7 @@ export const LIBRARY_TABS: ReadonlyArray<{ id: LibraryTab; label: string; search
 export interface LibraryRow {
   scientific: string;
   common: string;
-  /** "best 95% · Heard once · last 11:15 AM" and the like. */
+  /** "best 95% · Heard once · 11:15 AM" and the like (the playlist's second line). */
   detail: string;
   /** The number on the right ("95%"), or "✓" on NEAR YOU for a bird you've spotted. */
   right: string;
@@ -34,7 +34,7 @@ export function heardRows(groups: readonly SpeciesGroup<Named>[], locale?: strin
   return groups.map((g) => ({
     scientific: g.species.scientific,
     common: g.species.common,
-    detail: `best ${pct(g.best)} · ${heardLabel(g.detections.length)} · last ${fmtClockShort(g.lastHeard, locale)}`,
+    detail: `best ${pct(g.best)} · ${heardLabel(g.detections.length)} · ${fmtClockShort(g.lastHeard, locale)}`,
     right: pct(g.best),
   }));
 }
@@ -69,7 +69,7 @@ export function sightingRows(sightings: readonly SightingLike[], opts: { since?:
     .map(([scientific, g]) => ({
       scientific,
       common: g.common,
-      detail: `best ${pct(g.best)} · ${seenLabel(g.n)} · last ${g.last >= today ? fmtClockShort(g.last, opts.locale) : new Date(g.last).toLocaleDateString(opts.locale, { day: 'numeric', month: 'short' })}`,
+      detail: `best ${pct(g.best)} · ${seenLabel(g.n)} · ${g.last >= today ? fmtClockShort(g.last, opts.locale) : new Date(g.last).toLocaleDateString(opts.locale, { day: 'numeric', month: 'short' })}`,
       right: pct(g.best),
     }));
 }
@@ -95,22 +95,35 @@ export function startOfDay(ms: number): number {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** The count line under the search field. */
-export function countLine(tab: LibraryTab, o: { rows: number; detections?: number; place?: string | null; noLocation?: string | null }): string {
+/** The playlist's total box, where Winamp shows the total time (DECISIONS.md #111). */
+export function totalText(tab: LibraryTab, o: { rows: number; detections?: number; place?: string | null }): string {
   switch (tab) {
     case 'heard':
-      return o.rows ? `${plural(o.rows, 'bird')} · ${plural(o.detections ?? 0, 'detection')} · repeats within 30 s count once` : 'No birds yet this session';
+      return `${plural(o.rows, 'bird')} · ${o.detections ?? 0} det`;
     case 'today':
-      return o.rows ? `${plural(o.rows, 'bird')} today · saved on this phone` : 'No birds saved today yet';
+      return `${plural(o.rows, 'bird')} today`;
     case 'all':
-      return o.rows ? `${plural(o.rows, 'bird')} you’ve spotted` : 'No birds spotted yet';
+      return plural(o.rows, 'bird');
     case 'near':
-      if (o.noLocation) return o.noLocation;
-      return `${plural(o.rows, 'species', 'species')} near ${o.place ?? 'you'} · ✓ = you’ve spotted it`;
+      return `${plural(o.rows, 'species', 'species')}${o.place ? ` near ${o.place}` : ''}`;
   }
 }
 
-/** The marquee's bird: "Lesser Redpoll — Acanthis flammea — 95% — Very likely". */
+/** What an empty list says instead (or why NEAR YOU has no list). */
+export function emptyText(tab: LibraryTab, noLocation?: string | null): string {
+  switch (tab) {
+    case 'heard':
+      return 'No birds yet this session. Repeats within 30 s count once.';
+    case 'today':
+      return 'No birds saved today yet.';
+    case 'all':
+      return 'No birds spotted yet.';
+    case 'near':
+      return noLocation ?? 'No local list yet.';
+  }
+}
+
+/** The marquee's bird, with Winamp's *** separators: "*** Lesser Redpoll — Acanthis flammea — 95% — Very likely ***". */
 export function marqueeBird(s: Named, best: number): string {
-  return `${s.common} — ${s.scientific} — ${pct(best)} — ${confidenceWords(best)}`;
+  return `*** ${s.common} — ${s.scientific} — ${pct(best)} — ${confidenceWords(best)} ***`;
 }

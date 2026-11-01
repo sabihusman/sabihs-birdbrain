@@ -1,5 +1,4 @@
 import type { AppController } from '../../app/controller';
-import { speciesColor } from '../../species/colors';
 import { groupRecent } from '../../species/recent';
 import { listSightedSpecies, listSightings } from '../../storage/db';
 import type { SightingRecord } from '../../storage/types';
@@ -9,15 +8,18 @@ import { hrefFor } from '../router';
 import type { ListenStatus } from '../status';
 import type { SpectrogramView } from '../viz/spectrogram';
 import type { WaveformView } from '../viz/waveform';
-import { lcdClock, levelSegments, specLine } from './lcd';
-import { countLine, filterRows, heardRows, LIBRARY_TABS, marqueeBird, nearRows, sightingRows, startOfDay, type LibraryRow, type LibraryTab } from './library';
+import { lcdClock, levelPercent } from './lcd';
+import { emptyText, filterRows, heardRows, LIBRARY_TABS, marqueeBird, nearRows, sightingRows, startOfDay, totalText, type LibraryRow, type LibraryTab } from './library';
 import { hiddenWindows, loadWindows, moveWindow, moveWindowTo, saveWindows, setWindowState, toggleWindow, WINDOW_TITLES, type BirdAmpWindow, type BirdAmpWindows } from './windows';
 
 /**
- * BirdAmp Hybrid (DECISIONS.md #110): the classic player window on top, the Library's tabs and rows below, and the
- * confidence strip between them, in a dark Winamp skin. Presentation only: it shows the same canvases, session
- * birds and controls as the other layouts (the canvases are moved in, never copied), and every element drawn as a
- * button does something. Readouts the app has no number for (mic gain, the area filter) are drawn as LCD text.
+ * BirdAmp Hybrid (DECISIONS.md #110, #111): the classic player window on top, the playlist below, the confidence
+ * strip between them, drawn as close to Winamp 2.x as the app's real data allows: ridged gold title bars, docked
+ * windows, clock and oscilloscope (the live waveform) side by side, LCD info boxes, a volume-style meter, one row
+ * of transport keys with EQ and PL, a green-on-black playlist with the current bird on a navy bar, and a one-line
+ * windowshade. Presentation only: it shows the same canvases, session birds and controls as the other layouts
+ * (the canvases are moved in, never copied), and every element drawn as a button does something. Readouts the app
+ * has no control for (mic gain, the area filter) are drawn as LCD text.
  */
 export interface BirdAmpParts {
   controller: AppController;
@@ -25,7 +27,7 @@ export interface BirdAmpParts {
   specBox: HTMLElement;
   timelineCanvas: HTMLCanvasElement;
   legend: HTMLElement;
-  /** "N birds not usual here · show" and its list, kept with the Library. */
+  /** "N birds not usual here · show" and its list, kept with the playlist. */
   notUsualBox: HTMLElement;
   waveform: WaveformView;
   spectrogram: SpectrogramView;
@@ -45,9 +47,9 @@ export interface BirdAmpView {
   el: HTMLElement;
   /** Move the shared canvases in (the layout switched to BirdAmp). */
   mount: () => void;
-  /** State, clock, transport, marquee and the Library. */
+  /** State, clock, transport, marquee and the playlist. */
   render: () => void;
-  /** Every animation frame while shown: gain and dB readouts. */
+  /** Every animation frame while shown: the gain readout. */
   tick: () => void;
   setClock: (sec: number) => void;
   setLevel: (level: number) => void;
@@ -71,58 +73,57 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   let disposed = false;
 
   // ---- player ------------------------------------------------------------------
+  // Left LCD: the play-state symbol and the big clock over the oscilloscope (the live waveform).
+  const stateWord = el('span', { class: 'sr-only' }, '');
+  const stateSymbol = el('span', { class: 'ba-ps', 'aria-hidden': 'true' }, '■');
+  const stateLabel = el('span', { class: 'ba-state', 'data-testid': 'ba-state' }, stateSymbol, stateWord);
   const clock = el('span', { class: 'ba-clock tabular', 'data-testid': 'ba-clock' }, '00:00');
-  const stateLabel = el('span', { class: 'ba-state', 'data-testid': 'ba-state' }, '');
+  const visSlot = el('div', { class: 'ba-vis', 'aria-label': 'Live waveform, auto-scaled' });
+  const lcdLeft = el('div', { class: 'ba-lcd ba-lcd-left' }, el('div', { class: 'ba-clockrow' }, stateLabel, clock), visSlot);
+  // Right LCD: the scrolling title, the info boxes (Winamp's kbps / kHz and mono / stereo), the meter.
   const marqueeText = el('span', { class: 'ba-marquee-text' }, '');
   const marquee = el('div', { class: 'ba-marquee', 'data-testid': 'ba-marquee', role: 'status', 'aria-live': 'polite' }, marqueeText);
-  const spec = el('div', { class: 'ba-specline', 'data-testid': 'ba-specline' }, '');
+  const info = el(
+    'div',
+    { class: 'ba-info', 'data-testid': 'ba-info', 'aria-label': '48 kHz, BirdNET 2.4, mono' },
+    el('span', { class: 'ba-ib' }, '48'),
+    el('small', null, 'kHz'),
+    el('span', { class: 'ba-ib' }, '2.4'),
+    el('small', null, 'BirdNET'),
+    el('span', { class: 'ba-light on' }, 'Mono'),
+    el('span', { class: 'ba-light' }, 'Stereo'),
+  );
+  // Shaped like Winamp's volume slider, with no knob: the waveform gain is automatic, so this is display only.
+  const meterFill = el('i');
+  const meterText = el('em', { 'data-testid': 'ba-gain' }, 'Gain ×1 · auto');
+  const meter = el('div', { class: 'ba-meter', title: 'Mic level; the waveform gain is set automatically (display only)' }, meterFill, meterText);
   const readoutLine = el('div', { class: 'ba-readout', 'data-testid': 'ba-readout', hidden: true }, '');
-  const lcd = el('div', { class: 'ba-lcd' }, el('div', { class: 'ba-lcd-top' }, clock, stateLabel), marquee, spec, readoutLine);
-  // The waveform canvas prints its own gain ("×25"); the meter row says it is automatic.
-  const visSlot = el('div', { class: 'ba-vis', 'aria-label': 'Live waveform, auto-scaled' });
+  const lcdRight = el('div', { class: 'ba-lcd ba-lcd-right' }, marquee, info, meter, readoutLine);
   const specSlot = el('div', { class: 'ba-spec' });
-  const counts = el('span', { 'data-testid': 'ba-counts' }, 'No birds yet');
-  const leds = el('span', { class: 'ba-leds', 'aria-hidden': 'true' }, ...Array.from({ length: 6 }, () => el('i')));
-  const ledGain = el('span', { class: 'tabular' }, '×1');
-  // Display only: BirdNET auto-scales the waveform, the user never sets a gain.
-  const countRow = el('div', { class: 'ba-countrow' }, counts, el('span', { class: 'ba-meter', title: 'Waveform gain, set automatically (display only)' }, 'GAIN ', leds, ' ', ledGain));
-  const tBtn = (icon: string, word: string, label: string, testid: string) => {
-    const b = el('button', { class: 'ba-key', type: 'button', 'aria-label': label, 'data-testid': testid }, el('span', { class: 'ba-key-icon', 'aria-hidden': 'true' }, icon), el('span', { class: 'ba-key-word', 'aria-hidden': 'true' }, word));
-    return b;
-  };
-  const prevBtn = tBtn('⏮', 'Prev', 'Previous bird', 'ba-prev');
-  const listenBtn = tBtn('▶', 'Listen', 'Listen', 'ba-listen');
-  const pauseBtn = tBtn('❚❚', 'Pause', 'Pause', 'ba-pause');
-  const stopBtn = tBtn('■', 'Stop', 'Stop', 'ba-stop');
-  const nextBtn = tBtn('⏭', 'Next', 'Next bird', 'ba-next');
-  const sampleBtn = tBtn('⏏', 'Sample', 'Try the sample clip', 'ba-sample');
-  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, sampleBtn);
+  const tKey = (icon: string, word: string, label: string, testid: string) =>
+    el('button', { class: 'ba-key', type: 'button', 'aria-label': label, 'data-testid': testid }, el('span', { class: 'ba-key-icon', 'aria-hidden': 'true' }, icon), el('span', { class: 'ba-key-word', 'aria-hidden': 'true' }, word));
+  const prevBtn = tKey('⏮', 'Prev', 'Previous bird', 'ba-prev');
+  const listenBtn = tKey('▶', 'Listen', 'Listen', 'ba-listen');
+  const pauseBtn = tKey('❚❚', 'Pause', 'Pause', 'ba-pause');
+  const stopBtn = tKey('■', 'Stop', 'Stop', 'ba-stop');
+  const nextBtn = tKey('⏭', 'Next', 'Next bird', 'ba-next');
+  const sampleBtn = tKey('⏏', 'Sample', 'Try the sample clip', 'ba-sample');
+  const eqBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Confidence window', 'aria-pressed': 'true', 'data-testid': 'ba-eq' }, 'EQ');
+  const plBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Playlist window', 'aria-pressed': 'true', 'data-testid': 'ba-pl' }, 'PL');
+  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, sampleBtn, el('span', { class: 'ba-eqpl' }, eqBtn, plBtn));
   // The area filter is shown, not set, here: it is edited in Settings.
   const area = el('a', { class: 'ba-area', href: '#/settings', 'data-testid': 'ba-area' }, '');
-  const eqBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Confidence window', 'aria-pressed': 'true', 'data-testid': 'ba-eq' }, 'EQ');
-  const plBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Library window', 'aria-pressed': 'true', 'data-testid': 'ba-pl' }, 'PL');
-  const areaRow = el('div', { class: 'ba-arearow' }, area, eqBtn, plBtn);
-  const playerBody = el('div', { class: 'ba-body' }, el('div', { class: 'ba-top' }, lcd, visSlot), specSlot, countRow, transport, areaRow);
-
-  // Windowshade mini-player: clock, live light, the bird, and play / pause / stop.
-  const shadeClock = el('span', { class: 'ba-shade-clock tabular' }, '00:00');
-  const shadeDot = el('span', { class: 'ba-dot', 'aria-hidden': 'true' });
-  const shadeBird = el('span', { class: 'ba-shade-bird', 'data-testid': 'ba-shade-bird' }, '');
-  const shadeListen = btn('ba-mini', 'Listen', '▶', 'ba-shade-listen');
-  const shadePause = btn('ba-mini', 'Pause', '❚❚', 'ba-shade-pause');
-  const shadeStop = btn('ba-mini', 'Stop', '■', 'ba-shade-stop');
-  const playerShade = el('div', { class: 'ba-shade', 'data-testid': 'ba-shade' }, shadeClock, shadeDot, shadeBird, shadeListen, shadePause, shadeStop);
+  const playerBody = el('div', { class: 'ba-body' }, el('div', { class: 'ba-main' }, lcdLeft, lcdRight), specSlot, transport, area);
 
   // ---- confidence ----------------------------------------------------------------
   const minLabel = el('span', { class: 'ba-min', 'data-testid': 'ba-min' }, '');
   const confSlot = el('div', { class: 'ba-conf' }, minLabel);
   const legendSlot = el('div', { class: 'ba-legend' });
   const confBody = el('div', { class: 'ba-body' }, confSlot, legendSlot);
-  const confShade = el('div', { class: 'ba-shade' }, el('span', { class: 'ba-shade-bird', 'data-testid': 'ba-conf-shade' }, ''));
 
-  // ---- library ---------------------------------------------------------------------
+  // ---- playlist ---------------------------------------------------------------------
   const tabBtns = new Map<LibraryTab, HTMLButtonElement>();
-  const tabRow = el('div', { class: 'ba-tabs', role: 'tablist', 'aria-label': 'Library' });
+  const tabRow = el('div', { class: 'ba-tabs', role: 'tablist', 'aria-label': 'Playlist' });
   for (const t of LIBRARY_TABS) {
     const b = el('button', { class: 'ba-tab', type: 'button', role: 'tab', 'aria-selected': 'false', 'aria-controls': 'ba-rows', 'data-testid': `ba-tab-${t.id}` }, t.label);
     b.addEventListener('click', () => {
@@ -133,20 +134,22 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     tabBtns.set(t.id, b);
     tabRow.appendChild(b);
   }
-  const search = el('input', { class: 'ba-search', type: 'search', placeholder: LIBRARY_TABS[0].search, 'aria-label': 'Search the library', 'data-testid': 'ba-search', autocomplete: 'off' }) as HTMLInputElement;
+  const search = el('input', { class: 'ba-search', type: 'search', placeholder: LIBRARY_TABS[0].search, 'aria-label': 'Search the playlist', 'data-testid': 'ba-search', autocomplete: 'off' }) as HTMLInputElement;
   search.addEventListener('input', () => {
     query = search.value;
     renderLibrary(false);
   });
-  const countText = el('p', { class: 'ba-countline', 'data-testid': 'ba-libcount' }, '');
+  const note = el('p', { class: 'ba-note', 'data-testid': 'ba-libnote', hidden: true }, '');
   const rows = el('div', { class: 'ba-rows', id: 'ba-rows', role: 'tabpanel', 'data-testid': 'ba-rows' });
-  const moreText = el('p', { class: 'ba-countline', hidden: true }, '');
-  const libBody = el('div', { class: 'ba-body' }, tabRow, el('div', { class: 'ba-searchrow' }, el('span', { 'aria-hidden': 'true' }, '⌕'), search), countText, rows, moreText);
-  const libShade = el('div', { class: 'ba-shade' }, el('span', { class: 'ba-shade-bird', 'data-testid': 'ba-lib-shade' }, ''));
+  const moreText = el('p', { class: 'ba-note', hidden: true }, '');
+  // Winamp's playlist foot: search on the left, the total box where Winamp shows the total time.
+  const total = el('span', { class: 'ba-total', 'data-testid': 'ba-libcount' }, '');
+  const foot = el('div', { class: 'ba-plfoot' }, el('label', { class: 'ba-searchbox' }, el('span', { 'aria-hidden': 'true' }, '⌕'), search), total);
+  const libBody = el('div', { class: 'ba-body' }, tabRow, note, rows, moreText, foot);
 
   // ---- windows ----------------------------------------------------------------------
-  const bodies: Record<BirdAmpWindow, [HTMLElement, HTMLElement]> = { player: [playerBody, playerShade], confidence: [confBody, confShade], library: [libBody, libShade] };
   const sections = new Map<BirdAmpWindow, HTMLElement>();
+  const shadeText = new Map<BirdAmpWindow, HTMLElement>();
   const stack = el('div', { class: 'ba-stack' });
   const hiddenBar = el('div', { class: 'ba-hiddenbar', 'data-testid': 'ba-hidden-bar', hidden: true });
 
@@ -155,28 +158,51 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     saveWindows(windows);
     renderWindows();
   };
+  // Player windowshade parts: clock, play-state, the bird, and play / pause / stop.
+  const shadeClock = el('span', { class: 'ba-shade-clock tabular' }, '00:00');
+  const shadeState = el('span', { class: 'ba-ps', 'aria-hidden': 'true' }, '■');
+  const shadeListen = btn('ba-mini', 'Listen', '▶', 'ba-shade-listen');
+  const shadePause = btn('ba-mini', 'Pause', '❚❚', 'ba-shade-pause');
+  const shadeStop = btn('ba-mini', 'Stop', '■', 'ba-shade-stop');
+  const bodies: Record<BirdAmpWindow, HTMLElement> = { player: playerBody, confidence: confBody, library: libBody };
+
   for (const id of ['player', 'confidence', 'library'] as const) {
     const title = WINDOW_TITLES[id];
     const grip = el('button', { class: 'ba-grip', type: 'button', 'aria-label': `Move the ${title} window (arrow keys move it up or down)`, 'data-testid': `ba-grip-${id}` }, '⠿');
-    const minBtn = btn('ba-wbtn', `Minimise ${title}`, '_', `ba-min-${id}`);
+    const minBtn = btn('ba-wbtn', `Windowshade ${title}`, '_', `ba-min-${id}`);
     const maxBtn = btn('ba-wbtn', `Full size ${title}`, '▢', `ba-max-${id}`);
     const closeBtn = btn('ba-wbtn', `Close ${title}`, '×', `ba-close-${id}`);
     minBtn.addEventListener('click', () => save(setWindowState(windows, id, 'min')));
     maxBtn.addEventListener('click', () => save(setWindowState(windows, id, 'open')));
     closeBtn.addEventListener('click', () => save(setWindowState(windows, id, 'closed')));
+    moveByKeys(grip, id);
+    dragByGrip(grip, id);
+    const bar = el('div', { class: 'ba-titlebar' }, grip, el('span', { class: 'ba-ridges', 'aria-hidden': 'true' }), el('span', { class: 'ba-title' }, title), el('span', { class: 'ba-ridges', 'aria-hidden': 'true' }), el('span', { class: 'ba-wbtns' }, minBtn, maxBtn, closeBtn));
+    // Windowshade: the whole window becomes one thin bar, as in Winamp; ▢ brings it back.
+    const shadeGrip = el('button', { class: 'ba-grip', type: 'button', 'aria-label': `Move the ${title} window (arrow keys move it up or down)` }, '⠿');
+    moveByKeys(shadeGrip, id);
+    dragByGrip(shadeGrip, id);
+    const unshade = btn('ba-wbtn', `Full size ${title}`, '▢', `ba-unshade-${id}`);
+    unshade.addEventListener('click', () => save(setWindowState(windows, id, 'open')));
+    const text = el('span', { class: 'ba-shade-text', 'data-testid': id === 'player' ? 'ba-shade-bird' : `ba-shade-${id}` }, '');
+    shadeText.set(id, text);
+    const shade =
+      id === 'player'
+        ? el('div', { class: 'ba-shade', 'data-testid': 'ba-shade' }, shadeGrip, shadeState, shadeClock, text, shadeListen, shadePause, shadeStop, unshade)
+        : el('div', { class: 'ba-shade', 'data-testid': `ba-shade-bar-${id}` }, shadeGrip, el('span', { class: 'ba-title' }, title), text, unshade);
+    const section = el('section', { class: 'ba-win', 'data-win': id, 'data-testid': `ba-win-${id}`, 'aria-label': title }, bar, bodies[id], shade);
+    sections.set(id, section);
+  }
+  const root = el('div', { class: 'birdamp', 'data-testid': 'birdamp' }, hiddenBar, stack);
+
+  function moveByKeys(grip: HTMLElement, id: BirdAmpWindow) {
     grip.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
       e.preventDefault();
       save(moveWindow(windows, id, e.key === 'ArrowUp' ? -1 : 1));
       grip.focus();
     });
-    dragByGrip(grip, id);
-    const bar = el('div', { class: 'ba-titlebar' }, grip, el('span', { class: 'ba-title' }, title), el('span', { class: 'ba-wbtns' }, minBtn, maxBtn, closeBtn));
-    const [body, shade] = bodies[id];
-    const section = el('section', { class: 'ba-win', 'data-win': id, 'data-testid': `ba-win-${id}`, 'aria-label': title }, bar, body, shade);
-    sections.set(id, section);
   }
-  const root = el('div', { class: 'birdamp', 'data-testid': 'birdamp' }, hiddenBar, stack);
 
   /** Drag a window by its grip: it slots in live as it passes the middle of a neighbour. Touch and mouse alike. */
   function dragByGrip(grip: HTMLElement, id: BirdAmpWindow) {
@@ -220,9 +246,6 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
       const section = sections.get(id)!;
       const st = windows.state[id];
       section.dataset.state = st;
-      const [body, shade] = bodies[id];
-      body.hidden = st !== 'open';
-      shade.hidden = st !== 'min';
       (section.querySelector(`[data-testid="ba-min-${id}"]`) as HTMLButtonElement).disabled = st === 'min';
       (section.querySelector(`[data-testid="ba-max-${id}"]`) as HTMLButtonElement).disabled = st === 'open';
       if (st !== 'closed') shown.push(section);
@@ -261,7 +284,7 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   for (const b of [stopBtn, shadeStop]) b.addEventListener('click', () => p.stop());
   sampleBtn.addEventListener('click', () => p.sample());
 
-  // ---- library data --------------------------------------------------------------------------
+  // ---- playlist data --------------------------------------------------------------------------
   let sightings: SightingRecord[] | null = null;
   let spotted: Set<string> | null = null;
   let loading = false;
@@ -280,23 +303,24 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     }
     if (!disposed) renderLibrary(false);
   };
-  const rowPool = keyedPool<{ el: HTMLElement; dispose: () => void; set: (r: LibraryRow, n: number) => void }>();
+  const rowPool = keyedPool<{ el: HTMLElement; dispose: () => void; set: (r: LibraryRow, n: number, current: boolean) => void }>();
   const makeRow = (scientific: string) => {
-    const sw = el('span', { class: 'ba-sw', 'aria-hidden': 'true' });
-    sw.style.background = speciesColor(scientific).css;
     const name = el('span', { class: 'ba-row-name' }, '');
-    const detail = el('span', { class: 'ba-row-detail' }, '');
     const right = el('span', { class: 'ba-row-right' }, '');
-    const a = el('a', { class: 'ba-row', href: hrefFor({ name: 'species-detail', scientific }), 'data-testid': 'ba-row', 'data-species': scientific }, el('span', { class: 'ba-note', 'aria-hidden': 'true' }, '♪'), sw, el('span', { class: 'ba-row-text' }, name, detail), right);
+    const detail = el('span', { class: 'ba-row-detail' }, '');
+    const a = el('a', { class: 'ba-row', href: hrefFor({ name: 'species-detail', scientific }), 'data-testid': 'ba-row', 'data-species': scientific }, name, right, detail);
     return {
       el: a,
       dispose: () => undefined,
-      set(r: LibraryRow, n: number) {
+      set(r: LibraryRow, n: number, current: boolean) {
         const label = `${n}. ${r.common}`;
         if (name.textContent !== label) name.textContent = label;
-        const d = r.detail ? `${r.scientific} · ${r.detail}` : r.scientific;
+        const d = r.detail || r.scientific;
         if (detail.textContent !== d) detail.textContent = d;
         if (right.textContent !== r.right) right.textContent = r.right;
+        a.classList.toggle('current', current);
+        if (current) a.setAttribute('aria-current', 'true');
+        else a.removeAttribute('aria-current');
       },
     };
   };
@@ -308,18 +332,24 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
       b.tabIndex = id === tab ? 0 : -1;
     }
     let all: LibraryRow[] = [];
-    let line: string;
+    let totalWords: string;
+    let empty: string;
+    let currentKey: string | null = null;
     if (tab === 'heard') {
       const groups = birds();
       all = heardRows(groups);
-      line = countLine('heard', { rows: groups.length, detections: groups.reduce((n, g) => n + g.detections.length, 0) });
+      currentKey = groups[selected]?.key ?? null;
+      totalWords = totalText('heard', { rows: groups.length, detections: groups.reduce((n, g) => n + g.detections.length, 0) });
+      empty = emptyText('heard');
     } else if (tab === 'today' || tab === 'all') {
       if (!sightings) {
         void loadSaved();
-        line = 'Loading…';
+        totalWords = '…';
+        empty = 'Loading…';
       } else {
         all = sightingRows(sightings, tab === 'today' ? { since: startOfDay(Date.now()) } : {});
-        line = countLine(tab, { rows: all.length });
+        totalWords = totalText(tab, { rows: all.length });
+        empty = emptyText(tab);
       }
     } else {
       if (!spotted) void loadSaved();
@@ -327,36 +357,42 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
       const includeNonBird = controller.settings.get().includeNonBird;
       const list = [...(local.indices ?? [])].map((i) => controller.species[i]).filter((s): s is NonNullable<typeof s> => !!s && (s.isBird || includeNonBird));
       all = local.indices ? nearRows(list, spotted ?? new Set()) : [];
-      line = countLine('near', { rows: all.length, place: p.place(), noLocation: local.indices ? null : local.note });
+      totalWords = totalText('near', { rows: all.length, place: p.place() });
+      empty = emptyText('near', local.indices ? null : local.note);
     }
     const filtered = filterRows(all, query);
     const shown = filtered.slice(0, MAX_ROWS);
-    countText.textContent = query.trim() && all.length ? `${filtered.length} of ${line}` : line;
+    total.textContent = query.trim() && all.length ? `${filtered.length} of ${totalWords}` : totalWords;
+    note.hidden = all.length > 0;
+    note.textContent = empty;
     moreText.hidden = filtered.length <= MAX_ROWS;
     moreText.textContent = `Showing ${MAX_ROWS} of ${filtered.length} · search to narrow`;
     syncChildren(
       rows,
       shown.map((r, i) => {
         const row = rowPool.take(`${tab}:${r.scientific}`, () => makeRow(r.scientific));
-        row.set(r, i + 1);
+        row.set(r, i + 1, r.scientific === currentKey);
         return row.el;
       }),
     );
     rowPool.sweep();
     if (tabChanged) rows.scrollTop = 0;
     const groups = birds();
-    (libShade.firstElementChild as HTMLElement).textContent = `Library · ${countLine('heard', { rows: groups.length, detections: groups.reduce((n, g) => n + g.detections.length, 0) }).split(' · repeats')[0]}`;
+    shadeText.get('library')!.textContent = totalText('heard', { rows: groups.length, detections: groups.reduce((n, g) => n + g.detections.length, 0) });
   }
 
   // ---- state -----------------------------------------------------------------------------------
-  let lastClock = 0;
+  let lastClock = -1;
   function render() {
     const st = p.status();
     const paused = controller.paused;
     const live = st === 'listening';
     const canStart = st === 'ready' || st === 'offline' || st === 'idle';
     root.dataset.status = paused ? 'held' : st;
-    stateLabel.textContent = live ? '▶ Live' : paused ? '❚❚ Paused' : st === 'paused' ? '❚❚ Paused' : '■ Ready';
+    const symbol = live ? '▶' : paused || st === 'paused' ? '❚❚' : '■';
+    stateSymbol.textContent = symbol;
+    shadeState.textContent = symbol;
+    stateWord.textContent = live ? 'Live' : paused || st === 'paused' ? 'Paused' : 'Ready';
     const groups = birds();
     if (selected >= groups.length) selected = 0;
     const bird = groups[selected];
@@ -371,9 +407,7 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
       marqueeText.textContent = text;
       fitMarquee();
     }
-    shadeBird.textContent = bird ? `${bird.species.common} · ${Math.round(bird.best * 100)}%` : paused ? 'Paused' : live ? 'Listening…' : 'Ready';
-    const detections = groups.reduce((n, g) => n + g.detections.length, 0);
-    counts.textContent = groups.length ? `${groups.length} bird${groups.length === 1 ? '' : 's'} · ${detections} detection${detections === 1 ? '' : 's'}` : 'No birds yet';
+    shadeText.get('player')!.textContent = bird ? `${bird.species.common} ${Math.round(bird.best * 100)}%` : paused ? 'Paused' : live ? 'Listening…' : 'Ready';
     listenBtn.setAttribute('aria-label', paused ? 'Carry on listening' : 'Listen');
     shadeListen.setAttribute('aria-label', paused ? 'Carry on listening' : 'Listen');
     listenBtn.disabled = shadeListen.disabled = !(canStart || paused) || live;
@@ -385,8 +419,8 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     pauseBtn.classList.toggle('lit', paused);
     const areaWords = p.areaText();
     if (area.textContent !== areaWords) area.textContent = areaWords;
-    minLabel.textContent = `Your min ${Math.round(controller.settings.get().threshold * 100)}%`;
-    (confShade.firstElementChild as HTMLElement).textContent = groups.length ? `Conf · ${groups.slice(0, 3).map((g) => `${g.species.common} ${Math.round(g.best * 100)}%`).join(' · ')}` : 'Conf · no birds yet';
+    minLabel.textContent = `Min ${Math.round(controller.settings.get().threshold * 100)}%`;
+    shadeText.get('confidence')!.textContent = groups.length ? groups.slice(0, 3).map((g) => `${g.species.common} ${Math.round(g.best * 100)}%`).join(' · ') : 'No birds yet';
     readoutLine.hidden = readout === '' || live;
     readoutLine.textContent = readout;
     renderLibrary(false);
@@ -404,7 +438,6 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   }
 
   let lastGain = '';
-  let lastSpec = '';
   const unsubs = [
     controller.on('detections-changed', () => {
       sightings = null;
@@ -424,33 +457,27 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
       if (p.specBox.parentElement !== specSlot) specSlot.appendChild(p.specBox);
       if (p.timelineCanvas.parentElement !== confSlot) confSlot.prepend(p.timelineCanvas);
       if (p.legend.parentElement !== legendSlot) legendSlot.appendChild(p.legend);
-      if (p.notUsualBox.parentElement !== libBody) libBody.appendChild(p.notUsualBox);
+      if (p.notUsualBox.parentElement !== libBody) libBody.insertBefore(p.notUsualBox, foot);
       render();
       requestAnimationFrame(() => fitMarquee());
     },
     render,
     tick() {
-      const g = `×${p.waveform.gain} auto`;
+      const g = `Gain ×${p.waveform.gain} · auto`;
       if (g !== lastGain) {
         lastGain = g;
-        ledGain.textContent = g;
-      }
-      const s = specLine(p.spectrogram.dbRange);
-      if (s !== lastSpec) {
-        lastSpec = s;
-        spec.textContent = s;
+        meterText.textContent = g;
       }
     },
     setClock(sec) {
       const t = lcdClock(sec);
-      if (sec === lastClock && clock.textContent === t) return;
+      if (sec === lastClock) return;
       lastClock = sec;
       clock.textContent = t;
       shadeClock.textContent = t;
     },
     setLevel(level) {
-      const lit = levelSegments(level);
-      Array.from(leds.children).forEach((led, i) => led.classList.toggle('on', i < lit));
+      meterFill.style.width = `${levelPercent(level)}%`;
     },
     setReadout(text) {
       readout = text.trim();
