@@ -18,6 +18,9 @@ test.beforeEach(async ({ page }) => {
 function returningVisitor(): void {
   if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
   localStorage.setItem('birdbrain.model.v1', 'wanted');
+  localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+  // What's new pop-ups off (DECISIONS.md #112), so other tests see Listen as before; the What's new tests start clean.
+  if (!localStorage.getItem('birdbrain.whatsnew.v1')) localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
 }
 
 /** Requests for model files (any host): the welcome layer must not cause any. `labels.json` is the species list, bundled with the app and loaded at startup by design. */
@@ -1640,6 +1643,7 @@ test('maps stay under the sticky header and the tab bar while scrolling (DECISIO
   await page.addInitScript(() => {
     localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   await page.goto('./#/map');
   const map = page.getByTestId('map');
@@ -2042,6 +2046,7 @@ test('Focus: the big Start page once per session and day; Stop/Record and Start 
   await page.addInitScript(() => {
     if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'focus' }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   await page.goto('./#/listen');
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
@@ -2207,6 +2212,7 @@ test('a bird matched by sound but not usual here is counted, can be kept, is mar
   await context.addInitScript(() => {
     localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'manual', manualLat: -33.87, manualLon: 151.21, useWeek: true }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   const page = await context.newPage();
   await page.goto('./#/listen');
@@ -2332,6 +2338,7 @@ test('live listening updates the result cards in place, so they do not flicker (
   await context.addInitScript(() => {
     localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   const page = await context.newPage();
   await page.goto('./#/listen');
@@ -2420,6 +2427,7 @@ test('Listen layout bubble: bottom right, opens upward, switches at once, never 
   await context.addInitScript(() => {
     if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   const page = await context.newPage();
   await page.goto('./#/listen');
@@ -2481,6 +2489,7 @@ test('a one-line location banner while listening, in each layout, grey with no l
         ([l, m]) => {
           localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: l, locationMode: m, manualLat: 42.44, manualLon: -76.5 }));
           localStorage.setItem('birdbrain.model.v1', 'wanted');
+          localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
         },
         [layout, mode],
       );
@@ -2660,6 +2669,7 @@ test('the birds heard this session are still on Listen after visiting another ta
   await context.addInitScript(() => {
     if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   const page = await context.newPage();
   await page.goto('./#/listen');
@@ -2731,6 +2741,7 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await context.addInitScript(() => {
     if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'birdamp', locationMode: 'off' }));
     localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   const page = await context.newPage();
   // Signed out: a saved BirdAmp choice shows Focus, with no skin, and Settings has no BirdAmp tile.
@@ -2823,4 +2834,122 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   expect(await page.evaluate(() => document.documentElement.dataset.skin ?? null)).toBeNull();
   await expect(page.getByTestId('model-status')).not.toHaveText('Ready');
   await browser.close();
+});
+
+const MEMBER = { token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Sam', status: 'approved', role: 'member' } };
+
+test('What’s new: a brand-new visitor gets the strip right after the welcome, three cards once, then only Settings › What’s new; 320 px (DECISIONS.md #112)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  // Pinned inside the announcement's month, so the test does not depend on today's date.
+  await page.clock.setFixedTime(new Date('2026-11-15T12:00:00'));
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await expect(page.getByTestId('whats-new-strip')).toHaveCount(0);
+  // After the welcome (Sabih's option 2): the quiet strip, no pop-up.
+  await page.getByTestId('welcome-start').click();
+  const strip = page.getByTestId('whats-new-strip');
+  await expect(strip).toBeVisible();
+  await expect(strip).toContainText('New: BirdAmp, a Winamp-style Listen screen');
+  await expect(page.getByTestId('whats-new-cards')).toHaveCount(0);
+  // Seen the moment it appears.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.whatsnew.v1') ?? '{}').seen)).toEqual(['2026-11-birdamp']);
+  await page.getByTestId('whats-new-see').click();
+  const cards = page.getByTestId('whats-new-cards');
+  await expect(cards).toBeVisible();
+  await expect(strip).toHaveCount(0);
+  await expect(page.getByTestId('whats-new-card')).toHaveCount(3);
+  await expect(cards).toContainText('1 of 3');
+  await expect(cards.locator('img.wn-shot')).toBeVisible();
+  await expect(page.getByTestId('whats-new-signup')).toBeHidden();
+  await page.getByTestId('whats-new-next').click();
+  await expect(cards).toContainText('2 of 3');
+  await page.getByTestId('whats-new-next').click();
+  await expect(cards).toContainText('3 of 3');
+  await expect(page.getByTestId('whats-new-next')).toBeHidden();
+  await expect(page.getByTestId('whats-new-signup')).toHaveText('Create free account');
+  await expect(page.getByTestId('whats-new-signin')).toHaveText('Sign in');
+  await expect(cards).toContainText('Sabih approves new accounts');
+  await expect(page.getByTestId('whats-new-mute')).toHaveText('Don’t show me this again');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.getByTestId('whats-new-cards-close').click();
+  await expect(cards).toHaveCount(0);
+  // Once: not again on the next visit.
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toBeVisible();
+  await page.waitForTimeout(1000);
+  await expect(page.getByTestId('whats-new-strip')).toHaveCount(0);
+  // Settings › What's new: a dot until opened; the cards can be opened again while it runs.
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('whats-new-dot')).toBeVisible();
+  await page.getByTestId('whats-new-link').click();
+  await expect(page.getByTestId('whats-new-new')).toContainText('BirdAmp');
+  await expect(page.getByTestId('whats-new-fixed')).toContainText('See the sound fits on the screen');
+  await expect(page.getByTestId('whats-new-popups')).toBeChecked();
+  await page.getByTestId('whats-new-open').click();
+  await expect(page.getByTestId('whats-new-card')).toHaveCount(3);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('whats-new-cards')).toHaveCount(0);
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('whats-new-link')).toBeVisible();
+  await expect(page.getByTestId('whats-new-dot')).toHaveCount(0);
+  await context.close();
+});
+
+test('What’s new: “Don’t show me this again” turns pop-ups off until the switch; wording per audience; members on BirdAmp skip it; the account’s copy counts; not after November (DECISIONS.md #112)', async ({ browser }) => {
+  const open = async (opts: { user?: object | null; layout?: string; whatsNew?: object | null; time?: string; remote?: { seen: string[]; muted: boolean } } = {}) => {
+    const context = await browser.newContext({ viewport: { width: 375, height: 760 }, serviceWorkers: 'block' });
+    const posts: unknown[] = [];
+    await context.route('**/v1/me/whats-new', async (route) => {
+      if (route.request().method() === 'POST') posts.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }, body: JSON.stringify(opts.remote ?? { seen: [], muted: false }) });
+    });
+    await context.addInitScript((o) => {
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: o.layout ?? 'focus', locationMode: 'off' }));
+      localStorage.setItem('birdbrain.model.v1', 'wanted');
+      if (o.user) localStorage.setItem('birdbrain.auth.v1', JSON.stringify(o.user));
+      if (o.whatsNew) localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify(o.whatsNew));
+    }, opts);
+    const page = await context.newPage();
+    await page.clock.setFixedTime(new Date(opts.time ?? '2026-11-15T12:00:00'));
+    await page.goto('./#/listen');
+    await expect(page.getByTestId('model-status')).toBeVisible();
+    return { context, page, posts };
+  };
+  // Waiting for approval: the strip, one card, OK; "Don't show me this again" turns pop-ups off.
+  {
+    const { context, page } = await open({ user: { ...MEMBER, user: { ...MEMBER.user, status: 'pending' } } });
+    await expect(page.getByTestId('whats-new-strip')).toContainText('New: BirdAmp, a Winamp-style Listen screen');
+    await page.getByTestId('whats-new-see').click();
+    await expect(page.getByTestId('whats-new-card')).toHaveCount(1);
+    await expect(page.getByTestId('whats-new-cards')).toContainText('BirdAmp is on its way');
+    await expect(page.getByTestId('whats-new-ok')).toBeVisible();
+    await page.getByTestId('whats-new-mute').click();
+    await expect(page.getByTestId('whats-new-cards')).toHaveCount(0);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.whatsnew.v1') ?? '{}').muted)).toBe(true);
+    await page.goto('./#/whats-new');
+    const sw = page.getByTestId('whats-new-popups');
+    await expect(sw).not.toBeChecked();
+    await sw.check();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.whatsnew.v1') ?? '{}').muted)).toBe(false);
+    await context.close();
+  }
+  // A member on Focus: "BirdAmp is here", and Try BirdAmp switches the layout; the account is told what was seen.
+  {
+    const { context, page, posts } = await open({ user: MEMBER });
+    await expect(page.getByTestId('whats-new-strip')).toContainText('New: BirdAmp is here');
+    await expect.poll(() => posts).toContainEqual({ seen: ['2026-11-birdamp'] });
+    await page.getByTestId('whats-new-see').click();
+    await expect(page.getByTestId('whats-new-cards')).toContainText('BirdAmp is here');
+    await page.getByTestId('whats-new-try').click();
+    await expect(page.getByTestId('birdamp')).toBeVisible();
+    await context.close();
+  }
+  // Already on BirdAmp, seen on another phone, or after November: no strip.
+  for (const opts of [{ user: MEMBER, layout: 'birdamp' }, { user: MEMBER, remote: { seen: ['2026-11-birdamp'], muted: false } }, { time: '2026-12-01T12:00:00' }]) {
+    const { context, page } = await open(opts);
+    await page.waitForTimeout(2000);
+    await expect(page.getByTestId('whats-new-strip'), JSON.stringify(opts)).toHaveCount(0);
+    await context.close();
+  }
 });

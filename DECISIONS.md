@@ -3086,3 +3086,25 @@ Each finding was checked against the code first.
   playlist's ADD / REM / SEL / MISC, the 10-band EQ sliders) and a bitmap pixel font. The navy selection colour is an
   example value from a published skin guide, not confirmed as Winamp's shipped default.
 - **At 320 px** the info boxes take two lines; at iPhone widths (390–430 px) one.
+
+## 112. What's new: a quiet strip on Listen that opens swipe cards, once per person
+
+- **Why (Sabih, Nov 1–2):** tell new and returning people about new features, fixes and what is coming, starting
+  with BirdAmp for November, without showing the same thing again and again. Chosen from the mockups: **B + C** (a
+  one-line strip on Listen whose "See ›" opens swipe cards), the per-audience wording as drawn, **option 1** for
+  "Don't show me this again" (it turns all later pop-ups off; the Settings page has a switch to turn them back on),
+  and **option 2** for brand-new visitors (the strip appears on Listen right after the welcome screen).
+- **Entries** live in one list (`src/app/whats-new.ts`, `WHATS_NEW`, newest first): id, first day and the day after
+  the last (the phone's calendar), kind (new / fixed / coming), the strip's words and cards per audience
+  (signed out: three cards ending in Create free account / Sign in; waiting for approval: "BirdAmp is on its way";
+  member: "BirdAmp is here" with Try BirdAmp / Keep my layout). BirdAmp runs 1–30 November; members already on
+  BirdAmp are not shown it.
+- **Not twice:** an announcement counts as seen the moment its strip appears; at most one strip per visit, the
+  newest unseen; never over the welcome or while listening (or BirdAmp-paused); after its last day it only appears
+  in Settings › What's new, which has a dot until opened. Seen ids and the switch live on the phone
+  (`birdbrain.whatsnew.v1`) and, when signed in, on the account (`GET/POST /v1/me/whats-new`, table
+  `whats_new_state`, ids only; removed with the account, #50). The two copies merge (every seen id; off if either is
+  off); Listen waits at most 1.5 s for the account's copy and never stalls on it.
+- **Known limit:** a signed-out iPhone user in a Safari tab who stays away 7+ days may see a strip once more: Safari
+  can clear a site's storage after 7 days of Safari use without a visit (home-screen installs keep it).
+- **Picture:** the BirdAmp card uses a screenshot of the built app (`src/assets/whats-new-birdamp.jpg`, 60 KB).

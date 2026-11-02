@@ -320,6 +320,15 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
   }
 
   /** Set the display name friends see; the cached session is updated so the Account card shows it at once. */
+  /** What's new memory on the account (DECISIONS.md #112): seen announcement ids and the pop-up switch. */
+  async getWhatsNew(): Promise<{ seen: string[]; muted: boolean }> {
+    return this.call('/v1/me/whats-new');
+  }
+
+  async postWhatsNew(patch: { seen?: string[]; muted?: boolean }): Promise<{ seen: string[]; muted: boolean }> {
+    return this.call('/v1/me/whats-new', patch);
+  }
+
   async setName(name: string): Promise<AuthUser> {
     const res = await this.call<{ ok: boolean; user: AuthUser }>('/v1/me/name', { name });
     if (this.session) this.setSession({ ...this.session, user: res.user });

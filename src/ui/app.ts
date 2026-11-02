@@ -8,6 +8,8 @@ import { speciesHistoryView } from './views/species-history';
 import { mapView } from './views/map';
 import { settingsView } from './views/settings';
 import { helpView } from './views/help';
+import { whatsNewView } from './views/whats-new';
+import { WhatsNewService } from '../app/whats-new';
 import { adminView, userManagementView } from './views/admin';
 import { forgotPasswordView, resetPasswordView, signInView, signUpView } from './views/auth';
 import { accountView } from './views/account';
@@ -31,6 +33,8 @@ export interface ViewContext {
   sharing: SpeciesSharer;
   /** Friends' shared lists for the Species tab. */
   friends: FriendsCache;
+  /** What's new: what was shown, and the pop-up switch (DECISIONS.md #112). */
+  whatsNew: WhatsNewService;
 }
 
 const ICONS: Record<string, string> = {
@@ -57,6 +61,7 @@ function tabGroup(route: Route): string {
     case 'species-history':
       return 'species';
     case 'help':
+    case 'whats-new':
     case 'admin':
     case 'admin-users':
     case 'signin':
@@ -164,7 +169,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   };
   if (pendingUpdate) showUpdateBanner(pendingUpdate);
 
-  const ctx: ViewContext = { controller, api, notify, sharing: new SpeciesSharer(api, controller), friends: new FriendsCache(api) };
+  const ctx: ViewContext = { controller, api, notify, sharing: new SpeciesSharer(api, controller), friends: new FriendsCache(api), whatsNew: new WhatsNewService(api) };
   let current: View | null = null;
 
   const render = () => {
@@ -199,6 +204,9 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
         break;
       case 'help':
         current = helpView(ctx);
+        break;
+      case 'whats-new':
+        current = whatsNewView(ctx);
         break;
       case 'admin':
         current = adminView(ctx);
