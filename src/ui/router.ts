@@ -11,6 +11,7 @@ export type Route =
   | { name: 'admin' }
   | { name: 'admin-users' }
   | { name: 'help' }
+  | { name: 'whats-new' }
   /** Sign in and Create account, each on its own page (DECISIONS.md #77). */
   | { name: 'signin' }
   /** `invite`: the token from an invite link (DECISIONS.md #80). */
@@ -49,6 +50,8 @@ export function parseHash(hash: string): Route {
       return rest[0] === 'users' ? { name: 'admin-users' } : { name: 'admin' };
     case 'help':
       return { name: 'help' };
+    case 'whats-new':
+      return { name: 'whats-new' };
     case 'signin':
       return { name: 'signin' };
     case 'signup': {
@@ -90,6 +93,8 @@ export function hrefFor(route: Route): string {
       return '#/admin/users';
     case 'help':
       return '#/help';
+    case 'whats-new':
+      return '#/whats-new';
     case 'signin':
       return '#/signin';
     case 'signup':

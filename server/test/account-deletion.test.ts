@@ -36,11 +36,12 @@ describe('account deletion', () => {
     await befriend(t, alex, sam);
     await post(t.app, '/v1/friends/invite', { email: riley.email }, bearer(sam.token)); // pending, from Sam
     await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-12' }] }, bearer(sam.token));
+    await post(t.app, '/v1/me/whats-new', { seen: ['2026-11-birdamp'], muted: true }, bearer(sam.token));
     await post(t.app, '/v1/ask', { species: 'Turdus merula', question: 'What?' }, bearer(sam.token));
     await post(t.app, '/v1/auth/login', { email: sam.email, password: PASSWORD }); // an unverified challenge
     const token2 = await signUpAndLogin(t, sam.email); // a second session
     const before = rowsReferencing(db, sam.id, sam.email);
-    for (const key of ['user.id', 'account.userId', 'session.userId', 'shared_species.user_id', 'friendship', 'friend_invite.from_user_id', 'invite_usage.user_id', 'ask_usage.scope', 'login_challenge.user_id']) {
+    for (const key of ['user.id', 'account.userId', 'session.userId', 'shared_species.user_id', 'friendship', 'friend_invite.from_user_id', 'invite_usage.user_id', 'ask_usage.scope', 'login_challenge.user_id', 'whats_new_state.user_id']) {
       expect(before.join(' ')).toContain(key);
     }
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'verification'").get()).toBeDefined();

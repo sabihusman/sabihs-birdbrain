@@ -51,6 +51,10 @@ Key modules:
   (HEARD / TODAY / ALL BIRDS / NEAR YOU rows), `lcd.ts`, `icon.ts` (gold bolt). `src/ui/skin.ts` sets
   `html[data-skin="birdamp"]`, which skins the header and tab bar on Listen only. Pause is
   `AppController.pauseListening()` (mic released, session and clock kept; `startListening()` carries on).
+- What's new (DECISIONS.md #112): `src/app/whats-new.ts` (the `WHATS_NEW` entries, the once-only rules and
+  `WhatsNewService`: phone copy `birdbrain.whatsnew.v1` merged with the account's `/v1/me/whats-new`),
+  `src/ui/components/whats-new.ts` (strip on Listen, swipe cards), `src/ui/views/whats-new.ts` (`#/whats-new`, the
+  Settings row has a dot until opened). Add the next announcement as a new first entry; e2e pins the clock.
 - `src/app/settings.ts` — localStorage settings; `src/app/location.ts` — GPS /
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.
@@ -106,7 +110,7 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   region + position + question → 7-day reuse), `src/pricing.ts` (list prices
   and thinking level per model, verified dates in the comment) and
   `src/ask-cost.ts` (per-day token/cost totals, `GET /v1/admin/ask-costs`;
-  DECISIONS #48); `src/users.ts` admin SQL; `src/account-deletion.ts` the
+  DECISIONS #48); `src/users.ts` admin SQL; `src/whats-new.ts` the What's new seen ids and pop-up switch per account (#112); `src/account-deletion.ts` the
   one-transaction account wipe (DECISIONS.md #50); `src/backup.ts`
   `VACUUM INTO` backups.
 - Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or

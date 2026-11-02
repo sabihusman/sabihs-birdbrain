@@ -801,3 +801,47 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 }
 /* Members-only layout tiles and bubble rows hide with the hidden attribute (their display rules would win otherwise). */
 .layout-tile[hidden], .layout-bubble-row[hidden] { display: none; }
+
+/* ---- What's new (DECISIONS.md #112): strip on Listen, swipe cards, Settings row ---- */
+.wn-strip { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); padding: 4px 4px 4px var(--space-2); border: 1px solid color-mix(in srgb, #e0a800 55%, var(--line)); border-radius: var(--radius-control); background: color-mix(in srgb, #ffd54a 10%, var(--card)); box-shadow: 0 2px 8px rgb(0 0 0 / 0.08); font-size: var(--text-sm); }
+.wn-strip-icon { flex: none; display: grid; }
+.wn-strip-text { flex: 1; min-width: 0; }
+.wn-strip-see { flex: none; min-height: 44px; padding: 0 var(--space-2); border: 0; background: none; color: var(--accent); font: inherit; font-weight: var(--weight-bold); white-space: nowrap; }
+.wn-strip-close { flex: none; width: 40px; min-height: 44px; border: 0; background: none; color: var(--muted); font-size: 1.3rem; line-height: 1; }
+html.wn-open, html.wn-open body { overflow: hidden; }
+.wn-dialog { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; gap: var(--space-2); padding: calc(var(--space-3) + var(--sat)) calc(var(--space-3) + var(--sar)) calc(var(--space-3) + var(--sab)) calc(var(--space-3) + var(--sal)); background: var(--card); color: var(--text); overflow-y: auto; }
+.wn-top { display: flex; align-items: center; justify-content: space-between; }
+.wn-close { min-height: 44px; padding: 0 var(--space-2); border: 0; background: none; color: var(--accent); font: inherit; font-weight: var(--weight-bold); }
+.wn-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; flex: 1 0 auto; max-width: 560px; width: 100%; margin: 0 auto; }
+.wn-track::-webkit-scrollbar { display: none; }
+.wn-card { flex: 0 0 100%; scroll-snap-align: start; display: flex; flex-direction: column; gap: var(--space-2); }
+.wn-card h2 { margin: 0; font-size: var(--text-xl); }
+.wn-eyebrow { margin: 0; display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); font-weight: var(--weight-bold); letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in srgb, #8a5a00 80%, var(--text)); }
+.wn-text { margin: 0; }
+.wn-shot { display: block; width: 100%; height: auto; border-radius: var(--radius-control); border: 1px solid #2b2f36; }
+.wn-art { position: relative; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); padding: var(--space-2); min-height: 220px; display: flex; flex-direction: column; gap: var(--space-2); }
+.wn-art p { margin: 0; }
+.wn-art-title { font-weight: var(--weight-bold); font-size: var(--text-sm); }
+.wn-q { align-self: flex-end; max-width: 80%; padding: 6px 10px; border-radius: 12px 12px 2px 12px; background: var(--accent); color: var(--accent-text); font-size: var(--text-sm); }
+.wn-a { max-width: 90%; padding: 8px 10px; border-radius: 12px 12px 12px 2px; background: var(--surface-2); font-size: var(--text-sm); }
+.wn-map { background: linear-gradient(135deg, #dfe8d6, #e9e3cf 40%, #d6e2e6); overflow: hidden; }
+.wn-heat { position: absolute; left: 38%; top: 30%; width: 130px; height: 100px; border-radius: 50%; background: radial-gradient(circle, rgb(230 90 40 / 0.55), rgb(255 200 0 / 0.25) 50%, transparent 70%); }
+.wn-pin { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #c0392b; border: 2px solid #fff; }
+.wn-pin-1 { left: 28%; top: 40%; } .wn-pin-2 { left: 55%; top: 58%; } .wn-pin-3 { left: 72%; top: 28%; }
+.wn-map-cap { position: absolute; left: 10px; bottom: 10px; padding: 3px 8px; border-radius: 6px; background: rgb(255 255 255 / 0.85); color: #1f2a24; font-size: var(--text-xs); }
+.wn-dots { display: flex; justify-content: center; gap: 6px; }
+.wn-dots[hidden] { display: none; }
+.wn-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.wn-dots i.on { background: var(--accent); }
+.wn-actions { display: flex; gap: var(--space-2); max-width: 560px; width: 100%; margin: 0 auto; }
+.wn-actions[hidden] { display: none; }
+.wn-actions .btn { flex: 1; }
+.wn-dialog > .btn.block { max-width: 560px; width: 100%; margin: 0 auto; }
+.wn-dialog > .btn.block[hidden], .wn-fine[hidden] { display: none; }
+.wn-fine { margin: 0 auto; max-width: 560px; }
+.wn-foot { display: flex; justify-content: center; }
+.wn-mute { min-height: 44px; }
+.wn-dot { display: inline-block; flex: none; width: 9px; height: 9px; margin: 0 var(--space-2); border-radius: 50%; background: #c2410c; }
+.wn-item h3 { margin: var(--space-2) 0 2px; font-size: var(--text-md); }
+.wn-item p { margin: 0 0 var(--space-1); }
+@media (prefers-reduced-motion: reduce) { .wn-track { scroll-behavior: auto; } }

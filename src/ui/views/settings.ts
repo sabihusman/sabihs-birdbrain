@@ -6,7 +6,8 @@ import { clearAllData, countDetections, countSightings, listSightings } from '..
 import { formatBytes, getStorageStatus, PERSIST_EXPLAINED, requestPersistentStorage } from '../../storage/quota';
 import type { View, ViewContext } from '../app';
 import { el, pct } from '../dom';
-import { foldHint } from '../components/rows';
+import { foldHint, linkRow } from '../components/rows';
+import { hasDot } from '../../app/whats-new';
 import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
 import { layoutPicker } from '../components/layout-picker';
@@ -143,10 +144,14 @@ export function settingsView(ctx: ViewContext): View {
   renderMic();
   const unsubMic = controller.on('mic', renderMic);
 
+  // What's new (DECISIONS.md #112): features, fixes and what's coming; a dot until the page is opened.
+  const whatsNewRow = linkRow('What’s new', '#/whats-new', { hint: 'New features and fixes', testId: 'whats-new-link' });
+  if (hasDot(ctx.whatsNew.get(), new Date())) whatsNewRow.insertBefore(el('span', { class: 'wn-dot', 'data-testid': 'whats-new-dot', 'aria-label': 'New' }), whatsNewRow.lastChild);
   const root = el(
     'div',
     null,
     account.el,
+    el('section', { class: 'card wn-settings' }, whatsNewRow),
     el(
       'section',
       { class: 'card' },

@@ -28,6 +28,7 @@ import { MailError, type Mail, type Mailer } from './mailer.js';
 import { RateLimiter } from './rate-limit.js';
 import { SignupNotifier } from './signup-notify.js';
 import { Users } from './users.js';
+import { WhatsNewStore, whatsNewSchema } from './whats-new.js';
 import type { WikiFetcher } from './wiki.js';
 import type { ArticleFetcher } from './wiki-article.js';
 import type { EbirdSource } from './ebird.js';
@@ -106,6 +107,7 @@ export function createApp(deps: AppDeps) {
   const providerUsage = deps.providerUsage ?? createProviderUsageStore(db);
   const answers = deps.answers ?? createAnswerCache<AnswerBody>(db);
   const friends = new FriendsStore(db);
+  const whatsNew = new WhatsNewStore(db);
   const emailInvites = new EmailInvites(db, config.BETTER_AUTH_SECRET);
   const invitesPerDay = deps.limits?.invitesPerDay ?? INVITES_PER_DAY;
   const caps: CapConfig = { perUserDaily: config.ASK_DAILY_PER_USER, globalDaily: config.ASK_DAILY_GLOBAL };
@@ -376,6 +378,21 @@ export function createApp(deps: AppDeps) {
     const s = await sessionUser(c);
     if (!s) return json(c, 401, { error: 'unauthorized' });
     return json(c, 200, { user: publicUser(s.user) });
+  });
+
+  // What's new memory (DECISIONS.md #112): any signed-in account, approved or not.
+  app.get('/v1/me/whats-new', async (c) => {
+    const s = await sessionUser(c);
+    if (!s) return json(c, 401, { error: 'unauthorized' });
+    return json(c, 200, whatsNew.get(s.user.id));
+  });
+
+  app.post('/v1/me/whats-new', async (c) => {
+    const s = await sessionUser(c);
+    if (!s) return json(c, 401, { error: 'unauthorized' });
+    const body = await readJson(c, whatsNewSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    return json(c, 200, whatsNew.merge(s.user.id, body));
   });
 
   app.post('/v1/me/name', async (c) => {

@@ -29,6 +29,8 @@ import { WaveformView } from '../viz/waveform';
 import { effectiveLayout, isMember } from '../../app/access';
 import { birdAmpView, type BirdAmpView } from '../birdamp/view';
 import { setShellSkin } from '../skin';
+import { audienceOf } from '../../app/whats-new';
+import { openWhatsNewCards, whatsNewStrip } from '../components/whats-new';
 
 /** "How BirdNET decides" stays open for the session once opened (DESIGN_GUIDE.md §5, §6). */
 let howItWorksOpen = false;
@@ -52,6 +54,8 @@ export function listenView(ctx: ViewContext): View {
   const { controller } = ctx;
   const settings = controller.settings;
   const subs: Array<() => void> = [];
+  /** The What's new strip while it is up (DECISIONS.md #112); kept across layout changes. */
+  let wnStrip: HTMLElement | null = null;
   // BirdAmp is for approved members; for anyone else a saved BirdAmp choice shows Focus (DECISIONS.md #110).
   const chosenLayout = () => effectiveLayout(settings.get().listenLayout, ctx.api.user);
   let layout: ListenLayout = chosenLayout();
@@ -347,6 +351,7 @@ export function listenView(ctx: ViewContext): View {
       // The result cards under the panel are the list; the "Recent sightings" dropdown repeated them (#109).
       root.replaceChildren(readyBlock, panel, resultsBlock, how, helpLink, credit, bubble.el);
     }
+    if (wnStrip) root.prepend(wnStrip);
   };
   applyLayout(layout);
 
@@ -395,6 +400,7 @@ export function listenView(ctx: ViewContext): View {
     readyBlock.dataset.status = st.status;
     root.dataset.status = st.status;
     const listening = st.status === 'listening' || st.status === 'paused';
+    if (listening) removeStrip();
     setHidden(banner, !listening);
     renderBanner();
     setHidden(notUsualLine, listening || controller.getNotUsual().every((b) => b.kept));
@@ -704,6 +710,38 @@ export function listenView(ctx: ViewContext): View {
     renderMoreBtn();
   });
 
+  // ---- What's new (DECISIONS.md #112) -------------------------------------------
+  // One quiet strip at the top of Listen, once per announcement and visit; never over the welcome or while listening.
+  const offerWhatsNew = () => {
+    if (wnStrip || disposed || controller.welcomePending || controller.listening || controller.paused) return;
+    void ctx.whatsNew.ready().then(() => {
+      if (wnStrip || disposed || controller.welcomePending || controller.listening || controller.paused) return;
+      const audience = audienceOf(ctx.api.user);
+      const entry = ctx.whatsNew.pick(audience, layout);
+      const text = entry && audience ? entry.strip?.[audience] : undefined;
+      if (!entry || !audience || !text) return;
+      ctx.whatsNew.markSeen(entry.id); // seen the moment it appears
+      wnStrip = whatsNewStrip(
+        text,
+        () => {
+          openWhatsNewCards(entry, audience, {
+            onMute: () => ctx.whatsNew.setMuted(true),
+            onSignUp: () => (location.hash = hrefFor({ name: 'signup' })),
+            onSignIn: () => (location.hash = hrefFor({ name: 'signin' })),
+            onTryBirdAmp: () => settings.update({ listenLayout: 'birdamp' }),
+          });
+          removeStrip();
+        },
+        () => (wnStrip = null),
+      );
+      root.prepend(wnStrip);
+    });
+  };
+  const removeStrip = () => {
+    wnStrip?.remove();
+    wnStrip = null;
+  };
+
   // ---- subscriptions ---------------------------------------------------------
   subs.push(
     controller.on('chunk', (c) => {
@@ -741,6 +779,7 @@ export function listenView(ctx: ViewContext): View {
     controller.on('welcome', () => {
       // "Start identifying" took the layer down: put the layout back and show the loading state.
       applyLayout(layout);
+      offerWhatsNew(); // a brand-new visitor sees the strip right after the welcome (Sabih's option 2)
       renderRecent();
       renderResults();
       renderState();
@@ -808,6 +847,7 @@ export function listenView(ctx: ViewContext): View {
     renderResults();
     renderRecent();
     renderNotUsual();
+    offerWhatsNew();
   }
 
   return {
