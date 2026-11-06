@@ -254,7 +254,7 @@ textarea { color: inherit; }
    Vertical padding on the inline links widens their hit area without changing the line box. */
 .answer-credit { font-size: 0.75em; color: var(--muted); line-height: 1.8; margin: var(--space-1) 0 0; padding: 4px 0; overflow-wrap: anywhere; }
 .source-credit { font-size: var(--text-xs); color: var(--muted); line-height: 1.8; margin: var(--space-2) 0 0; padding: 4px 0; text-align: center; overflow-wrap: anywhere; }
-.answer-credit a, .source-credit a { color: var(--muted); text-decoration: underline; padding: 12px 0; }
+.answer-credit a, .source-credit a { color: var(--muted); text-decoration: underline; padding: 15px 0; }
 .answer-credit a:hover, .source-credit a:hover, .answer-credit a:focus-visible, .source-credit a:focus-visible { color: var(--accent); }
 
 /* Listen screen (DESIGN_GUIDE.md §5–6) */
@@ -651,7 +651,8 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 /* Listen's one status line before listening (DECISIONS.md #108): plain text, nothing that looks tappable. */
 .ready-extras { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
 .listen-status-line { margin: 0; text-align: center; overflow-wrap: anywhere; }
-.listen-status-line a { color: var(--accent); font-weight: var(--weight-semibold); }
+/* Inline links keep the sentence's layout; the vertical padding only widens the tap area to 44 px (DESIGN_GUIDE §tap targets). */
+.listen-status-line a { color: var(--accent); font-weight: var(--weight-semibold); padding: 14px 0; }
 .listen-status-line a[hidden] { display: none; }
 .focus-block .ready-extras { margin-top: var(--space-3); }
 .listen-dock-layout .ready-extras { align-items: stretch; }
@@ -666,7 +667,7 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .pipeline-fold > summary > .pipeline-summary { grid-area: chips; }
 .pipeline-fold > summary::after { grid-area: chev; }
 .pipeline-fold[open] > summary::after { content: "Hide ⌃"; transform: none; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--accent); margin-right: 0; }
-.see-info { position: absolute; top: -4px; right: 64px; width: 44px; height: 32px; line-height: 1; border: 0; background: none; color: var(--accent); font-size: 1.15rem; cursor: pointer; border-radius: var(--radius-control); }
+.see-info { position: absolute; top: -10px; right: 64px; width: 44px; height: 44px; line-height: 1; border: 0; background: none; color: var(--accent); font-size: 1.15rem; cursor: pointer; border-radius: var(--radius-control); }
 .see-info[aria-expanded="true"] { background: var(--surface-2); }
 .see-info:focus-visible { outline: 3px solid var(--focus); outline-offset: 0; }
 .see-views { gap: var(--space-2); }
@@ -674,7 +675,7 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .see-captions[hidden] { display: none; }
 .see-captions p { margin: 0; }
 .listen-help-link { margin: var(--space-2) 0 0; }
-.listen-help-link a { color: var(--accent); font-weight: var(--weight-semibold); }
+.listen-help-link a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); font-weight: var(--weight-semibold); }
 .help-steps { margin: 0 0 var(--space-2); padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }
 
 /* ---- BirdAmp Hybrid (DECISIONS.md #110): dark Winamp skin in both themes, Listen only ---- */

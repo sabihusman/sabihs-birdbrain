@@ -3108,3 +3108,18 @@ Each finding was checked against the code first.
 - **Known limit:** a signed-out iPhone user in a Safari tab who stays away 7+ days may see a strip once more: Safari
   can clear a site's storage after 7 days of Safari use without a visit (home-screen installs keep it).
 - **Picture:** the BirdAmp card uses a screenshot of the built app (`src/assets/whats-new-birdamp.jpg`, 60 KB).
+
+## 113. Listen links get 44 px tap areas (from the Nov 4 Listen redesign audit)
+
+- **Why:** the audit (signed in, model not loaded, ~840 px) found text links too small to tap reliably. Measured:
+  "How BirdNET decides ›" and "Turn on location to filter for your area ›" were 17 px tall at 390 px, the BirdNET and
+  licence credit links 39 px, against DESIGN_GUIDE.md's 44 × 44 px.
+- **Now:** "How BirdNET decides ›" is a 44 px row; the inline links in the status line and the credit keep the
+  sentence's layout and get vertical padding, which widens only the tap area. The new test also caught See the sound's
+  ⓘ (32 px since #109): it is now 44 × 44, still centred on the title row. An e2e test checks every link and button
+  on Listen before listening is at least 44 px tall at 390 and 840 px.
+- **Not acted on from the same audit (checked against the app):** the "floating button with no name" is the layout
+  bubble, which is named ("Listen layout: Focus. Change") and 44 px; the model download already shows a progress bar
+  and MB count once it starts (#70, not seen by a read-only audit); the layout menu already has a picture and a line
+  per layout. The audit's "Install app" pill, BirdAmp description and desktop two-column layout rest on those misreadings
+  or are larger choices for Sabih.
