@@ -174,11 +174,14 @@ test('the model loads only when needed: every tab and Account work with model re
   await expect(page.getByTestId('demo')).toHaveCount(0); // no sample clip (DECISIONS.md #117)
   expect(modelRequests, 'no model request before an identifying action').toBe(0);
 
-  // Start listening is an identifying action: it loads the model, then listens.
+  // Start listening is an identifying action: it loads the model, then listens. (The manual position is Zürich, where
+  // the location filter holds the sample redpoll back as "not usual here", so this checks the load, not a bird.)
   allowModel = true;
-  await hearBird(page);
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 200_000 });
   expect(modelRequests).toBeGreaterThan(0);
-  await expect(page.getByTestId('results')).toContainText('Redpoll');
+  await page.getByTestId('stop').click();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready');
   expect(await page.evaluate(() => localStorage.getItem('birdbrain.model.v1'))).toBe('wanted');
   // Next visit: the flag makes the model load at startup, so the phone is "Model ready" without a tap.
   await page.reload();
