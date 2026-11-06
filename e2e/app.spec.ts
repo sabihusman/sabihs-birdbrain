@@ -1,4 +1,20 @@
-import { devices, expect, test } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
+
+/**
+ * A bird at the fake microphone (playwright.config.ts plays BirdNET's sample redpoll on a loop): start listening in
+ * whatever layout is showing, wait for the first result card, then stop. Replaces the removed "Try the sample clip"
+ * (DECISIONS.md #117).
+ */
+async function hearBird(page: Page): Promise<void> {
+  const layout = await page.locator('.listen').getAttribute('data-layout');
+  const big = page.getByTestId('start-stop');
+  const start = layout !== 'dock' && (await big.isVisible()) ? big : page.getByTestId('dock-start');
+  await start.click();
+  await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 200_000 });
+  await expect(page.getByTestId('result-card').first()).toBeAttached({ timeout: 120_000 });
+  await page.getByTestId(layout === 'dock' ? 'dock-stop' : 'stop').click();
+  await expect(page.getByTestId('model-status')).not.toContainText('Listening');
+}
 
 /**
  * Most tests below were written for the Consolidated layout. The app now opens in
@@ -116,7 +132,7 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   await context.close();
 });
 
-test('the model loads only when needed: every tab and Account work with model requests aborted, and the sample clip starts the load', async ({ browser }) => {
+test('the model loads only when needed: every tab and Account work with model requests aborted, and Start listening starts the load', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
   const page = await context.newPage();
   // Settings stored, no flag, no cache: a returning visitor who never identified a bird (DECISIONS.md #69).
@@ -155,15 +171,14 @@ test('the model loads only when needed: every tab and Account work with model re
   await expect(page.locator('.listen')).toHaveAttribute('data-status', 'idle');
   await expect(page.getByTestId('model-status')).toHaveText('Not loaded');
   await expect(page.getByTestId('start-stop')).toBeEnabled();
-  await expect(page.getByTestId('demo')).toBeEnabled();
+  await expect(page.getByTestId('demo')).toHaveCount(0); // no sample clip (DECISIONS.md #117)
   expect(modelRequests, 'no model request before an identifying action').toBe(0);
 
-  // The sample clip is an identifying action: it loads the model, then analyses.
+  // Start listening is an identifying action: it loads the model, then listens.
   allowModel = true;
-  await page.getByTestId('demo').click();
-  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await hearBird(page);
   expect(modelRequests).toBeGreaterThan(0);
-  await expect(page.getByTestId('results')).toContainText('Redpoll', { timeout: 120_000 });
+  await expect(page.getByTestId('results')).toContainText('Redpoll');
   expect(await page.evaluate(() => localStorage.getItem('birdbrain.model.v1'))).toBe('wanted');
   // Next visit: the flag makes the model load at startup, so the phone is "Model ready" without a tap.
   await page.reload();
@@ -189,7 +204,7 @@ test('first run opens Listen in Focus, and a chosen layout is kept after a reloa
  * Worker, then runs inference on the sample clip that ships with the official
  * BirdNET-Analyzer TF.js export (a redpoll) and checks the result.
  */
-test('loads the model and identifies the bundled BirdNET sample clip', async ({ page, context }) => {
+test('loads the model and identifies the bundled BirdNET sample clip played as the microphone', async ({ page, context }) => {
   const logs: string[] = [];
   page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
@@ -201,12 +216,8 @@ test('loads the model and identifies the bundled BirdNET sample clip', async ({ 
   const status = page.getByTestId('model-status');
   await expect(status, logs.join('\n')).toContainText('Model ready', { timeout: 200_000 });
 
-  const demo = page.getByTestId('demo');
-  await expect(demo).toBeEnabled();
-  await demo.click();
-  const results = page.getByTestId('results');
-  await expect(results, logs.join('\n')).toContainText('Redpoll', { timeout: 120_000 });
-  await expect(page.getByTestId('listen-status')).toContainText('Sample analysed');
+  await hearBird(page);
+  await expect(page.getByTestId('results'), logs.join('\n')).toContainText('Redpoll');
 
   // Offline species browser works from the bundled label list.
   await page.getByRole('link', { name: 'Species' }).click();
@@ -235,8 +246,8 @@ test('loads the model and identifies the bundled BirdNET sample clip', async ({ 
   await expect(page.getByRole('heading', { name: 'Sabih’s Birdbrain' })).toBeVisible();
   // Offline: the model still loads from the cache; the pill says so (DESIGN_GUIDE.md §7).
   await expect(page.getByTestId('model-status')).toContainText(/Offline|Model ready/, { timeout: 120_000 });
-  await page.getByTestId('demo').click();
-  await expect(page.getByTestId('results')).toContainText('Redpoll', { timeout: 120_000 });
+  await hearBird(page);
+  await expect(page.getByTestId('results')).toContainText('Redpoll');
   await page.goto('./#/species');
   await page.getByRole('searchbox', { name: 'Search species' }).fill('chickadee');
   await expect(page.getByTestId('species-list')).toContainText('Black-capped Chickadee');
@@ -689,8 +700,8 @@ test('WebAssembly backend fallback loads the model and runs inference', async ({
   await page.goto('./');
   const status = page.getByTestId('model-status');
   await expect(status).toContainText('Model ready · wasm', { timeout: 240_000 });
-  await page.getByTestId('demo').click();
-  await expect(page.getByTestId('results')).toContainText('Redpoll', { timeout: 180_000 });
+  await hearBird(page);
+  await expect(page.getByTestId('results')).toContainText('Redpoll');
   // "Why this ID" on this backend: Coarse by default, with an estimate and the chosen level as a choice (DECISIONS.md #85).
   await page.goto('./#/recordings');
   await page.locator('#import-file').setInputFiles('public/samples/birdnet-sample.wav');
@@ -1119,21 +1130,8 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     // Focus shows no such row (DECISIONS.md #59).
     if (layout === 'focus') await expect(page.getByTestId('pipeline')).toHaveCount(0);
     else await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
-    // Result cards from the sample clip: thumbnail tile, dot + name, scientific name, confidence.
-    // Focus shows no sample button by design (DECISIONS.md #59), so click it through the DOM there.
-    if (layout === 'focus') await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
-    else await page.getByTestId('demo').click();
-    await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
-    const card = page.getByTestId('result-card').first();
-    if (layout === 'focus') {
-      await expect(page.getByTestId('results-empty')).toBeHidden();
-    } else {
-      await expect(page.getByTestId('results')).toContainText('Lesser Redpoll');
-      await expect(card).toContainText(/Redpoll/);
-      await expect(card).toContainText(/Acanthis/);
-      await expect(card).toContainText(/\d+%/);
-      await expect(card.locator('.result-thumb').first()).toBeAttached();
-    }
+    // No sample clip in any layout (DECISIONS.md #117).
+    await expect(page.getByTestId('demo')).toHaveCount(0);
     // Listening with the fake microphone: panel/dock/focus card, status text, conditions line, timer.
     await start.click();
     await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
@@ -1145,9 +1143,18 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       await expect(page.getByTestId('conditions')).toContainText('Conditions:', { timeout: 15_000 });
       await expect(page.getByTestId('stop')).toBeVisible();
     }
+    // Result cards from the bird at the mic: thumbnail tile, dot + name, scientific name, confidence.
+    const card = page.getByTestId('result-card').first();
+    await expect(card).toBeAttached({ timeout: 120_000 });
     if (layout === 'focus') {
       await expect(page.getByTestId('focus-latest')).toBeVisible();
-      await expect(page.getByTestId('more-birds')).toBeVisible();
+      await expect(page.getByTestId('results-empty')).toBeHidden();
+    } else {
+      await expect(page.getByTestId('results')).toContainText('Lesser Redpoll');
+      await expect(card).toContainText(/Redpoll/);
+      await expect(card).toContainText(/Acanthis/);
+      await expect(card).toContainText(/\d+%/);
+      await expect(card.locator('.result-thumb').first()).toBeAttached();
     }
     await page.waitForTimeout(1500);
     if (layout === 'consolidated') {
@@ -1293,9 +1300,9 @@ test('Listen layouts: the picker switches at once, each Ready state differs, and
   await expect(page.getByTestId('dock')).toBeHidden();
   await expect(page.getByTestId('recent-fold')).toHaveCount(0); // no lists on the Focus screen
   await expect(page.getByTestId('pipeline')).toHaveCount(0);
-  // Focus has the same status line and sample clip as the other layouts (DECISIONS.md #108).
+  // Focus has the same status line as the other layouts (DECISIONS.md #108); no sample clip (#117).
   await expect(page.getByTestId('listen-status-line')).toBeVisible();
-  await expect(page.getByTestId('demo')).toBeVisible();
+  await expect(page.getByTestId('demo')).toHaveCount(0);
 
   // 2. The choice survives a reload and is right on the first paint, with no flash.
   await page.reload();
@@ -1368,8 +1375,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     // dropdown any more); Focus shows the latest bird (DECISIONS.md #59, #109).
     if (layout !== 'dock') await expect(page.getByTestId('recent-fold')).toHaveCount(0);
     else await expect(page.getByTestId('recent-empty')).toBeAttached();
-    await page.getByTestId('demo').click();
-    await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
+    await hearBird(page);
     // The live results list shows the best confidence labelled "best" and the count.
     if (layout === 'focus') {
       await expect(page.getByTestId('focus-latest')).toContainText('Heard once');
@@ -1613,7 +1619,7 @@ test('a browser without WebAssembly is told which browsers work, and no model by
   await expect(page.getByTestId('model-status')).toContainText('Browser not supported');
   await expect(page.getByTestId('try-again')).toBeHidden();
   await expect(page.getByTestId('start-stop')).toBeHidden();
-  await expect(page.getByTestId('demo')).toBeHidden();
+  await expect(page.getByTestId('demo')).toHaveCount(0);
   // Give a stray download a moment to show up, then check that none did.
   await page.waitForTimeout(2000);
   expect(modelRequests).toEqual([]);
@@ -2055,9 +2061,6 @@ test('Focus: the big Start page once per session and day; Stop/Record and Start 
   await expect(listen).toHaveClass(/focus-intro/);
   await expect(page.getByTestId('start-stop')).toBeVisible();
   await expect(page.getByTestId('dock')).toBeHidden();
-  // Some birds from the sample clip, so there is something to keep.
-  await page.getByTestId('demo').evaluate((b) => (b as HTMLButtonElement).click());
-  await expect(page.getByTestId('listen-status')).toContainText('Sample analysed', { timeout: 120_000 });
 
   const tabsTop = async () => (await page.locator('nav.tabs, .tabs').first().boundingBox())!.y;
   await page.getByTestId('start-stop').click();
@@ -2692,7 +2695,7 @@ test('the birds heard this session are still on Listen after visiting another ta
   await browser.close();
 });
 
-test('Listen: one plain status line with the town, in every layout; the dock tip; Focus has the sample clip (DECISIONS.md #108)', async ({ browser }) => {
+test('Listen: one plain status line with the town, in every layout; the dock tip (DECISIONS.md #108)', async ({ browser }) => {
   const month = new Date().toLocaleString('en-US', { month: 'long' });
   for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     const context = await browser.newContext({ viewport: { width: 320, height: 700 }, serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
@@ -2711,8 +2714,7 @@ test('Listen: one plain status line with the town, in every layout; the dock tip
     // No location: words, not codes, and a real link to fix it.
     await expect(line).toContainText('No location · All year · Only matches 70% or more');
     await expect(page.getByTestId('listen-status-link')).toHaveText('Turn on location to filter for your area ›');
-    await expect(page.getByTestId('demo')).toBeVisible();
-    expect((await page.getByTestId('demo').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(page.getByTestId('demo')).toHaveCount(0); // no sample clip (DECISIONS.md #117)
     // Bottom dock now shows the state's tip until the first bird ("Point the bottom…" once the model is ready).
     if (layout === 'dock') await expect(page.locator('.state-hint')).toBeVisible();
     // With a position: the nearest town, asked once with a position rounded to ~1 km.
@@ -2988,8 +2990,7 @@ test('Help lights no tab: opened from Listen or from Settings › About (DECISIO
 });
 
 
-test('the sample clip says it downloads the model first, only while the model is not on the phone (DECISIONS.md #116)', async ({ browser }) => {
-  // Signed in with no model asked for yet: Listen is in its "Model not loaded" state (DECISIONS.md #81).
+test('no sample clip anywhere: not on Listen in any layout, not on BirdAmp’s player (DECISIONS.md #117)', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 800 }, serviceWorkers: 'block' });
   await context.addInitScript(() => {
     localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'm@e.com', name: 'Sam', status: 'approved', role: 'member' } }));
@@ -2998,15 +2999,17 @@ test('the sample clip says it downloads the model first, only while the model is
   });
   const page = await context.newPage();
   await page.goto('./#/listen');
-  await expect(page.locator('.listen')).toHaveAttribute('data-status', 'idle');
-  const note = page.getByTestId('demo-note');
-  await expect(note).toHaveText('Downloads the 78 MB model first');
-  const [btn, line] = [await page.getByTestId('demo').boundingBox(), await note.boundingBox()];
-  expect(line!.y).toBeGreaterThan(btn!.y + btn!.height - 1); // right under the button
-  expect(line!.y - (btn!.y + btn!.height)).toBeLessThan(16);
-  // Once the model loads, the line goes.
-  await page.getByTestId('demo').click();
-  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-  await expect(note).toBeHidden();
+  for (const layout of ['consolidated', 'dock', 'focus', 'birdamp'] as const) {
+    await page.evaluate((l) => {
+      const s = JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}');
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ ...s, listenLayout: l }));
+    }, layout);
+    await page.reload();
+    await expect(page.locator('.listen')).toHaveAttribute('data-layout', layout);
+    await expect(page.getByTestId('demo'), layout).toHaveCount(0);
+    await expect(page.getByTestId('demo-note'), layout).toHaveCount(0);
+    await expect(page.getByTestId('ba-sample'), layout).toHaveCount(0);
+    await expect(page.getByText(/sample clip/i), layout).toHaveCount(0);
+  }
   await context.close();
 });

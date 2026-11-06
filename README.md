@@ -85,7 +85,7 @@ The name is always shown next to the colour.
 - **Listen:** three layouts (Consolidated, Bottom dock, Focus mode; Settings → Listen layout) around one Start/Stop action, result cards with Wikipedia thumbnails, a status line with words and an icon for every state (loading, ready, listening, paused, mic blocked with iPhone steps, error, offline), and the waveform, spectrogram, pipeline and timeline folded into "How it works". Also: multi-species results with
   confidences, confidence threshold slider, elapsed time, inference time,
   dropped-window count, screen wake lock (with a notice when unsupported),
-  resume after returning to the foreground, a “Try the sample clip” demo,
+  resume after returning to the foreground,
   and a conditions indicator (Good / Too quiet / Windy, guidance only).
 - **Microphone handling:** asks the browser for raw audio (echo cancellation,
   noise suppression and automatic gain off) and shows in Settings what was
@@ -330,7 +330,7 @@ multi-label logic, the week-of-year calculation, species colours, WAV encoding
 and decoding, occlusion masking, and CSV/GeoJSON export. The Playwright test
 runs the built app in Chromium at iPhone size, waits for the models to load in
 the worker, identifies the sample clip that ships with the official BirdNET
-TF.js export (a redpoll), checks the WebAssembly fallback, then reloads offline
+TF.js export (a redpoll) played as the microphone, checks the WebAssembly fallback, then reloads offline
 and does it again from the caches. GitHub Actions runs all of it on every push;
 Vercel builds and deploys the front end from `main`.
 

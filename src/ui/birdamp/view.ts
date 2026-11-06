@@ -40,7 +40,6 @@ export interface BirdAmpParts {
   start: () => void;
   pause: () => void;
   stop: () => void;
-  sample: () => void;
 }
 
 export interface BirdAmpView {
@@ -53,8 +52,6 @@ export interface BirdAmpView {
   tick: () => void;
   setClock: (sec: number) => void;
   setLevel: (level: number) => void;
-  /** "Sample analysed in 247 ms." after the sample clip. */
-  setReadout: (text: string) => void;
   /** A window was analysed: the newest bird goes back into the marquee. */
   onResult: () => void;
   dispose: () => void;
@@ -69,7 +66,6 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   let query = '';
   /** Which session bird the marquee shows: 0 is the newest; PREV and NEXT step through them. */
   let selected = 0;
-  let readout = '';
   let disposed = false;
 
   // ---- player ------------------------------------------------------------------
@@ -97,8 +93,7 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   const meterFill = el('i');
   const meterText = el('em', { 'data-testid': 'ba-gain' }, 'Gain ×1 · auto');
   const meter = el('div', { class: 'ba-meter', title: 'Mic level; the waveform gain is set automatically (display only)' }, meterFill, meterText);
-  const readoutLine = el('div', { class: 'ba-readout', 'data-testid': 'ba-readout', hidden: true }, '');
-  const lcdRight = el('div', { class: 'ba-lcd ba-lcd-right' }, marquee, info, meter, readoutLine);
+  const lcdRight = el('div', { class: 'ba-lcd ba-lcd-right' }, marquee, info, meter);
   const specSlot = el('div', { class: 'ba-spec' });
   const tKey = (icon: string, word: string, label: string, testid: string) =>
     el('button', { class: 'ba-key', type: 'button', 'aria-label': label, 'data-testid': testid }, el('span', { class: 'ba-key-icon', 'aria-hidden': 'true' }, icon), el('span', { class: 'ba-key-word', 'aria-hidden': 'true' }, word));
@@ -107,10 +102,9 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   const pauseBtn = tKey('❚❚', 'Pause', 'Pause', 'ba-pause');
   const stopBtn = tKey('■', 'Stop', 'Stop', 'ba-stop');
   const nextBtn = tKey('⏭', 'Next', 'Next bird', 'ba-next');
-  const sampleBtn = tKey('⏏', 'Sample', 'Try the sample clip', 'ba-sample');
   const eqBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Confidence window', 'aria-pressed': 'true', 'data-testid': 'ba-eq' }, 'EQ');
   const plBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Playlist window', 'aria-pressed': 'true', 'data-testid': 'ba-pl' }, 'PL');
-  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, sampleBtn, el('span', { class: 'ba-eqpl' }, eqBtn, plBtn));
+  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, el('span', { class: 'ba-eqpl' }, eqBtn, plBtn));
   // The area filter is shown, not set, here: it is edited in Settings.
   const area = el('a', { class: 'ba-area', href: '#/settings', 'data-testid': 'ba-area' }, '');
   const playerBody = el('div', { class: 'ba-body' }, el('div', { class: 'ba-main' }, lcdLeft, lcdRight), specSlot, transport, area);
@@ -282,7 +276,6 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   for (const b of [listenBtn, shadeListen]) b.addEventListener('click', () => p.start());
   for (const b of [pauseBtn, shadePause]) b.addEventListener('click', () => p.pause());
   for (const b of [stopBtn, shadeStop]) b.addEventListener('click', () => p.stop());
-  sampleBtn.addEventListener('click', () => p.sample());
 
   // ---- playlist data --------------------------------------------------------------------------
   let sightings: SightingRecord[] | null = null;
@@ -414,15 +407,12 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     pauseBtn.disabled = shadePause.disabled = !live;
     stopBtn.disabled = shadeStop.disabled = !(live || paused || st === 'paused');
     prevBtn.disabled = nextBtn.disabled = groups.length < 2;
-    sampleBtn.disabled = !canStart || live;
     listenBtn.classList.toggle('lit', live);
     pauseBtn.classList.toggle('lit', paused);
     const areaWords = p.areaText();
     if (area.textContent !== areaWords) area.textContent = areaWords;
     minLabel.textContent = `Min ${Math.round(controller.settings.get().threshold * 100)}%`;
     shadeText.get('confidence')!.textContent = groups.length ? groups.slice(0, 3).map((g) => `${g.species.common} ${Math.round(g.best * 100)}%`).join(' · ') : 'No birds yet';
-    readoutLine.hidden = readout === '' || live;
-    readoutLine.textContent = readout;
     renderLibrary(false);
   }
 
@@ -478,10 +468,6 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     },
     setLevel(level) {
       meterFill.style.width = `${levelPercent(level)}%`;
-    },
-    setReadout(text) {
-      readout = text.trim();
-      render();
     },
     onResult() {
       selected = 0;

@@ -743,7 +743,6 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .ba-meter { position: relative; height: 14px; margin-top: 6px; background: #14171d; border: 1px solid var(--ba-edge); overflow: hidden; }
 .ba-meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #00b82e, #c8d400 70%, #e04a1a); transition: width 0.1s linear; }
 .ba-meter em { position: absolute; right: 4px; top: 0; line-height: 12px; font-style: normal; font-size: 0.6rem; color: #e8ecf2; text-transform: uppercase; text-shadow: 0 0 2px #000, 0 0 2px #000; }
-.ba-readout { margin-top: 4px; font-size: 0.6rem; line-height: 1.3; color: var(--ba-green); text-transform: uppercase; }
 .ba-spec { background: var(--ba-lcd); border: 1px solid var(--ba-edge); overflow: hidden; }
 .ba-spec .viz { border-radius: 0; margin: 0; }
 .ba-spec .viz canvas:first-child { height: 60px !important; }
@@ -846,4 +845,3 @@ html.wn-open, html.wn-open body { overflow: hidden; }
 .wn-item h3 { margin: var(--space-2) 0 2px; font-size: var(--text-md); }
 .wn-item p { margin: 0 0 var(--space-1); }
 @media (prefers-reduced-motion: reduce) { .wn-track { scroll-behavior: auto; } }
-.demo-note { margin: calc(-1 * var(--space-1)) 0 0; text-align: center; }

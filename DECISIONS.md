@@ -3147,3 +3147,14 @@ Each finding was checked against the code first.
 - **Now:** while the model is not on the phone (Listen's "Model not loaded" state) a small grey line under the button
   reads "Downloads the 78 MB model first"; it goes once the model is there or downloading. Same in every layout that
   shows the button (BirdAmp's Sample key keeps its word only).
+
+## 117. The "Try the sample clip" demo is removed
+
+- **Why (Sabih, Nov 6):** "It doesn't work very well. Disable it altogether." One 3 s clip, analysed once and not
+  saved, did not show what listening does, and on a phone without the model it started the 78 MB download.
+- **Now:** no sample button on Listen in any layout, no line under it (#116 is undone), no Sample key on BirdAmp's
+  player (its transport is Prev / Listen / Pause / Stop / Next, then EQ / PL) and no "Sample analysed in N ms" readout;
+  `AppController.analyzeDemoClip` and the `ephemeral` result flag are gone. Start listening and Import (Recordings)
+  are the identifying actions.
+- **Kept:** `public/samples/birdnet-sample.wav` stays, only as the e2e tests' fake microphone (Playwright plays it on a
+  loop for every test now); it is not precached and nothing in the app links to it.
