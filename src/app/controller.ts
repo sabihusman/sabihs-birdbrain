@@ -35,8 +35,6 @@ export interface WindowResult {
   detections: Score[];
   inferMs: number;
   geoApplied: boolean;
-  /** Not persisted (e.g. the demo clip). */
-  ephemeral: boolean;
   /** Indices in `detections` that are there only because the user kept the bird against the location filter (DECISIONS.md #93). */
   soundOnly?: number[];
 }
@@ -255,7 +253,7 @@ export class AppController extends Emitter<ControllerEvents> {
 
   /**
    * The model, loaded on demand (DECISIONS.md #69): every identifying action (Listen's
-   * start, the sample clip, an import, "Start identifying") goes through here, so the
+   * start, an import, "Start identifying") goes through here, so the
    * first one downloads and the flag makes the next visit load at startup. Resolves true
    * when inference is ready, false when the download failed (a notice was shown).
    */
@@ -570,7 +568,7 @@ export class AppController extends Emitter<ControllerEvents> {
       this.noteNotUsual(hidden.filter((d) => !kept.includes(d)), time, copy);
       this.stats = { ...this.stats, windows: this.stats.windows + 1, lastInferMs: res.inferMs };
       this.emit('stage', 'result');
-      result = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, ephemeral: false, soundOnly: kept.map((d) => d.index) };
+      result = { windowId, time, offsetSec, scores: res.scores, detections, inferMs: res.inferMs, geoApplied: res.geoApplied, soundOnly: kept.map((d) => d.index) };
       this.publish(result);
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Analysis failed: ${(e as Error).message}` });
@@ -910,26 +908,6 @@ export class AppController extends Emitter<ControllerEvents> {
     }
   }
 
-  /** Run the bundled demo clip through the same path as a live window (not persisted). */
-  async analyzeDemoClip(url: string): Promise<WindowResult> {
-    if (!(await this.ensureModel())) throw new Error(this.modelFailure?.text ?? MODEL_DOWNLOAD_ERROR);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Could not fetch sample (${res.status})`);
-    const audio = await this.decodeAudioFile(await res.arrayBuffer());
-    const win = audio.slice(0, WINDOW_SAMPLES);
-    const padded = new Float32Array(WINDOW_SAMPLES);
-    padded.set(win);
-    for (const c of chunksOf(padded, 2048)) this.emit('chunk', c);
-    this.emit('stage', 'window');
-    const s = this.settings.get();
-    const out = await this.inference.analyze(await this.prepareForAnalysis(padded));
-    const detections = selectDetections(out.scores, this.species, { threshold: s.threshold, applyGeo: false, includeNonBird: s.includeNonBird });
-    this.emit('stage', 'result');
-    const result: WindowResult = { windowId: ++this.windowCounter, time: Date.now(), offsetSec: 0, scores: out.scores, detections, inferMs: out.inferMs, geoApplied: false, ephemeral: true };
-    this.publish(result);
-    return result;
-  }
-
   // Device APIs -----------------------------------------------------------
 
   private async requestWakeLock(): Promise<void> {
@@ -966,10 +944,6 @@ export class AppController extends Emitter<ControllerEvents> {
       if (!this.wakeLock) await this.requestWakeLock();
     }
   }
-}
-
-function* chunksOf(a: Float32Array, size: number): Generator<Float32Array> {
-  for (let i = 0; i < a.length; i += size) yield a.subarray(i, Math.min(a.length, i + size));
 }
 
 export const WINDOW_LENGTH_SEC = WINDOW_SECONDS;

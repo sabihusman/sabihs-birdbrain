@@ -68,7 +68,6 @@ export function listenView(ctx: ViewContext): View {
   const dockStartBtn = el('button', { class: 'btn primary', type: 'button', 'data-testid': 'dock-start' }, 'Start listening');
   const dockStopBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'dock-stop' }, 'Stop');
   const recordBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'record' }, '● Record');
-  const demoBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'demo' }, 'Try the sample clip');
   const tryAgainBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'try-again' }, 'Try again');
   const resumeBtn = el('button', { class: 'btn primary', type: 'button', 'data-testid': 'resume' }, 'Resume listening');
 
@@ -153,10 +152,8 @@ export function listenView(ctx: ViewContext): View {
     }
     renderStatusLine();
   };
-  /** The status line and the sample clip, in the Ready block (or under the bird in Focus after its first page). */
-  // Before the model is on the phone the sample clip downloads it first; say so before the tap (DECISIONS.md #116).
-  const demoNote = el('p', { class: 'small muted demo-note', 'data-testid': 'demo-note' }, `Downloads the ${MODEL_SIZE_MB} MB model first`);
-  const readyExtras = el('div', { class: 'ready-extras' }, statusLineEl, el('div', { class: 'row' }, demoBtn), demoNote);
+  /** The status line, in the Ready block (or under the bird in Focus after its first page). The sample clip is gone (DECISIONS.md #117). */
+  const readyExtras = el('div', { class: 'ready-extras' }, statusLineEl);
 
   // Results
   const resultsList = el('div', { class: 'result-list', 'data-testid': 'results' });
@@ -297,7 +294,6 @@ export function listenView(ctx: ViewContext): View {
       start: () => void start(),
       pause: () => void controller.pauseListening().then(renderState),
       stop: () => void stop(),
-      sample: () => void runSample(),
     }));
   const applyLayout = (next: ListenLayout) => {
     layout = next;
@@ -426,12 +422,10 @@ export function listenView(ctx: ViewContext): View {
     const noModel = st.status === 'unsupported';
     setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || noModel || layout === 'dock');
     setHidden(readyExtras, listening || noModel);
-    setHidden(demoBtn, listening || st.status === 'loading' || noModel);
-    setHidden(demoNote, listening || st.status !== 'idle');
     setHidden(readyBlock, listening);
     if (layout === 'dock') {
       // Cards fill the screen, so the state row only appears when there is something to say
-      // (loading, mic blocked, paused, an error). The sample-clip button stays reachable.
+      // (loading, mic blocked, paused, an error).
       setHidden(stateRow, plainReady);
       // "Point the bottom of your phone toward the sound." until the first bird (DECISIONS.md #108).
       setHidden(stateHint, plainReady && controller.getSessionHits().length > 0);
@@ -447,7 +441,7 @@ export function listenView(ctx: ViewContext): View {
       // The big Start page is an introduction, once per session and day (DECISIONS.md #83). After
       // it, the bird stays on screen and the controls sit above the tab bar, listening or not.
       const intro = !listening && !focusIntroDone();
-      // The status line and the sample clip sit on the big Start page, or under the bird after it (DECISIONS.md #108).
+      // The status line sits on the big Start page, or under the bird after it (DECISIONS.md #108).
       const home = intro ? readyBlock : focusBlock;
       if (readyExtras.parentElement !== home) {
         if (intro) readyBlock.insertBefore(readyExtras, lastBirdLine);
@@ -479,7 +473,7 @@ export function listenView(ctx: ViewContext): View {
       dock.dataset.status = st.status;
     }
     if (layout === 'birdamp') {
-      // The player has Listen and Sample; the block only speaks when there is something to say.
+      // The player has Listen; the block only speaks when there is something to say.
       const words = st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || st.status === 'unsupported' || st.status === 'paused';
       setHidden(readyBlock, !words);
       setHidden(startBtn, true);
@@ -490,7 +484,6 @@ export function listenView(ctx: ViewContext): View {
       amp?.render();
     }
     startBtn.disabled = !canStart;
-    demoBtn.disabled = !canStart;
     const rec = controller.getRecordingState();
     recordBtn.textContent = rec.recording ? `■ Stop (${fmtDuration(rec.seconds)})` : '● Record';
     recordBtn.classList.toggle('recording', rec.recording);
@@ -684,22 +677,6 @@ export function listenView(ctx: ViewContext): View {
     } else controller.startRecording();
     renderState();
   });
-  const runSample = async () => {
-    demoBtn.disabled = true;
-    status.textContent = controller.inference.getStatus().state === 'ready' ? 'Analysing the sample clip…' : 'Loading the model, then the sample…';
-    waveform.reset();
-    spectrogram.reset();
-    try {
-      const r = await controller.analyzeDemoClip(`${controller.baseUrl}samples/birdnet-sample.wav`);
-      status.textContent = `Sample analysed in ${Math.round(r.inferMs)} ms. ${r.detections.length ? '' : 'Nothing above your minimum; lower it in Settings to see weaker candidates.'}`;
-    } catch (e) {
-      status.textContent = `Sample failed: ${(e as Error).message}`;
-    } finally {
-      amp?.setReadout(status.textContent ?? '');
-      renderState();
-    }
-  };
-  demoBtn.addEventListener('click', () => void runSample());
   notUsualLine.addEventListener('click', () => {
     showNotUsual = !showNotUsual;
     renderNotUsual();

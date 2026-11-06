@@ -19,8 +19,9 @@ export default defineConfig({
     permissions: ['microphone'],
     defaultBrowserType: 'chromium',
     launchOptions: {
-      // Fake microphone so the Listening state is testable without a device.
-      args: ['--autoplay-policy=no-user-gesture-required', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+      // Fake microphone so the Listening state is testable without a device. It plays BirdNET's sample redpoll on a
+      // loop, so listening finds a bird (the app's own "Try the sample clip" is gone, DECISIONS.md #117).
+      args: ['--autoplay-policy=no-user-gesture-required', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
     },
   },
   webServer: {

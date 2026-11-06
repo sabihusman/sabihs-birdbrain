@@ -6,7 +6,7 @@
  *
  * - stored settings (the user changed something),
  * - the "model wanted" flag (the user tapped "Start identifying", or started
- *   listening, the sample clip or an import),
+ *   listening or an import),
  * - the model files in the Cache API (a download finished here before),
  * - a signed-in session (an account on this phone; DECISIONS.md #81).
  *
