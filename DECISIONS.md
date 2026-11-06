@@ -3123,3 +3123,11 @@ Each finding was checked against the code first.
   and MB count once it starts (#70, not seen by a read-only audit); the layout menu already has a picture and a line
   per layout. The audit's "Install app" pill, BirdAmp description and desktop two-column layout rest on those misreadings
   or are larger choices for Sabih.
+
+## 114. The Help page lights no tab
+
+- **Why (Listen audit, Nov 4; Sabih chose option 1 from the mockup, Nov 6):** Help counted as part of Settings because
+  it was first reached only from Settings › About; since #109 it is also linked from Listen ("How BirdNET decides ›"),
+  so Settings lighting up there was misleading.
+- **Now:** on `#/help` no tab in the bottom bar is lit. Every other page keeps its tab (What's new, account and admin
+  pages still light Settings).

@@ -2971,3 +2971,19 @@ test('Listen: every link and button before listening is at least 44 px tall, at 
     await context.close();
   }
 });
+
+test('Help lights no tab: opened from Listen or from Settings › About (DECISIONS.md #114)', async ({ page }) => {
+  await page.goto('./#/listen');
+  await page.getByTestId('listen-help-link').click();
+  await expect(page.getByTestId('help-steps')).toBeVisible();
+  await expect(page.locator('.tabs a.active')).toHaveCount(0);
+  await page.goto('./#/settings');
+  await expect(page.locator('.tabs a.active')).toHaveText('Settings');
+  await page.getByRole('link', { name: 'How it works' }).click();
+  await expect(page).toHaveURL(/#\/help$/);
+  await expect(page.locator('.tabs a.active')).toHaveCount(0);
+  // Every other page keeps its tab.
+  await page.goto('./#/whats-new');
+  await expect(page.locator('.tabs a.active')).toHaveText('Settings');
+});
+

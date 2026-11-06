@@ -60,7 +60,9 @@ function tabGroup(route: Route): string {
     case 'species-detail':
     case 'species-history':
       return 'species';
+    // Help is reached from Listen and from Settings › About, so no tab lights up there (Sabih's option 1, DECISIONS.md #114).
     case 'help':
+      return 'none';
     case 'whats-new':
     case 'admin':
     case 'admin-users':
