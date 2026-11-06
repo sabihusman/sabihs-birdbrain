@@ -2953,3 +2953,21 @@ test('What’s new: “Don’t show me this again” turns pop-ups off until the
     await context.close();
   }
 });
+
+test('Listen: every link and button before listening is at least 44 px tall, at 390 and 840 px (DESIGN_GUIDE.md tap targets, DECISIONS.md #113)', async ({ browser }) => {
+  for (const width of [390, 840]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' });
+    await context.addInitScript(returningVisitor);
+    const page = await context.newPage();
+    await page.goto('./#/listen');
+    await expect(page.getByTestId('listen-help-link')).toBeVisible();
+    const short = await page.evaluate(() =>
+      [...document.querySelectorAll('main a, main button')]
+        .filter((e) => e.getBoundingClientRect().width > 0)
+        .map((e) => ({ name: (e.getAttribute('aria-label') ?? e.textContent ?? '').trim(), h: Math.round(e.getBoundingClientRect().height) }))
+        .filter((t) => t.h < 44),
+    );
+    expect(short, `${width} px`).toEqual([]);
+    await context.close();
+  }
+});
