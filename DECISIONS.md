@@ -3131,3 +3131,11 @@ Each finding was checked against the code first.
   so Settings lighting up there was misleading.
 - **Now:** on `#/help` no tab in the bottom bar is lit. Every other page keeps its tab (What's new, account and admin
   pages still light Settings).
+
+## 115. Header pill says "Not loaded" before the model is downloaded
+
+- **Why (Listen audit, Nov 4; Sabih chose option 2 from the mockup, Nov 6):** before the download, "Model not loaded"
+  appeared twice on Listen, in the header pill and as the heading.
+- **Now:** the pill reads "Not loaded" in that state, on every tab; Listen's heading keeps "Model not loaded". The error
+  state's pill ("Model not loaded", with the reason below) is unchanged. At iPhone width the app name now fits on one
+  line in that state.

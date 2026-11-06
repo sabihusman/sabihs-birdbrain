@@ -67,7 +67,7 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   // No "Ready to work offline." on a first visit: the model is not on the phone yet.
   await expect(page.getByText('Ready to work offline.')).toHaveCount(0);
   await expect(page.getByTestId('start-stop')).toHaveCount(0); // the layer stands in for the whole screen
-  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  await expect(page.getByTestId('model-status')).toHaveText('Not loaded');
   // The one filled button is Start identifying; the welcome fits the phone width.
   const box = await page.getByTestId('welcome-start').boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(44);
@@ -133,7 +133,7 @@ test('the model loads only when needed: every tab and Account work with model re
 
   // Settings › Account › Sign in: the sign-in page is reachable and usable.
   await page.goto('./#/settings');
-  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  await expect(page.getByTestId('model-status')).toHaveText('Not loaded');
   await page.getByTestId('account').getByRole('link', { name: 'Sign in' }).click();
   const signin = page.getByTestId('signin-page');
   await signin.getByLabel('Email').fill('new@example.com');
@@ -153,7 +153,7 @@ test('the model loads only when needed: every tab and Account work with model re
   await page.goto('./#/listen');
   await expect(page.getByTestId('welcome')).toHaveCount(0);
   await expect(page.locator('.listen')).toHaveAttribute('data-status', 'idle');
-  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  await expect(page.getByTestId('model-status')).toHaveText('Not loaded');
   await expect(page.getByTestId('start-stop')).toBeEnabled();
   await expect(page.getByTestId('demo')).toBeEnabled();
   expect(modelRequests, 'no model request before an identifying action').toBe(0);
@@ -1959,7 +1959,7 @@ test('signed in means returning: no welcome at startup or after signing in, List
   await page.goto('./#/listen');
   await expect(page.locator('.listen')).toHaveClass(/listen-focus-layout/);
   await expect(page.getByTestId('welcome')).toHaveCount(0);
-  await expect(page.getByTestId('model-status')).toHaveText('Model not loaded');
+  await expect(page.getByTestId('model-status')).toHaveText('Not loaded');
   expect(modelRequests).toBe(0);
   await context.close();
 
@@ -2257,7 +2257,7 @@ test('the header title never sits under the status pill, at 320 and 375 px, with
     await page.addInitScript(returningVisitor);
     await page.route(/\/models\/birdnet-v2\.4\/(?!labels\.json)/, (route) => route.abort());
     await page.goto('./#/species');
-    for (const text of ['Model not loaded', 'Model ready · webgl', 'Something went wrong', 'Browser not supported', 'Loading model 100%']) {
+    for (const text of ['Not loaded', 'Model not loaded', 'Model ready · webgl', 'Something went wrong', 'Browser not supported', 'Loading model 100%']) {
       const m = await page.evaluate((t) => {
         const pill = document.querySelector('[data-testid="model-status"]') as HTMLElement;
         (pill.querySelector('.model-pill-text') ?? pill).textContent = t;
