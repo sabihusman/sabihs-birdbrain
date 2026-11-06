@@ -2997,7 +2997,8 @@ test('no sample clip anywhere: not on Listen in any layout, not on BirdAmp’s p
   const context = await browser.newContext({ viewport: { width: 390, height: 800 }, serviceWorkers: 'block' });
   await context.addInitScript(() => {
     localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'm@e.com', name: 'Sam', status: 'approved', role: 'member' } }));
-    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+    // Only the first load: the loop below changes the layout and reloads.
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
     localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
   });
   const page = await context.newPage();
