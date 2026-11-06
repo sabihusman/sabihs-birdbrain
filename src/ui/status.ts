@@ -27,7 +27,8 @@ export function listenStatus(controller: AppController, online = typeof navigato
   // nearly always a connection problem; say the reason instead of "Something went wrong".
   if (model.state === 'error') return { status: 'error', pill: 'Model not loaded', icon: '⚠', tone: 'error', hint: failure?.text ?? MODEL_DOWNLOAD_ERROR };
   // Nothing asked for the model yet (first visit, welcome layer up): not an error, not a download.
-  if (model.state === 'idle') return { status: 'idle', pill: 'Model not loaded', icon: '◌', tone: 'muted' };
+  // Short in the header: Listen's heading already says "Model not loaded" (Sabih's option 2, DECISIONS.md #115).
+  if (model.state === 'idle') return { status: 'idle', pill: 'Not loaded', icon: '◌', tone: 'muted' };
   if (model.state !== 'ready') return { status: 'loading', pill: `Loading model ${Math.round((model.progress ?? 0) * 100)}%`, icon: '◌', tone: 'muted' };
   if (controller.listening) {
     return controller.engine.getState() === 'suspended' ? { status: 'paused', pill: 'Paused', icon: '❚❚', tone: 'warn' } : { status: 'listening', pill: 'Listening', icon: '●', tone: 'ok' };
