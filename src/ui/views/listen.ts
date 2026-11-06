@@ -154,7 +154,9 @@ export function listenView(ctx: ViewContext): View {
     renderStatusLine();
   };
   /** The status line and the sample clip, in the Ready block (or under the bird in Focus after its first page). */
-  const readyExtras = el('div', { class: 'ready-extras' }, statusLineEl, el('div', { class: 'row' }, demoBtn));
+  // Before the model is on the phone the sample clip downloads it first; say so before the tap (DECISIONS.md #116).
+  const demoNote = el('p', { class: 'small muted demo-note', 'data-testid': 'demo-note' }, `Downloads the ${MODEL_SIZE_MB} MB model first`);
+  const readyExtras = el('div', { class: 'ready-extras' }, statusLineEl, el('div', { class: 'row' }, demoBtn), demoNote);
 
   // Results
   const resultsList = el('div', { class: 'result-list', 'data-testid': 'results' });
@@ -425,6 +427,7 @@ export function listenView(ctx: ViewContext): View {
     setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || noModel || layout === 'dock');
     setHidden(readyExtras, listening || noModel);
     setHidden(demoBtn, listening || st.status === 'loading' || noModel);
+    setHidden(demoNote, listening || st.status !== 'idle');
     setHidden(readyBlock, listening);
     if (layout === 'dock') {
       // Cards fill the screen, so the state row only appears when there is something to say

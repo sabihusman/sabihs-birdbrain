@@ -3139,3 +3139,11 @@ Each finding was checked against the code first.
 - **Now:** the pill reads "Not loaded" in that state, on every tab; Listen's heading keeps "Model not loaded". The error
   state's pill ("Model not loaded", with the reason below) is unchanged. At iPhone width the app name now fits on one
   line in that state.
+
+## 116. "Try the sample clip" says it downloads the model first
+
+- **Why (Listen audit, Nov 4; Sabih chose option 2, Nov 6):** on a phone without the model, the sample clip starts the
+  78 MB download, but said so only after the tap ("Loading the model, then the sample…").
+- **Now:** while the model is not on the phone (Listen's "Model not loaded" state) a small grey line under the button
+  reads "Downloads the 78 MB model first"; it goes once the model is there or downloading. Same in every layout that
+  shows the button (BirdAmp's Sample key keeps its word only).

@@ -2987,3 +2987,26 @@ test('Help lights no tab: opened from Listen or from Settings › About (DECISIO
   await expect(page.locator('.tabs a.active')).toHaveText('Settings');
 });
 
+
+test('the sample clip says it downloads the model first, only while the model is not on the phone (DECISIONS.md #116)', async ({ browser }) => {
+  // Signed in with no model asked for yet: Listen is in its "Model not loaded" state (DECISIONS.md #81).
+  const context = await browser.newContext({ viewport: { width: 390, height: 800 }, serviceWorkers: 'block' });
+  await context.addInitScript(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'm@e.com', name: 'Sam', status: 'approved', role: 'member' } }));
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' }));
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+  });
+  const page = await context.newPage();
+  await page.goto('./#/listen');
+  await expect(page.locator('.listen')).toHaveAttribute('data-status', 'idle');
+  const note = page.getByTestId('demo-note');
+  await expect(note).toHaveText('Downloads the 78 MB model first');
+  const [btn, line] = [await page.getByTestId('demo').boundingBox(), await note.boundingBox()];
+  expect(line!.y).toBeGreaterThan(btn!.y + btn!.height - 1); // right under the button
+  expect(line!.y - (btn!.y + btn!.height)).toBeLessThan(16);
+  // Once the model loads, the line goes.
+  await page.getByTestId('demo').click();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(note).toBeHidden();
+  await context.close();
+});

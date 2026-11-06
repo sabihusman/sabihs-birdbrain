@@ -846,3 +846,4 @@ html.wn-open, html.wn-open body { overflow: hidden; }
 .wn-item h3 { margin: var(--space-2) 0 2px; font-size: var(--text-md); }
 .wn-item p { margin: 0 0 var(--space-1); }
 @media (prefers-reduced-motion: reduce) { .wn-track { scroll-behavior: auto; } }
+.demo-note { margin: calc(-1 * var(--space-1)) 0 0; text-align: center; }
