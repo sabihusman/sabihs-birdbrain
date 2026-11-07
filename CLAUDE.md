@@ -226,7 +226,9 @@ See DECISIONS.md for the full list. The ones that bite:
 - Playwright here runs Chromium only; iOS behaviour must be tested on a device.
 - Chrome on iPhone (seen on Sabih's phone, Oct 28) lets the fixed bottom tab bar scroll with the page, so it
   floats mid-screen; Safari is fine. A Chrome iOS bug (reported in WebKit bug 297779, comment 41, iOS 26.6.1 /
-  Chrome 154), not the app's CSS. Sabih chose to leave it (Nov 1): no Chrome-only workaround.
+  Chrome 154), not the app's CSS. Left alone on Nov 1; on Nov 7 Chrome also scrolled past the page into blank space,
+  so the document no longer scrolls at all: `.app-scroll` (between header and tab bar, `src/ui/app.ts`) does, in every
+  browser (DECISIONS.md #118). Overflow checks in e2e must measure `.app-scroll` too.
 - `el()` sets styles through `style.cssText` (CSSOM), never the `style`
   attribute, because the CSP has no `'unsafe-inline'`. Keep it that way.
 - Changing the API domain later: `VITE_API_BASE_URL` (or the default in
