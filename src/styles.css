@@ -520,7 +520,7 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 /* User management (DECISIONS.md #61): long addresses wrap at 320 px; the confirmation sits inside the row. */
 .user-item { display: flex; flex-direction: column; gap: 4px; }
 .user-email, .user-name { overflow-wrap: anywhere; min-width: 0; }
-.confirm-panel { padding: 10px; border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid var(--border); }
+.confirm-panel { padding: 10px; border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid var(--border); overflow-wrap: anywhere; }
 
 /* Map tab: map, Birds | Places switch, count line and cards (DECISIONS.md #72). */
 .map.map-tab { height: 45vh; min-height: 260px; max-height: 420px; }

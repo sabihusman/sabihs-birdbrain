@@ -3172,3 +3172,5 @@ Each finding was checked against the code first.
 - **Tests:** a new e2e test checks the document cannot scroll, the header and tab bar stay at the screen edges, and the
   last item ends just above the tab bar on Listen, Species, Settings and Recordings. Every "nothing wider than the
   screen" check now also measures `.app-scroll`, which is where content would overflow now.
+- **Found by the stricter check:** User management's delete confirmation let a long email run ~55 px past a 320 px
+  screen; the confirmation panel now wraps long words.

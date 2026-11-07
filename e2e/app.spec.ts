@@ -1645,7 +1645,7 @@ test('a browser without WebAssembly is told which browsers work, and no model by
   await context.close();
 });
 
-test('maps stay under the sticky header and the tab bar while scrolling (DECISIONS.md #74)', async ({ browser }) => {
+test('maps stay under the header and the tab bar while scrolling (DECISIONS.md #74, #118)', async ({ browser }) => {
   // A short screen so the map reaches under the tab bar at first, and under the header after a scroll.
   const context = await browser.newContext({ viewport: { width: 390, height: 360 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
@@ -1666,9 +1666,9 @@ test('maps stay under the sticky header and the tab bar while scrolling (DECISIO
   const mapBox = (await map.boundingBox())!;
   expect(mapBox.y + mapBox.height, 'the map reaches under the tab bar on this short screen').toBeGreaterThan(tabBox.y);
   expect(await topmost(195, tabBox.y + tabBox.height / 2)).toBe('tabs');
-  // Scroll so the map passes under the sticky header.
+  // Scroll so the map passes under the header (the in-app scroll area scrolls, not the page: DECISIONS.md #118).
   const headerBox = (await page.locator('.app-header').boundingBox())!;
-  await page.evaluate((dy) => window.scrollBy(0, dy), mapBox.y - headerBox.y);
+  await page.evaluate((dy) => document.querySelector('.app-scroll')!.scrollBy(0, dy), mapBox.y - headerBox.y);
   await page.waitForTimeout(200);
   const mapAfter = (await map.boundingBox())!;
   expect(mapAfter.y, 'the map now starts under the header').toBeLessThan(headerBox.y + headerBox.height);
