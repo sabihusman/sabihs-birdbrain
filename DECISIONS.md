@@ -3158,3 +3158,17 @@ Each finding was checked against the code first.
   are the identifying actions.
 - **Kept:** `public/samples/birdnet-sample.wav` stays, only as the e2e tests' fake microphone (Playwright plays it on a
   loop for every test now); it is not precached and nothing in the app links to it.
+
+## 118. The page scrolls inside the app, not in the browser
+
+- **Why (Sabih, Nov 7, Chrome on iPhone; not in Safari):** Chrome let the page scroll past its end into blank space and
+  drew the "fixed" tab bar mid-screen (the bug first seen Oct 28, left alone on Nov 1 because the only fixes were
+  Chrome-only). Sabih: "just go ahead and build it, if I don't like it we can reverse it."
+- **Now:** the document is exactly the screen (`body` 100dvh, overflow hidden). The header sits at the top, the tab
+  bar at the bottom, and only `.app-scroll` between them scrolls (`src/ui/app.ts`; new routes reset its scroll, as
+  `window.scrollTo` did). Same in every browser, so no browser sniffing.
+- **Trade-offs:** in Safari the address bar no longer shrinks while scrolling, and tapping the status bar no longer
+  jumps to the top. Reversing is one revert of this change.
+- **Tests:** a new e2e test checks the document cannot scroll, the header and tab bar stay at the screen edges, and the
+  last item ends just above the tab bar on Listen, Species, Settings and Recordings. Every "nothing wider than the
+  screen" check now also measures `.app-scroll`, which is where content would overflow now.
