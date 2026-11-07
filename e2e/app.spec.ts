@@ -87,7 +87,7 @@ test('first visit: the welcome layer shows before any download, the tabs work be
   // The one filled button is Start identifying; the welcome fits the phone width.
   const box = await page.getByTestId('welcome-start').boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(44);
-  const scroll = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+  const scroll = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
   expect(scroll.sw).toBeLessThanOrEqual(scroll.iw);
   // The tabs keep working behind the layer, and the species list loads without the model.
   await page.getByRole('link', { name: 'Species' }).click();
@@ -1003,7 +1003,7 @@ test('no horizontal scrolling and the primary control visible at 320, 375, 390 a
     // First the welcome layer (a first visit), then the usual Listen screen: neither may overflow.
     await page.goto('./#/listen');
     await expect(page.getByTestId('welcome')).toBeVisible();
-    const w = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    const w = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
     expect(w.sw, `welcome at ${width}px`).toBeLessThanOrEqual(w.iw);
     for (const id of ['welcome-start', 'welcome-signin', 'welcome-signup']) {
       const b = await page.getByTestId(id).boundingBox();
@@ -1016,7 +1016,7 @@ test('no horizontal scrolling and the primary control visible at 320, 375, 390 a
     for (const route of ['#/listen', '#/species', '#/settings']) {
       await page.goto(`./${route}`);
       await page.waitForTimeout(300);
-      const scroll = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+      const scroll = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
       expect(scroll.sw, `${route} at ${width}px`).toBeLessThanOrEqual(scroll.iw);
     }
     await page.goto('./#/listen');
@@ -1224,7 +1224,7 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   await expect(page.getByTestId('delete-screen')).toHaveCount(0);
   // No horizontal scrolling with every section open either.
   const noScroll = async (label: string) => {
-    const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    const m = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
     expect(m.sw, label).toBeLessThanOrEqual(m.iw);
   };
   await noScroll('my account at 320px');
@@ -1421,7 +1421,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     await page.getByTestId('recent-card').first().click();
     await expect(page.getByTestId('recent-card').first()).toHaveAttribute('aria-expanded', 'true');
     // Nothing on the screen overflows the phone width.
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const overflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });
 }
@@ -1462,7 +1462,7 @@ test('User management: admin-only button in Settings, confirmations, plain resul
     expect(box!.height, `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
   }
   const noScroll = async (label: string) => {
-    const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    const m = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
     expect(m.sw, label).toBeLessThanOrEqual(m.iw);
   };
   await noScroll('user list at 320px, dark');
@@ -1536,7 +1536,7 @@ test('Listen credits BirdNET, inside the viewport and clear of the dock and tab 
         const n = document.querySelector<HTMLElement>(sel);
         return n && n.offsetParent !== null && getComputedStyle(n).display !== 'none' ? n.getBoundingClientRect().top : Number.POSITIVE_INFINITY;
       };
-      return { tabs: top('.tabs'), dock: top('[data-testid="dock"]'), innerHeight: window.innerHeight, scrollWidth: document.documentElement.scrollWidth };
+      return { tabs: top('.tabs'), dock: top('[data-testid="dock"]'), innerHeight: window.innerHeight, scrollWidth: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) };
     });
     expect(box.x, `${layout} left edge`).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width, `${layout} right edge`).toBeLessThanOrEqual(320);
@@ -1635,7 +1635,7 @@ test('a browser without WebAssembly is told which browsers work, and no model by
   await expect(listen).toHaveAttribute('data-status', 'unsupported');
   for (const theme of ['dark', 'light']) {
     await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) <= window.innerWidth)).toBe(true);
     const box = await block.boundingBox();
     expect(box, theme).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -1645,7 +1645,7 @@ test('a browser without WebAssembly is told which browsers work, and no model by
   await context.close();
 });
 
-test('maps stay under the sticky header and the tab bar while scrolling (DECISIONS.md #74)', async ({ browser }) => {
+test('maps stay under the header and the tab bar while scrolling (DECISIONS.md #74, #118)', async ({ browser }) => {
   // A short screen so the map reaches under the tab bar at first, and under the header after a scroll.
   const context = await browser.newContext({ viewport: { width: 390, height: 360 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
@@ -1666,9 +1666,9 @@ test('maps stay under the sticky header and the tab bar while scrolling (DECISIO
   const mapBox = (await map.boundingBox())!;
   expect(mapBox.y + mapBox.height, 'the map reaches under the tab bar on this short screen').toBeGreaterThan(tabBox.y);
   expect(await topmost(195, tabBox.y + tabBox.height / 2)).toBe('tabs');
-  // Scroll so the map passes under the sticky header.
+  // Scroll so the map passes under the header (the in-app scroll area scrolls, not the page: DECISIONS.md #118).
   const headerBox = (await page.locator('.app-header').boundingBox())!;
-  await page.evaluate((dy) => window.scrollBy(0, dy), mapBox.y - headerBox.y);
+  await page.evaluate((dy) => document.querySelector('.app-scroll')!.scrollBy(0, dy), mapBox.y - headerBox.y);
   await page.waitForTimeout(200);
   const mapAfter = (await map.boundingBox())!;
   expect(mapAfter.y, 'the map now starts under the header').toBeLessThan(headerBox.y + headerBox.height);
@@ -2125,7 +2125,7 @@ test('Focus: the big Start page once per session and day; Stop/Record and Start 
   await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
   for (const theme of ['dark', 'light']) {
     if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) !== theme) await page.getByTestId('theme-toggle').click();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `${theme} at 320 px`).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0)), `${theme} at 320 px`).toBeLessThanOrEqual(320);
     if (shots) await page.screenshot({ path: `${shots}/focus-320-${theme}.png` });
   }
   await page.getByTestId('stop').click();
@@ -2268,7 +2268,7 @@ test('the header title never sits under the status pill, at 320 and 375 px, with
         const pill = document.querySelector('[data-testid="model-status"]') as HTMLElement;
         (pill.querySelector('.model-pill-text') ?? pill).textContent = t;
         const h1 = document.querySelector('.app-header h1') as HTMLElement;
-        return { titleRight: h1.getBoundingClientRect().right, pillLeft: pill.getBoundingClientRect().left, titleFits: h1.scrollWidth <= h1.clientWidth + 1, sw: document.documentElement.scrollWidth };
+        return { titleRight: h1.getBoundingClientRect().right, pillLeft: pill.getBoundingClientRect().left, titleFits: h1.scrollWidth <= h1.clientWidth + 1, sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) };
       }, text);
       expect(m.titleRight, `${text} at ${width}px`).toBeLessThanOrEqual(m.pillLeft + 0.5);
       expect(m.titleFits, `title fits at ${width}px with "${text}"`).toBe(true);
@@ -2405,7 +2405,7 @@ test('extra text folds under one line: tapping the line opens it and never flips
     await expect(about.getByText(/Works offline/)).toBeHidden();
     await about.locator('summary').click();
     await expect(about.getByText(/Works offline/)).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     // Settings: the long hints are closed; status lines stay in view.
     await page.goto('./#/settings');
     await expect(page.getByText('Lower: more birds, more mistakes')).toBeVisible();
@@ -2420,7 +2420,7 @@ test('extra text folds under one line: tapping the line opens it and never flips
     const heights = await page.locator('.fold-hint > summary').evaluateAll((els) => els.filter((e) => (e as HTMLElement).offsetParent).map((e) => e.getBoundingClientRect().height));
     expect(heights.length).toBeGreaterThan(5);
     for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   }
   await context.close();
 });
@@ -2470,7 +2470,7 @@ test('Listen layout bubble: bottom right, opens upward, switches at once, never 
     await bubble.click();
     await page.getByTestId('layout-bubble-consolidated').click();
     await expect(page.locator('main .listen')).toHaveAttribute('data-layout', 'consolidated');
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   }
   // Settings shows the choice made here.
   await page.goto('./#/settings');
@@ -2523,7 +2523,7 @@ test('a one-line location banner while listening, in each layout, grey with no l
         return id === 'listen-panel' ? anchor.contains(b) : !!(b.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING) && b.parentElement === anchor.parentElement;
       }, where);
       expect(placed, `banner placed for ${layout}`).toBe(true);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
       const stop = page.getByTestId(layout === 'dock' ? 'dock-stop' : 'stop');
       await stop.click();
       await expect(banner).toBeHidden();
@@ -2617,7 +2617,7 @@ test('Species with no location: one banner, Use my location, Pick a place by nam
   await expect(showAll.getByText('Off: only birds found near you at any time of year.')).toBeVisible();
   await expect(page.getByTestId('show-all-species')).not.toBeChecked();
   expect(searches).toHaveLength(1);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   // Allowing location and tapping Use my location switches back to the phone's position.
   await page.getByTestId('place-change').click();
   await page.getByText('Cancel').click();
@@ -2733,7 +2733,7 @@ test('Listen: one plain status line with the town, in every layout; the dock tip
     expect(reverse.length).toBeGreaterThanOrEqual(1);
     expect(reverse[0]).toContain('lat=41.670&lon=-93.700');
     await expect(page.getByText('86H8M7PV+QW')).toHaveCount(0);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await context.close();
   }
 });
@@ -2830,7 +2830,7 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   // NEAR YOU with location off says so instead of a list.
   await page.getByTestId('ba-tab-near').click();
   await expect(page.getByTestId('ba-libnote')).toContainText('location filter off');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   await page.reload();
   await expect(amp).toBeVisible();
   expect(await order()).toEqual(['library', 'player', 'confidence']);
@@ -2876,7 +2876,7 @@ test('What’s new: a brand-new visitor gets the strip right after the welcome, 
   await expect(page.getByTestId('whats-new-signin')).toHaveText('Sign in');
   await expect(cards).toContainText('Sabih approves new accounts');
   await expect(page.getByTestId('whats-new-mute')).toHaveText('Don’t show me this again');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   await page.getByTestId('whats-new-cards-close').click();
   await expect(cards).toHaveCount(0);
   // Once: not again on the next visit.
@@ -3017,3 +3017,30 @@ test('no sample clip anywhere: not on Listen in any layout, not on BirdAmp’s p
   }
   await context.close();
 });
+
+test('the page itself never scrolls; the area between the header and the tab bar does, and ends at its content (DECISIONS.md #118)', async ({ page }) => {
+  for (const route of ['./#/listen', './#/species', './#/settings', './#/recordings']) {
+    await page.goto(route);
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(() => {
+      const doc = document.documentElement;
+      const sc = document.querySelector('.app-scroll') as HTMLElement;
+      const tabs = document.querySelector('.tabs')!.getBoundingClientRect();
+      const header = document.querySelector('.app-header')!.getBoundingClientRect();
+      window.scrollTo(0, 10_000);
+      const docScrolled = window.scrollY;
+      sc.scrollTop = 1e6;
+      const last = document.querySelector('main.view')!.lastElementChild!.getBoundingClientRect();
+      return { scrolls: sc.scrollHeight > sc.clientHeight + 1, docH: doc.scrollHeight, inner: innerHeight, docScrolled, headerTop: header.top, tabsBottom: tabs.bottom, scTop: sc.getBoundingClientRect().top, headerBottom: header.bottom, lastBottom: last.bottom, tabsTop: tabs.top };
+    });
+    expect(m.docScrolled, route).toBe(0); // the document cannot scroll
+    expect(m.docH, route).toBeLessThanOrEqual(m.inner + 1);
+    expect(m.headerTop, route).toBe(0);
+    expect(Math.round(m.tabsBottom), route).toBe(m.inner);
+    expect(Math.round(m.scTop), route).toBe(Math.round(m.headerBottom));
+    // Scrolled to the end, the last thing on the page sits above the tab bar, not under it or past blank space.
+    expect(m.lastBottom, route).toBeLessThanOrEqual(m.tabsTop + 1);
+    if (m.scrolls) expect(m.tabsTop - m.lastBottom, route).toBeLessThan(60);
+  }
+});
+

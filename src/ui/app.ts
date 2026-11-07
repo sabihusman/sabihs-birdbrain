@@ -134,7 +134,10 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     tabLinks.set(t.route.name, a);
     tabs.appendChild(a);
   }
-  root.replaceChildren(el('div', { class: 'app' }, header, notices, main, tabs));
+  // The page itself never scrolls: this area between the header and the tab bar does (DECISIONS.md #118). Chrome on
+  // iPhone otherwise scrolled past the end of the page into blank space and drew the "fixed" tab bar mid-screen.
+  const scroller = el('div', { class: 'app-scroll', 'data-testid': 'app-scroll' }, notices, main);
+  root.replaceChildren(el('div', { class: 'app' }, header, scroller, tabs));
 
   const notify = (n: Notice) => {
     const node = el('div', { class: `notice ${n.kind}`, role: n.kind === 'error' ? 'alert' : 'status' }, n.text);
@@ -233,7 +236,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
         break;
     }
     main.appendChild(current.el);
-    window.scrollTo(0, 0);
+    scroller.scrollTop = 0;
     if (route.name === 'settings' && route.section === 'account') {
       // From the welcome layer's "Sign in / Create account": land on the Account card, for the eye and for the focus.
       const account = main.querySelector<HTMLElement>('[data-testid="account"]');
