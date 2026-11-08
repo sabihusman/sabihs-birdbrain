@@ -3174,3 +3174,13 @@ Each finding was checked against the code first.
   screen" check now also measures `.app-scroll`, which is where content would overflow now.
 - **Found by the stricter check:** User management's delete confirmation let a long email run ~55 px past a 320 px
   screen; the confirmation panel now wraps long words.
+
+## 119. BirdAmp gets a ● REC key where Sample was
+
+- **Why (Sabih, Nov 8):** the Sample key went with the sample clip (#117); of the options for the free slot (keep five
+  wider keys, ● REC, ⏏ OPEN) Sabih chose ● REC. It fills a real gap: the other layouts have "● Record" next to Stop,
+  BirdAmp had no way to save what the mic hears.
+- **Now:** the transport is Prev / Listen / Pause / Stop / Next / ● REC, then EQ / PL. REC works only while listening
+  (it is greyed out otherwise); a tap starts the same recording as the panel's "● Record", the key turns dark red with a
+  pulsing dot and shows the recording's time instead of "Rec", and a second tap saves it to Recordings with the usual
+  "Saved …" note. Pause and Stop save a recording in progress, as they always did. Reduced motion: no pulse.

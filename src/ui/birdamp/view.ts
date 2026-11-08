@@ -40,6 +40,8 @@ export interface BirdAmpParts {
   start: () => void;
   pause: () => void;
   stop: () => void;
+  /** Start or stop saving what the mic hears, as the panel's ● Record does. */
+  record: () => void;
 }
 
 export interface BirdAmpView {
@@ -102,9 +104,11 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   const pauseBtn = tKey('❚❚', 'Pause', 'Pause', 'ba-pause');
   const stopBtn = tKey('■', 'Stop', 'Stop', 'ba-stop');
   const nextBtn = tKey('⏭', 'Next', 'Next bird', 'ba-next');
+  // Where Winamp's ⏏ was: ● REC saves what the mic hears to Recordings (Sabih's choice, DECISIONS.md #119).
+  const recBtn = tKey('●', 'Rec', 'Record', 'ba-rec');
   const eqBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Confidence window', 'aria-pressed': 'true', 'data-testid': 'ba-eq' }, 'EQ');
   const plBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Playlist window', 'aria-pressed': 'true', 'data-testid': 'ba-pl' }, 'PL');
-  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, el('span', { class: 'ba-eqpl' }, eqBtn, plBtn));
+  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, recBtn, el('span', { class: 'ba-eqpl' }, eqBtn, plBtn));
   // The area filter is shown, not set, here: it is edited in Settings.
   const area = el('a', { class: 'ba-area', href: '#/settings', 'data-testid': 'ba-area' }, '');
   const playerBody = el('div', { class: 'ba-body' }, el('div', { class: 'ba-main' }, lcdLeft, lcdRight), specSlot, transport, area);
@@ -276,6 +280,7 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   for (const b of [listenBtn, shadeListen]) b.addEventListener('click', () => p.start());
   for (const b of [pauseBtn, shadePause]) b.addEventListener('click', () => p.pause());
   for (const b of [stopBtn, shadeStop]) b.addEventListener('click', () => p.stop());
+  recBtn.addEventListener('click', () => p.record());
 
   // ---- playlist data --------------------------------------------------------------------------
   let sightings: SightingRecord[] | null = null;
@@ -407,6 +412,13 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     pauseBtn.disabled = shadePause.disabled = !live;
     stopBtn.disabled = shadeStop.disabled = !(live || paused || st === 'paused');
     prevBtn.disabled = nextBtn.disabled = groups.length < 2;
+    // Recording needs the mic on; Pause and Stop save a recording in progress, as on the panel.
+    const rec = controller.getRecordingState();
+    recBtn.disabled = !live && !rec.recording;
+    recBtn.classList.toggle('recording', rec.recording);
+    recBtn.setAttribute('aria-label', rec.recording ? `Stop recording (${lcdClock(rec.seconds)})` : 'Record');
+    recBtn.setAttribute('aria-pressed', String(rec.recording));
+    (recBtn.lastElementChild as HTMLElement).textContent = rec.recording ? lcdClock(rec.seconds) : 'Rec';
     listenBtn.classList.toggle('lit', live);
     pauseBtn.classList.toggle('lit', paused);
     const areaWords = p.areaText();
