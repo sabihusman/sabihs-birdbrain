@@ -2770,6 +2770,8 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('ba-clock')).toHaveText('00:00');
   await expect(page.getByTestId('ba-pause')).toBeDisabled();
   await expect(page.getByTestId('ba-area')).toContainText('No location');
+  // ● REC needs the mic on (DECISIONS.md #119).
+  await expect(page.getByTestId('ba-rec')).toBeDisabled();
   // Listen: the clock runs, the marquee and the Library get the bird.
   await page.getByTestId('ba-listen').click();
   await expect(page.getByTestId('model-status')).toHaveText('Live');
@@ -2785,6 +2787,16 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('ba-info')).toContainText('Mono');
   await expect(page.getByTestId('ba-win-player').locator('.ba-ridges')).toHaveCount(2);
   await expect(page.getByTestId('ba-marquee')).toContainText(/ — Acanthis .+ — \d+% — (Very likely|Likely|Possible)/);
+  // ● REC records what the mic hears, its key shows the time, and a second tap saves it to Recordings.
+  const rec = page.getByTestId('ba-rec');
+  await expect(rec).toBeEnabled();
+  await rec.click();
+  await expect(rec).toHaveAttribute('aria-pressed', 'true');
+  await expect(rec).toHaveClass(/recording/);
+  await expect(rec).toHaveAttribute('aria-label', /^Stop recording \(00:0[1-9]\)$/, { timeout: 10_000 });
+  await rec.click();
+  await expect(page.getByText(/^Saved “.+” \(\d+:\d{2}\)\. Find it under Recordings\.$/)).toBeVisible();
+  await expect(rec).toHaveAttribute('aria-pressed', 'false');
   // Pause: the mic is released, the clock holds, the birds stay.
   await page.getByTestId('ba-pause').click();
   await expect(page.getByTestId('model-status')).toHaveText('Paused');

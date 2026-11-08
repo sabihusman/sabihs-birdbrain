@@ -294,6 +294,7 @@ export function listenView(ctx: ViewContext): View {
       start: () => void start(),
       pause: () => void controller.pauseListening().then(renderState),
       stop: () => void stop(),
+      record: () => void toggleRecording(),
     }));
   const applyLayout = (next: ListenLayout) => {
     layout = next;
@@ -670,13 +671,15 @@ export function listenView(ctx: ViewContext): View {
   stopBtn.addEventListener('click', () => void stop());
   dockStopBtn.addEventListener('click', () => void stop());
   resumeBtn.addEventListener('click', () => void controller.resumeListening().then(renderState));
-  recordBtn.addEventListener('click', async () => {
+  /** ● Record on the panel and BirdAmp's ● REC key (DECISIONS.md #119): the same recording, saved to Recordings. */
+  const toggleRecording = async () => {
     if (controller.getRecordingState().recording) {
       const rec = await controller.stopRecording();
       if (rec) ctx.notify({ kind: 'info', text: `Saved “${rec.name}” (${fmtDuration(rec.durationSec)}). Find it under Recordings.` });
     } else controller.startRecording();
     renderState();
-  });
+  };
+  recordBtn.addEventListener('click', () => void toggleRecording());
   notUsualLine.addEventListener('click', () => {
     showNotUsual = !showNotUsual;
     renderNotUsual();

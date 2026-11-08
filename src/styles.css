@@ -756,6 +756,12 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .ba-key:disabled { opacity: 0.45; }
 .ba-key.lit .ba-key-icon { color: var(--ba-green); }
 .ba-key[data-testid="ba-pause"].lit .ba-key-icon { color: var(--ba-amber); }
+/* ● REC (DECISIONS.md #119): a dim red dot, bright and pulsing while recording; the word becomes the recording's time. */
+.ba-key[data-testid="ba-rec"] .ba-key-icon { color: #b8473a; }
+.ba-key[data-testid="ba-rec"].recording { background: linear-gradient(#5a2320, #3a1614); }
+.ba-key[data-testid="ba-rec"].recording .ba-key-icon { color: #ff4a3a; animation: ba-pulse 1.2s ease-in-out infinite; }
+.ba-key[data-testid="ba-rec"].recording .ba-key-word { color: #ffd2cc; }
+@keyframes ba-pulse { 50% { opacity: 0.35; } }
 .ba-key-icon { font-size: 0.95rem; line-height: 1; }
 .ba-key-word { font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.04em; color: #aab1be; }
 .ba-eqpl { display: flex; gap: 3px; margin-left: 3px; }
@@ -801,6 +807,7 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .ba-marquee.scroll .ba-marquee-text, .ba-body { animation: none; }
   .ba-meter i { transition: none; }
+  .ba-key[data-testid="ba-rec"].recording .ba-key-icon { animation: none; }
 }
 /* Members-only layout tiles and bubble rows hide with the hidden attribute (their display rules would win otherwise). */
 .layout-tile[hidden], .layout-bubble-row[hidden] { display: none; }
