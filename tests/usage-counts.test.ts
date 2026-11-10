@@ -30,12 +30,13 @@ const ENV: PageEnv = { origin: 'https://sabihs-birdbrain.vercel.app', host: 'sab
 const CONFIG = { key: 'phc_test', host: 'https://us.i.posthog.com' };
 const NOW = new Date('2026-11-10T18:00:00Z');
 
-function counter(o: { enabled?: boolean; blocked?: boolean; configured?: boolean } = {}) {
+function counter(o: { enabled?: boolean; blocked?: boolean; configured?: boolean; automated?: boolean } = {}) {
   const sent: Array<{ url: string; body: Record<string, unknown> }> = [];
   const usage = new UsageCounts(o.configured === false ? null : CONFIG, {
     enabled: () => o.enabled ?? true,
     audience: () => 'member',
     browserBlocked: () => o.blocked ?? false,
+    automated: () => o.automated ?? false,
     env: () => ENV,
     now: () => NOW,
     send: (url, body) => sent.push({ url, body: JSON.parse(body) as Record<string, unknown> }),
@@ -51,8 +52,8 @@ describe('usage counts: when anything is sent', () => {
     expect(usageConfig({ VITE_POSTHOG_KEY: 'phc_x', VITE_POSTHOG_HOST: 'https://eu.i.posthog.com/' })).toEqual({ key: 'phc_x', host: 'https://eu.i.posthog.com' });
   });
 
-  it('sends nothing without a key, with the switch off, or when the browser asks not to be tracked', () => {
-    for (const o of [{ configured: false }, { enabled: false }, { blocked: true }]) {
+  it('sends nothing without a key, with the switch off, when the browser asks not to be tracked, or under automation', () => {
+    for (const o of [{ configured: false }, { enabled: false }, { blocked: true }, { automated: true }]) {
       const { usage, sent } = counter(o);
       usage.pageview('listen');
       usage.track({ event: 'listen_started', layout: 'focus' });
@@ -150,6 +151,25 @@ describe('usage counts: never sent', () => {
     expect(usageHint({ configured: false, blockedByBrowser: false })).toMatch(/nothing is sent/);
     expect(usageHint({ configured: true, blockedByBrowser: true })).toMatch(/browser asks websites not to track/);
     expect(usageHint({ configured: true, blockedByBrowser: false })).toBe('Helps Sabih see what gets used and what breaks.');
+  });
+});
+
+describe('usage counts: automation', () => {
+  it('reads navigator.webdriver when no override is given', () => {
+    const nav = globalThis.navigator as Navigator & { webdriver?: boolean };
+    const had = Object.getOwnPropertyDescriptor(nav, 'webdriver');
+    const make = () => new UsageCounts(CONFIG, { enabled: () => true, audience: () => 'member', browserBlocked: () => false, env: () => ENV, send: () => undefined });
+    try {
+      Object.defineProperty(nav, 'webdriver', { configurable: true, get: () => true });
+      expect(make().automated).toBe(true);
+      expect(make().active).toBe(false);
+      Object.defineProperty(nav, 'webdriver', { configurable: true, get: () => false });
+      expect(make().automated).toBe(false);
+      expect(make().active).toBe(true);
+    } finally {
+      if (had) Object.defineProperty(nav, 'webdriver', had);
+      else delete (nav as unknown as Record<string, unknown>).webdriver;
+    }
   });
 });
 

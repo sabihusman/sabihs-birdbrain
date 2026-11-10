@@ -3062,6 +3062,8 @@ test('usage counts: anonymous, route names only, nothing kept on the phone, off 
   const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block', permissions: ['microphone'] });
   const page = await context.newPage();
   await page.addInitScript(returningVisitor);
+  // Playwright sets navigator.webdriver, and automated browsers are not counted (DECISIONS.md #120); this test plays a person.
+  await page.addInitScript(() => Object.defineProperty(navigator, 'webdriver', { configurable: true, get: () => false }));
   const sent: Array<{ distinct_id: string; event: string; properties: Record<string, unknown> }> = [];
   await page.route('**/i/v0/e/', async (route) => {
     sent.push(JSON.parse(route.request().postData() ?? '{}'));
@@ -3216,4 +3218,22 @@ test('Admin › Usage is admin-only on the page too', async ({ page }) => {
   await page.goto('./#/admin/usage');
   await expect(page.getByTestId('admin-only')).toBeVisible();
   expect(asked).toBe(false);
+});
+
+test('usage counts: a browser run by automation sends nothing (DECISIONS.md #120)', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  let sent = 0;
+  await page.route('**/i/v0/e/', (route) => {
+    sent++;
+    return route.fulfill({ status: 200, body: '{}' });
+  });
+  await page.goto('./#/settings');
+  await expect(page.getByTestId('privacy')).toBeVisible();
+  expect(await page.evaluate(() => navigator.webdriver)).toBe(true);
+  await page.goto('./#/map');
+  await page.waitForTimeout(500);
+  expect(sent).toBe(0);
+  await context.close();
 });
