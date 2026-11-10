@@ -58,7 +58,8 @@ Key modules:
 - Usage counts (DECISIONS.md #120): `src/app/usage-counts.ts` (own ~4 KB PostHog cookieless sender, fixed `SCHEMA`,
   route names only, `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST`), `src/app/usage-wiring.ts` (controller events → counts),
   `src/ui/components/privacy-card.ts` (Settings › Privacy switch and "Never sent: …"). Never add a field that could
-  carry audio, a position, a bird name, an email or a question.
+  carry audio, a position, a bird name, an email or a question. Admin › Usage (`#/admin/usage`,
+  `src/ui/views/admin-usage.ts`, `src/ui/usage-labels.ts`, DECISIONS.md #121) reads them back through the server.
 - `src/app/settings.ts` — localStorage settings; `src/app/location.ts` — GPS /
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.
@@ -114,7 +115,7 @@ Back end (`server/`, TypeScript, Hono + Better Auth + `node:sqlite`):
   region + position + question → 7-day reuse), `src/pricing.ts` (list prices
   and thinking level per model, verified dates in the comment) and
   `src/ask-cost.ts` (per-day token/cost totals, `GET /v1/admin/ask-costs`;
-  DECISIONS #48); `src/users.ts` admin SQL; `src/whats-new.ts` the What's new seen ids and pop-up switch per account (#112); `src/account-deletion.ts` the
+  DECISIONS #48); `src/users.ts` admin SQL; `src/whats-new.ts` the What's new seen ids and pop-up switch per account (#112); `src/usage-stats.ts` Admin › Usage from PostHog's query API (`POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID`, `POSTHOG_APP_HOST`; fixed HogQL, 15 min cache, #121); `src/account-deletion.ts` the
   one-transaction account wipe (DECISIONS.md #50); `src/backup.ts`
   `VACUUM INTO` backups.
 - Migrations: `migrateAuth(db, config)` must run **before** `createAuth` or

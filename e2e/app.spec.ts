@@ -3108,3 +3108,112 @@ test('usage counts: anonymous, route names only, nothing kept on the phone, off 
   expect(sent.length).toBe(before);
   await context.close();
 });
+
+function usageFixture(range: string) {
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(Date.UTC(2026, 9, 12 + i));
+    return { day: d.toISOString().slice(0, 10), visitors: 20 + (i % 7) * 3, listens: 3 + (i % 5) * 3 };
+  });
+  return {
+    configured: true,
+    range,
+    updatedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
+    stale: false,
+    tiles: { visitorsPerDay: range === 'today' ? 50 : 41, listens: range === 'today' ? 18 : 84, foundShare: 0.62, medianListenSec: 250 },
+    days,
+    screens: [{ value: 'listen', count: 212 }, { value: 'recordings', count: 40 }, { value: 'recording', count: 21 }, { value: 'species-detail', count: 58 }, { value: 'map', count: 37 }, { value: 'settings', count: 29 }, { value: 'help', count: 11 }],
+    layouts: [{ value: 'focus', count: 38 }, { value: 'consolidated', count: 27 }, { value: 'dock', count: 12 }, { value: 'birdamp', count: 7 }],
+    backends: [{ value: 'webgl', count: 71 }, { value: 'wasm', count: 12 }, { value: 'cpu', count: 1 }],
+    devices: [{ value: 'iOS|Safari|Mobile', count: 96 }, { value: 'Android|Chrome|Mobile', count: 44 }, { value: 'Windows|Edge|Desktop', count: 20 }, { value: 'macOS|Safari|Desktop', count: 16 }],
+    timeZones: [{ value: 'America/Chicago', count: 88 }, { value: 'America/New_York', count: 61 }, { value: 'America/Toronto', count: 19 }, { value: 'Europe/Zurich', count: 4 }],
+    micProblems: [{ value: 'denied', count: 6 }],
+    modelFailures: { unsupported: 2, other: 3 },
+    load: { firstDownloadSec: 9.8, cachedSec: 1.6 },
+    failed: [],
+  };
+}
+
+test('Admin › Usage: reached from User management, numbers from the server, Today / 7 / 30 days, fits 320 px in both themes and three across at 1280 px (DECISIONS.md #121)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 740 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e-admin', expiresAt: null, user: { id: 'a1', email: 'admin@example.com', name: 'Sabih', status: 'approved', role: 'admin' } }));
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+  });
+  const ranges: string[] = [];
+  let notSetUp = false;
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/admin\/users$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ users: [] }) }));
+  await page.route(/\/v1\/admin\/usage\?/, (route) => {
+    const range = new URL(route.request().url()).searchParams.get('range') ?? '';
+    ranges.push(range);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(notSetUp ? { configured: false } : usageFixture(range)) });
+  });
+  // Nothing on this page talks to PostHog itself.
+  const posthog: string[] = [];
+  page.on('request', (r) => {
+    if (/posthog/.test(r.url())) posthog.push(r.url());
+  });
+
+  await page.goto('./#/admin/users');
+  await page.getByTestId('admin-usage-link').click();
+  await expect(page).toHaveURL(/#\/admin\/usage$/);
+  await expect(page.getByRole('heading', { name: 'Usage' })).toBeVisible();
+  await expect(page.getByTestId('usage-status')).toContainText('Updated 12 min ago (every 15 min).');
+  await expect(page.getByTestId('usage-visitors')).toContainText('41');
+  await expect(page.getByTestId('usage-listens')).toContainText('84');
+  await expect(page.getByTestId('usage-found')).toContainText('62%');
+  await expect(page.getByTestId('usage-median')).toContainText('4m 10s');
+  // Routes grouped like the tabs: recordings + recording = 61.
+  await expect(page.getByTestId('usage-screens')).toContainText('Recordings');
+  await expect(page.getByTestId('usage-screens')).toContainText('61');
+  await expect(page.getByTestId('usage-devices')).toContainText('iPhone Safari');
+  await expect(page.getByTestId('usage-devices')).toContainText('Desktop');
+  await expect(page.getByTestId('usage-zones')).toContainText('US Central');
+  await expect(page.getByTestId('usage-zones')).toContainText('Canada Eastern');
+  await expect(page.getByTestId('usage-model')).toContainText('9.8 s');
+  await expect(page.getByTestId('usage-errors')).toContainText('Microphone blocked');
+  await expect(page.locator('[data-testid="usage-days"] svg polyline')).toHaveCount(1);
+  expect(ranges).toEqual(['7d']);
+
+  await page.getByRole('button', { name: 'Today' }).click();
+  await expect(page.getByTestId('usage-visitors')).toContainText('visitors today');
+  await expect(page.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true');
+  expect(ranges).toEqual(['7d', 'today']);
+  for (const b of await page.locator('.usage-chip').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+  const noScroll = async (label: string) => {
+    const m = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
+    expect(m.sw, label).toBeLessThanOrEqual(m.iw);
+  };
+  await noScroll('320 px');
+  await page.getByTestId('theme-toggle').click();
+  await noScroll('320 px, other theme');
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const xs = await page.evaluate(() => ['usage-screens', 'usage-layouts', 'usage-model', 'usage-devices'].map((id) => Math.round(document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect().left)));
+  // Listens per day spans two columns beside Screens; then three cards across.
+  expect(new Set(xs.slice(1)).size).toBe(3);
+  await noScroll('1280 px');
+
+  notSetUp = true;
+  await page.reload();
+  await expect(page.getByTestId('usage-not-set-up')).toContainText('POSTHOG_PERSONAL_API_KEY');
+  expect(posthog).toEqual([]);
+  await context.close();
+});
+
+test('Admin › Usage is admin-only on the page too', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e-member', expiresAt: null, user: { id: 'm1', email: 'm@example.com', name: 'Robin', status: 'approved', role: 'member' } }));
+  });
+  let asked = false;
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/admin\/usage/, (route) => {
+    asked = true;
+    return route.abort();
+  });
+  await page.goto('./#/admin/usage');
+  await expect(page.getByTestId('admin-only')).toBeVisible();
+  expect(asked).toBe(false);
+});

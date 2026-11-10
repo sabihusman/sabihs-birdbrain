@@ -27,6 +27,7 @@ export const PAGES = [
   'settings',
   'admin',
   'admin-users',
+  'admin-usage',
   'help',
   'whats-new',
   'signin',

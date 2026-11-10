@@ -201,6 +201,30 @@ export function parseStoredSession(raw: string | null): StoredSession | null {
 }
 
 /** Talks to the Birdbrain API with bearer tokens stored in localStorage. */
+/** Admin › Usage (server/src/usage-stats.ts). */
+export type UsageRange = 'today' | '7d' | '30d';
+export interface UsageCount {
+  value: string;
+  count: number;
+}
+export interface UsageReport {
+  configured: true;
+  range: UsageRange;
+  updatedAt: string;
+  stale: boolean;
+  tiles: { visitorsPerDay: number | null; listens: number; foundShare: number | null; medianListenSec: number | null };
+  days: Array<{ day: string; visitors: number; listens: number }>;
+  screens: UsageCount[];
+  layouts: UsageCount[];
+  backends: UsageCount[];
+  devices: UsageCount[];
+  timeZones: UsageCount[];
+  micProblems: UsageCount[];
+  modelFailures: { unsupported: number; other: number };
+  load: { firstDownloadSec: number | null; cachedSec: number | null };
+  failed: string[];
+}
+
 export class ApiClient extends Emitter<{ change: AuthUser | null }> {
   private session: StoredSession | null;
 
@@ -414,5 +438,10 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
   /** The last 30 days of /v1/ask token and cost totals, newest first. */
   adminAskCosts(): Promise<AskCostSummary> {
     return this.call('/v1/admin/ask-costs');
+  }
+
+  /** Admin › Usage (DECISIONS.md #121): the anonymous usage counts, read from PostHog by the server. */
+  adminUsage(range: UsageRange): Promise<UsageReport | { configured: false }> {
+    return this.call(`/v1/admin/usage?range=${range}`);
   }
 }

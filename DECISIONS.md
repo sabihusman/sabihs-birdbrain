@@ -3218,3 +3218,28 @@ Each finding was checked against the code first.
   bird's name never appears, no cookie, no PostHog storage, nothing after the switch goes off).
 - **Next:** Admin › Usage (mockups approved Nov 10) reads the counts through the server with a read-only key in
   `/opt/birdbrain/.env`, once the PostHog project is set up.
+
+## 121. Admin › Usage: the counts read back from PostHog, inside the app
+
+- **Why (Sabih, Nov 10):** to review the usage counts (#120) in the admin area instead of signing in to PostHog.
+  The phone and desktop mockups were approved the same day.
+- **Now:** `#/admin/usage`, linked from User management next to Ask costs. The page asks our server
+  (`GET /v1/admin/usage?range=today|7d|30d`, admin only); the server asks PostHog's query API
+  (`POST {POSTHOG_APP_HOST}/api/projects/{POSTHOG_PROJECT_ID}/query/`, HogQL) with a personal API key that has only
+  query read access, from `/opt/birdbrain/.env`. The page never talks to PostHog and never sees the key.
+  - Four fixed questions (`server/src/usage-stats.ts`): tiles, the 30-day daily series (shared by the ranges),
+    breakdowns (one `UNION ALL`), model load times. Only the range changes them, from a fixed list; all of them
+    keep to `$lib = 'birdbrain-web'` and leave out `audience = 'admin'` (Sabih's own use). Asked one after another
+    (PostHog runs 3 at once), each cached 15 minutes: at most 40 an hour, under the oldest limit of 120.
+  - A part PostHog fails to answer shows "Couldn't load" on its card; after a good answer a failure serves the old
+    one, marked; with nothing at all the route answers 502 and the page offers "Try again". PostHog's strings are cut
+    to 60 characters and its numbers coerced before they leave the server; the page renders them as text.
+  - Without both `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` the route answers `{ configured: false }` and the
+    page says what to add. `POSTHOG_APP_HOST` defaults to `https://us.posthog.com`.
+  - Labels (`src/ui/usage-labels.ts`): routes grouped like the tabs; "iPhone Safari", "Android Chrome", "Desktop";
+    IANA time zones to US and Canadian regions, the rest "Other".
+- **Project:** PostHog's free plan allows one project, so the app uses the existing project 456272, renamed
+  "Sabih's Birdbrain" (Nov 10); old flags and dashboards from an earlier app stay in it, unused. The `$lib` filter
+  keeps them out of these numbers.
+- **Unverified until the first live load:** the HogQL itself. The tests use a fake PostHog; if a question is
+  rejected, the server log says `[usage] PostHog query <name> failed: HTTP …` and only that card is empty.

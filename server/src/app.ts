@@ -16,6 +16,7 @@ import { aiServiceLabels } from './providers/index.js';
 import { anthropicCostMicros } from './pricing.js';
 import { createProviderUsageStore, PROVIDER_SUMMARY_DAYS, type ProviderUsageStore } from './provider-usage.js';
 import { createAnswerCache, type AnswerCache } from './answer-cache.js';
+import { createUsageStats, USAGE_RANGES, usageConfigFrom, UsageUnavailableError, type UsageStats } from './usage-stats.js';
 import type { AnswerBody } from './ask.js';
 import { COST_SUMMARY_DAYS, createAskCostStore, type AskCostStore } from './ask-cost.js';
 import { createUsageStore } from './db.js';
@@ -54,6 +55,8 @@ export interface AppDeps {
   providerUsage?: ProviderUsageStore;
   /** Answer cache; created here when absent. */
   answers?: AnswerCache<AnswerBody>;
+  /** Admin › Usage from PostHog (DECISIONS.md #121); created from the config when absent. */
+  usage?: UsageStats;
   /** Override limits in tests. */
   limits?: { ipPerWindow?: number; emailPerWindow?: number; windowMs?: number; askPerMinute?: number; signupNotifyWindowMs?: number; invitesPerDay?: number };
   /** Clock for the sign-up notifier (tests). */
@@ -106,6 +109,7 @@ export function createApp(deps: AppDeps) {
   const costs = deps.costs ?? createAskCostStore(db);
   const providerUsage = deps.providerUsage ?? createProviderUsageStore(db);
   const answers = deps.answers ?? createAnswerCache<AnswerBody>(db);
+  const usageStats = deps.usage ?? createUsageStats(usageConfigFrom(config));
   const friends = new FriendsStore(db);
   const whatsNew = new WhatsNewStore(db);
   const emailInvites = new EmailInvites(db, config.BETTER_AUTH_SECRET);
@@ -615,6 +619,19 @@ export function createApp(deps: AppDeps) {
   app.get('/v1/admin/users', async (c) => {
     if (!(await requireAdmin(c))) return json(c, 403, { error: 'forbidden' });
     return json(c, 200, { users: users.list().map((u) => ({ ...publicUser(u), emailVerified: u.emailVerified, createdAt: u.createdAt.toISOString() })) });
+  });
+
+  /** Admin › Usage (DECISIONS.md #121): the anonymous usage counts read back from PostHog, cached 15 minutes. */
+  app.get('/v1/admin/usage', async (c) => {
+    if (!(await requireAdmin(c))) return json(c, 403, { error: 'forbidden' });
+    const parsed = z.enum(USAGE_RANGES).safeParse(c.req.query('range') ?? '7d');
+    if (!parsed.success) return json(c, 400, { error: 'invalid_range' });
+    try {
+      return json(c, 200, await usageStats.report(parsed.data));
+    } catch (e) {
+      if (e instanceof UsageUnavailableError) return json(c, 502, { error: 'usage_unavailable' });
+      throw e;
+    }
   });
 
   /** Per-day token and cost totals for /v1/ask (DECISIONS.md #48): numbers only, no questions. */

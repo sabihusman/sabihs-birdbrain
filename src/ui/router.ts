@@ -10,6 +10,8 @@ export type Route =
   | { name: 'settings'; section?: 'account' }
   | { name: 'admin' }
   | { name: 'admin-users' }
+  /** Admin › Usage (DECISIONS.md #121). */
+  | { name: 'admin-usage' }
   | { name: 'help' }
   | { name: 'whats-new' }
   /** Sign in and Create account, each on its own page (DECISIONS.md #77). */
@@ -47,7 +49,7 @@ export function parseHash(hash: string): Route {
     case 'settings':
       return rest[0] === 'account' ? { name: 'settings', section: 'account' } : { name: 'settings' };
     case 'admin':
-      return rest[0] === 'users' ? { name: 'admin-users' } : { name: 'admin' };
+      return rest[0] === 'users' ? { name: 'admin-users' } : rest[0] === 'usage' ? { name: 'admin-usage' } : { name: 'admin' };
     case 'help':
       return { name: 'help' };
     case 'whats-new':
@@ -91,6 +93,8 @@ export function hrefFor(route: Route): string {
       return '#/admin';
     case 'admin-users':
       return '#/admin/users';
+    case 'admin-usage':
+      return '#/admin/usage';
     case 'help':
       return '#/help';
     case 'whats-new':
