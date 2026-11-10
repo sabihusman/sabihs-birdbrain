@@ -3184,3 +3184,37 @@ Each finding was checked against the code first.
   (it is greyed out otherwise); a tap starts the same recording as the panel's "● Record", the key turns dark red with a
   pulsing dot and shows the recording's time instead of "Rec", and a second tap saves it to Recordings with the usual
   "Saved …" note. Pause and Stop save a recording in progress, as they always did. Reduced motion: no pulse.
+
+## 120. Anonymous usage counts to PostHog, without asking (Version 2)
+
+- **Why (Sabih, Nov 10):** to see which screens and layouts get used and what breaks. Of the two versions mocked up
+  (a consent card with a lasting ID, or no card and nothing on the phone) Sabih chose "Version 2, don't ask". The app
+  is used mostly in the US and Canada; no US law found asks for consent for this at the app's size, PIPEDA accepts
+  implied consent for non-sensitive data explained plainly, and Quebec's Law 25 (tracking that can identify, locate or
+  profile must start off) is the reason there is no ID at all. Not legal advice; sources in the Nov 10 conversation.
+- **Now:** `src/app/usage-counts.ts` is the whole client, about 4 KB minified (2 KB gzipped), instead of posthog-js (~330 KB minified, which also
+  loads remote scripts the CSP forbids). It posts single events to `${VITE_POSTHOG_HOST}/i/v0/e/` (default
+  `https://us.i.posthog.com`, in `connect-src`) with `distinct_id: "$posthog_cookieless"`, `$cookieless_mode: true`
+  and `$process_person_profile: false`. PostHog's cookieless server hash mode (project setting "Enable cookieless
+  tracking", required, or the events are dropped) hashes IP + user agent + host with a daily salt, then deletes the IP
+  and the user agent (`nodejs/src/ingestion/common/cookieless/cookieless-manager.ts` in PostHog's repo, read Nov 10). A
+  phone counts once per day and is never recognised the next day; GeoIP is off in this mode, so the phone's time zone
+  is the only hint of region.
+- **What is sent** (`SCHEMA`, checked again before every send, so nothing else can slip in): page views by route name
+  only (`#/species-detail`, never the species, a record id or a link token); listen started / stopped (layout, seconds,
+  number of birds, windows, skipped); model loaded (backend, seconds, from cache) or failed (unsupported or not);
+  microphone problem (its kind); layout changed; recording saved (seconds). With each: browser, OS and device type
+  worked out on the phone, the raw user agent for the hash, the host, viewport width to 10 px, time zone, the referring
+  host on page views, and `audience` (signed-out / pending / member / admin, so Sabih can leave his own use out).
+  **Never sent:** audio, GPS position, bird names, email, what members ask. That sentence is on Settings › Privacy
+  as Sabih asked, and in What we store.
+- **Off when:** the build has no `VITE_POSTHOG_KEY` (the project token, public by design; set in Vercel), the
+  Settings › Privacy switch "Anonymous usage counts" is off (`usageCounts`, on by default), the browser sends Global
+  Privacy Control or Do Not Track (the switch then shows off and says why), or the phone is offline. Nothing is stored
+  for the counts; the switch itself is an ordinary setting.
+- **Tests:** `tests/usage-counts.test.ts` (no key / off / GPC send nothing; the exact body; bird names, positions,
+  emails and questions dropped even when forced in; device names; the controller's events, including a BirdAmp
+  pause); e2e (CI builds with a stand-in key and `VITE_POSTHOG_HOST=/__usage`, the test catches the posts: a heard
+  bird's name never appears, no cookie, no PostHog storage, nothing after the switch goes off).
+- **Next:** Admin › Usage (mockups approved Nov 10) reads the counts through the server with a read-only key in
+  `/opt/birdbrain/.env`, once the PostHog project is set up.

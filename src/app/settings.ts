@@ -37,6 +37,8 @@ export interface Settings {
   speciesSpottedOnly: boolean;
   listenLayout: ListenLayout;
   mapCardsView: MapCardsView;
+  /** Anonymous usage counts to PostHog, nothing kept on the phone for them (Settings › Privacy, DECISIONS.md #120). */
+  usageCounts: boolean;
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
@@ -71,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // First run (and after the user deletes all data) opens in Focus; a chosen layout is remembered (DECISIONS.md #63).
   listenLayout: 'focus',
   mapCardsView: 'birds',
+  usageCounts: true,
 };
 
 /** localStorage key of the stored settings; its presence is one of the "returning visitor" signals (src/app/first-visit.ts). */
@@ -146,6 +149,7 @@ export function sanitize(s: Settings): Settings {
     geoThreshold: clamp(s.geoThreshold, 0, 1, DEFAULT_SETTINGS.geoThreshold),
     listenLayout: LAYOUTS.includes(s.listenLayout) ? s.listenLayout : DEFAULT_SETTINGS.listenLayout,
     mapCardsView: s.mapCardsView === 'places' ? 'places' : 'birds',
+    usageCounts: s.usageCounts !== false,
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),

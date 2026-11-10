@@ -56,8 +56,10 @@ describe('front-end response headers (vercel.json)', () => {
     expect(header('Content-Security-Policy')).toMatch(/img-src[^;]*https:\/\/tile\.openstreetmap\.org/);
   });
 
-  it('lets the Places view reach Nominatim and nothing else new (DECISIONS.md #73)', () => {
+  it('lets the Places view reach Nominatim and the usage counts reach PostHog, nothing else (DECISIONS.md #73, #120)', () => {
     const connect = /connect-src ([^;]*)/.exec(header('Content-Security-Policy')!)![1].split(/\s+/);
-    expect(connect).toEqual(["'self'", 'https://bird-brain.duckdns.org', 'https://en.wikipedia.org', 'https://nominatim.openstreetmap.org']);
+    expect(connect).toEqual(["'self'", 'https://bird-brain.duckdns.org', 'https://en.wikipedia.org', 'https://nominatim.openstreetmap.org', 'https://us.i.posthog.com']);
+    // Sending only: no PostHog script may load (the app has its own small sender, src/app/usage-counts.ts).
+    expect(/script-src ([^;]*)/.exec(header('Content-Security-Policy')!)![1]).not.toMatch(/posthog/);
   });
 });

@@ -3056,3 +3056,53 @@ test('the page itself never scrolls; the area between the header and the tab bar
   }
 });
 
+
+test('usage counts: anonymous, route names only, nothing kept on the phone, off with the Settings › Privacy switch (DECISIONS.md #120)', async ({ browser }) => {
+  // CI builds with a stand-in key and a local host (ci.yml); a build without a key sends nothing, which the unit tests cover.
+  const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block', permissions: ['microphone'] });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  const sent: Array<{ distinct_id: string; event: string; properties: Record<string, unknown> }> = [];
+  await page.route('**/i/v0/e/', async (route) => {
+    sent.push(JSON.parse(route.request().postData() ?? '{}'));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"status":"Ok"}' });
+  });
+  await page.goto('./#/settings');
+  const privacy = page.getByTestId('privacy');
+  await expect(privacy).toBeVisible();
+  await expect(page.getByTestId('usage-never-sent')).toHaveText('Never sent: audio, GPS position, bird names, your email or what members ask.');
+  const sw = page.getByTestId('usage-switch');
+  test.skip(await sw.isDisabled(), 'this build has no VITE_POSTHOG_KEY');
+  await expect(sw).toBeChecked();
+  await page.getByTestId('usage-whats-sent').locator('summary').click();
+  await expect(page.getByTestId('usage-whats-sent')).toContainText('PostHog');
+
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await hearBird(page);
+  await page.goto('./#/species');
+  await expect.poll(() => sent.map((s) => s.event)).toEqual(expect.arrayContaining(['$pageview', 'listen_started', 'listen_stopped', 'model_loaded']));
+  const stopped = sent.find((s) => s.event === 'listen_stopped')!;
+  expect(stopped.properties.birds).toBeGreaterThanOrEqual(1);
+  for (const s of sent) {
+    expect(s.distinct_id).toBe('$posthog_cookieless');
+    expect(s.properties.$cookieless_mode).toBe(true);
+    expect(String(s.properties.$current_url)).toMatch(/\/#\/[a-z-]+$/);
+  }
+  // A bird was heard, but no bird name, position or species path left the page.
+  const text = JSON.stringify(sent);
+  expect(text).not.toMatch(/Redpoll|Acanthis|latitude|"lat"|"lon"/);
+  // Nothing written to the phone for the counts: no cookie, no PostHog storage.
+  expect(await context.cookies()).toEqual([]);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => /posthog|ph_/i.test(k)))).toEqual([]);
+
+  // Off: not one more event.
+  await page.goto('./#/settings');
+  await page.getByTestId('usage-switch').uncheck();
+  const before = sent.length;
+  await page.goto('./#/map');
+  await page.goto('./#/listen');
+  await page.waitForTimeout(500);
+  expect(sent.length).toBe(before);
+  await context.close();
+});

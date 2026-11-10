@@ -1,6 +1,7 @@
 import { describeAiServices, refreshAiServices, storedAiServices } from '../../api/ai-services';
 import { disclosure } from './disclosure';
 import { el } from '../dom';
+import { USAGE_NEVER_SENT } from './privacy-card';
 
 /**
  * What the server keeps and where data goes. Written from the code, not from memory:
@@ -44,6 +45,15 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
       'Listen sends your position, rounded to about 1 km, to OpenStreetMap’s Nominatim to name the nearest town. The name is kept on this phone.',
       // src/geo/place-search.ts (DECISIONS.md #105): only when someone presses Search in Species › Pick a place.
       'Species › Pick a place sends the town name you type to OpenStreetMap’s Nominatim to find it. Nothing else.',
+    ],
+  },
+  {
+    // src/app/usage-counts.ts (DECISIONS.md #120): Settings › Privacy turns them off.
+    title: 'Anonymous usage counts',
+    items: [
+      'Unless switched off in Settings › Privacy: screens opened, listening times, how many birds were found (not which), layout, model speed, problems, browser, device type, screen width and time zone go to PostHog.',
+      'Nothing is saved on your phone for this; PostHog makes a daily anonymous count from your IP address and browser, then throws both away.',
+      USAGE_NEVER_SENT,
     ],
   },
   {

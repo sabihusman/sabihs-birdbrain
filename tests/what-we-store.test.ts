@@ -11,7 +11,7 @@ describe('what we store', () => {
   it('is one paragraph that covers every stored or sent item and ends with the backups sentence', () => {
     expect(WHAT_WE_STORE_TEXT).not.toContain('\n');
     // Every fact, in the shorter wording (DECISIONS.md #92): nothing was dropped when the list was cut down.
-    for (const needle of ['your email', 'password (hashed, unreadable)', 'display name', 'sign-in sessions', 'Sign-in codes (hashed, for minutes)', 'reset links (hashed, 1 hour)', 'friends, open invites', 'daily question count', 'hashed copy of their address, up to 30 days', 'Sightings, recordings, clips and ticks never leave this phone', 'each bird’s name and the last day you spotted it', 'Friends see only that and your display name', 'The species, your question and your state/province go to the server', 'Wikipedia', 'NatureServe', 'eBird', 'rounded to ~10 km', 'Ollama Cloud, or Google Gemini as backup', 'none of them sees your name, email or exact location', 'Answers are kept 7 days', 'without your name or email', 'erases it from the server at once', 'rounded to ~100 m', 'Nominatim', '1 km area’s centre']) {
+    for (const needle of ['your email', 'password (hashed, unreadable)', 'display name', 'sign-in sessions', 'Sign-in codes (hashed, for minutes)', 'reset links (hashed, 1 hour)', 'friends, open invites', 'daily question count', 'hashed copy of their address, up to 30 days', 'Sightings, recordings, clips and ticks never leave this phone', 'each bird’s name and the last day you spotted it', 'Friends see only that and your display name', 'The species, your question and your state/province go to the server', 'Wikipedia', 'NatureServe', 'eBird', 'rounded to ~10 km', 'Ollama Cloud, or Google Gemini as backup', 'none of them sees your name, email or exact location', 'Answers are kept 7 days', 'without your name or email', 'erases it from the server at once', 'rounded to ~100 m', 'Nominatim', '1 km area’s centre', 'go to PostHog', 'Settings › Privacy', 'Nothing is saved on your phone for this', 'throws both away', 'Never sent: audio, GPS position, bird names, your email or what members ask.']) {
       expect(WHAT_WE_STORE_TEXT).toContain(needle);
     }
     // Since 2026-10-19 23:00 UTC a root cron job runs backup.sh nightly at 03:15 UTC with BACKUP_RETENTION_DAYS=14 (round-3 report, Backups).
@@ -23,8 +23,8 @@ describe('what we store', () => {
 
 /** The facts moved into five groups behind a collapsed section (DECISIONS.md #57); none was dropped. */
 describe('what we store, regrouped', () => {
-  it('has the five groups in the order the data flows', () => {
-    expect(WHAT_WE_STORE_GROUPS.map((g) => g.title)).toEqual(['On the server', 'Only on this phone', 'If sharing is on', 'When you ask about a bird', 'Deleting your account']);
+  it('has the six groups in the order the data flows', () => {
+    expect(WHAT_WE_STORE_GROUPS.map((g) => g.title)).toEqual(['On the server', 'Only on this phone', 'Anonymous usage counts', 'If sharing is on', 'When you ask about a bird', 'Deleting your account']);
   });
 
   it('keeps every fact: the one-line paragraph is built from the groups', () => {

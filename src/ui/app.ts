@@ -9,6 +9,9 @@ import { mapView } from './views/map';
 import { settingsView } from './views/settings';
 import { helpView } from './views/help';
 import { whatsNewView } from './views/whats-new';
+import { effectiveLayout } from '../app/access';
+import { UsageCounts, usageConfig } from '../app/usage-counts';
+import { audienceFor, pageOf, wireUsageCounts } from '../app/usage-wiring';
 import { WhatsNewService } from '../app/whats-new';
 import { adminView, userManagementView } from './views/admin';
 import { forgotPasswordView, resetPasswordView, signInView, signUpView } from './views/auth';
@@ -35,6 +38,8 @@ export interface ViewContext {
   friends: FriendsCache;
   /** What's new: what was shown, and the pop-up switch (DECISIONS.md #112). */
   whatsNew: WhatsNewService;
+  /** Anonymous usage counts, Settings › Privacy (DECISIONS.md #120). */
+  usage: UsageCounts;
 }
 
 const ICONS: Record<string, string> = {
@@ -174,7 +179,12 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   };
   if (pendingUpdate) showUpdateBanner(pendingUpdate);
 
-  const ctx: ViewContext = { controller, api, notify, sharing: new SpeciesSharer(api, controller), friends: new FriendsCache(api), whatsNew: new WhatsNewService(api) };
+  const usage = new UsageCounts(usageConfig(import.meta.env as { VITE_POSTHOG_KEY?: string; VITE_POSTHOG_HOST?: string }), {
+    enabled: () => controller.settings.get().usageCounts,
+    audience: () => audienceFor(api.user),
+  });
+  wireUsageCounts(controller, usage, () => effectiveLayout(controller.settings.get().listenLayout, api.user));
+  const ctx: ViewContext = { controller, api, notify, sharing: new SpeciesSharer(api, controller), friends: new FriendsCache(api), whatsNew: new WhatsNewService(api), usage };
   let current: View | null = null;
 
   const render = () => {
@@ -237,6 +247,9 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     }
     main.appendChild(current.el);
     scroller.scrollTop = 0;
+    // The route's name only: never a recording id, a species or a link's token.
+    const page = pageOf(route.name);
+    if (page) usage.pageview(page);
     if (route.name === 'settings' && route.section === 'account') {
       // From the welcome layer's "Sign in / Create account": land on the Account card, for the eye and for the focus.
       const account = main.querySelector<HTMLElement>('[data-testid="account"]');

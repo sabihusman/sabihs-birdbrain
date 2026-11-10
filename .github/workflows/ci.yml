@@ -26,6 +26,9 @@ jobs:
         run: npm run build
         env:
           VITE_MODEL_BASE_URL: /models/birdnet-v2.4/
+          # Usage counts on, sent to the preview server itself; the e2e test catches them (DECISIONS.md #120).
+          VITE_POSTHOG_KEY: phc_e2e_not_a_real_key
+          VITE_POSTHOG_HOST: /__usage
       - name: Build must not contain the BirdNET weights (DECISIONS.md #56)
         run: npm run check:dist
       - name: Install Playwright Chromium
