@@ -55,6 +55,10 @@ Key modules:
   `WhatsNewService`: phone copy `birdbrain.whatsnew.v1` merged with the account's `/v1/me/whats-new`),
   `src/ui/components/whats-new.ts` (strip on Listen, swipe cards), `src/ui/views/whats-new.ts` (`#/whats-new`, the
   Settings row has a dot until opened). Add the next announcement as a new first entry; e2e pins the clock.
+- Usage counts (DECISIONS.md #120): `src/app/usage-counts.ts` (own ~4 KB PostHog cookieless sender, fixed `SCHEMA`,
+  route names only, `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST`), `src/app/usage-wiring.ts` (controller events → counts),
+  `src/ui/components/privacy-card.ts` (Settings › Privacy switch and "Never sent: …"). Never add a field that could
+  carry audio, a position, a bird name, an email or a question.
 - `src/app/settings.ts` — localStorage settings; `src/app/location.ts` — GPS /
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.

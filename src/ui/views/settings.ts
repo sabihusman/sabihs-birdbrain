@@ -10,6 +10,7 @@ import { foldHint, linkRow } from '../components/rows';
 import { hasDot } from '../../app/whats-new';
 import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
+import { privacyCard } from '../components/privacy-card';
 import { layoutPicker } from '../components/layout-picker';
 import { effectiveLayout, isMember } from '../../app/access';
 import { describeVoiceProcessing } from '../../audio/mic-constraints';
@@ -224,6 +225,7 @@ export function settingsView(ctx: ViewContext): View {
     el('section', { class: 'card' }, el('h2', null, 'Storage'), storageText, storageBar, persistText, persistFold, el('div', { class: 'row' }, persistBtn)),
     el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), foldHint('What’s in the file', [el('p', null, 'One row per sighting: times, species, peak confidence, windows, position, recording.')])),
     el('section', { class: 'card' }, el('h2', null, 'Data'), el('div', { class: 'row' }, clearBtn)),
+    privacyCard(settings, ctx.usage),
     el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
     // Last thing on the page, closed: the full privacy facts are there when wanted and out of the way otherwise.
     whatWeStoreFold(),
