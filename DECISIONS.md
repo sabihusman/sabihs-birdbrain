@@ -3245,3 +3245,20 @@ Each finding was checked against the code first.
   keeps them out of these numbers.
 - **Unverified until the first live load:** the HogQL itself. The tests use a fake PostHog; if a question is
   rejected, the server log says `[usage] PostHog query <name> failed: HTTP …` and only that card is empty.
+
+## 122. Desktop: tabs in the header, two columns on Listen
+
+- **Why (Sabih, Nov 9–10):** on a computer the phone layout left most of the screen empty. Of the mockups, Sabih
+  chose the two-column Listen with the tabs moved into the header (1-B).
+- **Now, from 1024 px wide** (`WIDE_SCREEN` in `src/ui/app.ts`, the same width as the CSS):
+  - The same `<nav class="tabs">` moves into the header, between the title and the status pill (`tabs-top`); it
+    goes back to the bottom bar when the window narrows. `--tab-h` is 0, so the dock, Focus's panel and the layout
+    bubble sit at the bottom of the screen.
+  - Consolidated and Bottom dock (`listen-two`): controls, See the sound and the links on the left; the result
+    cards (`.listen-side`, plus Recent sightings in Dock) on the right; the BirdNET credit under both. Five auto
+    rows and one `1fr` row keep the left blocks together however tall the right column grows (Chrome already did
+    so without it; the rule makes it explicit, and e2e checks it).
+  - The dock bar is centred, at most 1200 px. BirdAmp puts its Playlist beside the player and Confidence windows.
+  - Focus stays one column, as in the approved mockup. Phones are unchanged.
+- **Tests:** e2e at 1024, 1280 and 1440 px (tabs in the header with 44 px targets, two columns, no sideways scroll,
+  a 2,400 px right column leaves the left blocks in place, Dock and Focus), then back to 390 px.

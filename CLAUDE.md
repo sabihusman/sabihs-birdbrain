@@ -62,7 +62,8 @@ Key modules:
   `src/ui/views/admin-usage.ts`, `src/ui/usage-labels.ts`, DECISIONS.md #121) reads them back through the server.
 - `src/app/settings.ts` — localStorage settings; `src/app/location.ts` — GPS /
   manual / off and BirdNET week (`src/model/geo.ts`).
-- `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs.
+- `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs; from 1024 px (`WIDE_SCREEN`) the same
+  tabs move into the header and Consolidated / Dock use two columns (`.listen-two`, `.listen-side`; DECISIONS.md #122).
 - `src/species/colors.ts` — deterministic OKLCH species colours;
   `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache;
   `src/species/wiki-sections.ts` — Description / Song / Habitat / Diet
