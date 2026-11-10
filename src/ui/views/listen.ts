@@ -253,6 +253,8 @@ export function listenView(ctx: ViewContext): View {
   const focusBlock = el('div', { class: 'focus-block' }, focusLatest, moreBtn, moreList);
   /** BirdNET is credited where it identifies (DECISIONS.md #66): the last line in flow in every layout. */
   const credit = birdnetCredit();
+  // The result cards' column on a wide screen (DECISIONS.md #122); on a phone it is an ordinary block in the flow.
+  const side = el('div', { class: 'listen-side', 'data-testid': 'listen-side' });
   const root = el('div', { class: 'listen' });
   // First visit: the welcome layer stands in for the whole Listen screen until the visitor chooses
   // (DECISIONS.md #68). The tabs behind it keep working; nothing downloads on its own.
@@ -299,7 +301,7 @@ export function listenView(ctx: ViewContext): View {
   const applyLayout = (next: ListenLayout) => {
     layout = next;
     bubble.sync(next);
-    root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : next === 'birdamp' ? ' listen-birdamp-layout' : ''}`;
+    root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : next === 'birdamp' ? ' listen-birdamp-layout' : ''}${(next === 'consolidated' || next === 'dock') && !controller.welcomePending ? ' listen-two' : ''}`;
     root.dataset.layout = next;
     if (controller.welcomePending) {
       setShellSkin(null);
@@ -341,14 +343,16 @@ export function listenView(ctx: ViewContext): View {
       lowLine.after(notUsualBox);
       recentInline.appendChild(recentBody);
       // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
-      root.replaceChildren(readyBlock, recentInline, resultsBlock, how, helpLink, credit, dock, bubble.el);
+      side.replaceChildren(recentInline, resultsBlock);
+      root.replaceChildren(readyBlock, side, how, helpLink, credit, dock, bubble.el);
     } else {
       resultsBlock.prepend(resultsList);
       panel.insertBefore(banner, panel.lastElementChild);
       lowLine.after(notUsualBox);
       recentDetails.appendChild(recentBody);
       // The result cards under the panel are the list; the "Recent sightings" dropdown repeated them (#109).
-      root.replaceChildren(readyBlock, panel, resultsBlock, how, helpLink, credit, bubble.el);
+      side.replaceChildren(resultsBlock);
+      root.replaceChildren(readyBlock, panel, side, how, helpLink, credit, bubble.el);
     }
     if (wnStrip) root.prepend(wnStrip);
   };

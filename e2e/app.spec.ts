@@ -3237,3 +3237,91 @@ test('usage counts: a browser run by automation sends nothing (DECISIONS.md #120
   expect(sent).toBe(0);
   await context.close();
 });
+
+test('desktop: tabs in the header, two columns on Listen (Consolidated, Dock), Focus one column, phone unchanged (DECISIONS.md #122)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/wikipedia\.org|wikimedia\.org|nominatim/, (route) => route.abort());
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  const noScroll = async (label: string) => {
+    const m = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
+    expect(m.sw, label).toBeLessThanOrEqual(m.iw);
+  };
+
+  for (const w of [1024, 1280, 1440]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    // The tabs are in the header, in one row, between the title and the status pill; 44 px targets.
+    const header = await page.locator('.app-header').boundingBox();
+    const tabs = page.locator('nav.tabs');
+    await expect(tabs).toHaveClass(/tabs-top/);
+    expect(await tabs.evaluate((n) => n.parentElement?.classList.contains('app-header'))).toBe(true);
+    for (const a of await tabs.locator('a').all()) {
+      const b = (await a.boundingBox())!;
+      expect(b.height, `tab at ${w}`).toBeGreaterThanOrEqual(44);
+      expect(b.y).toBeGreaterThanOrEqual(header!.y);
+      expect(b.y + b.height).toBeLessThanOrEqual(header!.y + header!.height + 1);
+    }
+    const title = (await page.locator('.app-header h1').boundingBox())!;
+    const pill = (await page.getByTestId('model-status').boundingBox())!;
+    const first = (await tabs.locator('a').first().boundingBox())!;
+    const last = (await tabs.locator('a').last().boundingBox())!;
+    expect(first.x).toBeGreaterThan(title.x + title.width);
+    expect(last.x + last.width).toBeLessThanOrEqual(pill.x);
+    // Consolidated: the result column sits right of the Ready block.
+    const ready = (await page.getByTestId('ready-block').boundingBox())!;
+    const side = (await page.getByTestId('listen-side').boundingBox())!;
+    expect(side.x, `two columns at ${w}`).toBeGreaterThan(ready.x + ready.width);
+    await noScroll(`Consolidated at ${w}`);
+  }
+
+  // A long right column leaves the left blocks where they were.
+  const gapBefore = await page.evaluate(() => {
+    const r = document.querySelector('[data-testid="ready-block"]')!.getBoundingClientRect();
+    const n = document.querySelector('.listen > .listen-help-link')!.getBoundingClientRect();
+    return n.top - r.bottom;
+  });
+  await page.evaluate(() => {
+    const side = document.querySelector('[data-testid="listen-side"]')!;
+    const filler = document.createElement('div');
+    filler.style.cssText = 'height:2400px';
+    filler.id = 'e2e-filler';
+    side.appendChild(filler);
+  });
+  const gapAfter = await page.evaluate(() => {
+    const r = document.querySelector('[data-testid="ready-block"]')!.getBoundingClientRect();
+    const n = document.querySelector('.listen > .listen-help-link')!.getBoundingClientRect();
+    return n.top - r.bottom;
+  });
+  expect(Math.abs(gapAfter - gapBefore)).toBeLessThan(2);
+  await page.evaluate(() => document.getElementById('e2e-filler')?.remove());
+
+  // Dock: two columns too, the dock bar centred at the bottom of the screen.
+  await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'dock' })));
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.locator('.listen')).toHaveClass(/listen-two/);
+  const dock = (await page.locator('.listen-dock').boundingBox())!;
+  expect(dock.y + dock.height).toBeGreaterThan(799);
+  await noScroll('Dock at 1440');
+
+  // Focus stays one column.
+  await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'focus' })));
+  await page.reload();
+  await expect(page.locator('.listen')).not.toHaveClass(/listen-two/);
+  await expect(page.locator('nav.tabs')).toHaveClass(/tabs-top/);
+
+  // Narrow again: the tab bar goes back to the bottom, and Listen is one column.
+  await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' })));
+  await page.reload();
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect(page.locator('nav.tabs')).not.toHaveClass(/tabs-top/);
+  const bar = (await page.locator('nav.tabs').boundingBox())!;
+  expect(bar.y + bar.height).toBeGreaterThan(799);
+  const ready = (await page.getByTestId('ready-block').boundingBox())!;
+  const side = (await page.getByTestId('listen-side').boundingBox())!;
+  expect(side.y).toBeGreaterThanOrEqual(ready.y + ready.height - 1);
+  await noScroll('Consolidated at 390');
+  await context.close();
+});

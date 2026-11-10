@@ -895,3 +895,33 @@ html.wn-open, html.wn-open body { overflow: hidden; }
   .usage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .usage-grid > [data-testid="usage-days"] { grid-column: span 2; }
 }
+
+/*
+ * Desktop (DECISIONS.md #122, Sabih's 1-B on the Nov 9 mockup): from 1024 px the tabs sit in the header (app.ts
+ * moves the same <nav> there), Consolidated and Bottom dock split into two columns (controls and live views left,
+ * result cards right), BirdAmp puts the playlist beside the player, and Focus stays one column.
+ */
+@media (min-width: 1024px) {
+  :root { --tab-h: 0px; }
+  .app-header h1 { flex: 0 1 auto; }
+  .app-header .tabs.tabs-top { position: static; margin-left: auto; height: auto; padding: 0; background: transparent; border: 0; gap: 4px; align-items: center; z-index: auto; }
+  .app-header .tabs.tabs-top a { flex: none; flex-direction: row; gap: 6px; padding: 0 14px; min-height: 44px; border-radius: var(--radius-pill); font-size: 15px; }
+  .app-header .tabs.tabs-top a.active { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .app-header .tabs.tabs-top a svg { width: 20px; height: 20px; }
+  :root[data-skin="birdamp"] .app-header .tabs.tabs-top { background: transparent; border: 0; padding: 0; }
+  :root[data-skin="birdamp"] .app-header .tabs.tabs-top a { margin: 0; padding: 0 12px; font-size: 0.7rem; }
+
+  main.view { max-width: 1200px; }
+  /* Five auto rows for the left column's blocks, then one flexible row: a tall right column stretches only that one,
+     so the left blocks never spread apart. The credit runs under both. */
+  .listen.listen-two { max-width: none; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); grid-template-rows: repeat(5, auto) 1fr; column-gap: 24px; align-items: start; }
+  .listen.listen-two > * { grid-column: 1; }
+  .listen.listen-two > .listen-side { grid-column: 2; grid-row: 1 / 7; }
+  .listen.listen-two > .source-credit { grid-column: 1 / -1; grid-row: 7; }
+  .listen-dock-layout .listen-dock { left: 50%; right: auto; transform: translateX(-50%); width: min(1200px, 100%); border-radius: var(--radius-card) var(--radius-card) 0 0; }
+
+  .listen-birdamp-layout { max-width: 1200px; }
+  .listen-birdamp-layout .ba-stack { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-items: start; }
+  .listen-birdamp-layout .ba-win[data-win="player"], .listen-birdamp-layout .ba-win[data-win="confidence"] { grid-column: 1; }
+  .listen-birdamp-layout .ba-win[data-win="library"] { grid-column: 2; grid-row: 1 / span 2; }
+}

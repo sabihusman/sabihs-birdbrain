@@ -51,6 +51,9 @@ const ICONS: Record<string, string> = {
   settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
 };
 
+/** Where the tabs move into the header; the same width as the two-column Listen in styles.css. */
+export const WIDE_SCREEN = '(min-width: 1024px)';
+
 const TABS: Array<{ route: Route; label: string; icon: string }> = [
   { route: { name: 'listen' }, label: 'Listen', icon: 'listen' },
   { route: { name: 'recordings' }, label: 'Recordings', icon: 'recordings' },
@@ -144,7 +147,19 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   // The page itself never scrolls: this area between the header and the tab bar does (DECISIONS.md #118). Chrome on
   // iPhone otherwise scrolled past the end of the page into blank space and drew the "fixed" tab bar mid-screen.
   const scroller = el('div', { class: 'app-scroll', 'data-testid': 'app-scroll' }, notices, main);
-  root.replaceChildren(el('div', { class: 'app' }, header, scroller, tabs));
+  const shell = el('div', { class: 'app' }, header, scroller, tabs);
+  root.replaceChildren(shell);
+  // On a wide screen the tabs sit in the header, between the title and the status pill (Sabih's 1-B, DECISIONS.md
+  // #122); on a phone they are the bar at the bottom. The same links move, so their listeners and state stay.
+  const wide = typeof matchMedia === 'function' ? matchMedia(WIDE_SCREEN) : null;
+  const placeTabs = () => {
+    const top = !!wide?.matches;
+    if (top && tabs.parentElement !== header) header.insertBefore(tabs, modelPill);
+    else if (!top && tabs.parentElement !== shell) shell.appendChild(tabs);
+    tabs.classList.toggle('tabs-top', top);
+  };
+  placeTabs();
+  wide?.addEventListener?.('change', placeTabs);
 
   const notify = (n: Notice) => {
     const node = el('div', { class: `notice ${n.kind}`, role: n.kind === 'error' ? 'alert' : 'status' }, n.text);
