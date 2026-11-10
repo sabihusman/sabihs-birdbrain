@@ -855,3 +855,43 @@ html.wn-open, html.wn-open body { overflow: hidden; }
 .wn-item h3 { margin: var(--space-2) 0 2px; font-size: var(--text-md); }
 .wn-item p { margin: 0 0 var(--space-1); }
 @media (prefers-reduced-motion: reduce) { .wn-track { scroll-behavior: auto; } }
+
+/* Admin › Usage (DECISIONS.md #121): tiles, bar lists and one line chart, as in the approved mockups. */
+.usage-page { display: flex; flex-direction: column; gap: var(--space-3); }
+.usage-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-2); }
+.usage-top h1 { margin: 0 0 2px; }
+.usage-top p { margin: 0; }
+.usage-chips { display: flex; gap: 6px; }
+.usage-chip { min-height: 44px; padding: 0 16px; border-radius: var(--radius-pill); border: 0; background: var(--surface-2); color: var(--text); font: inherit; font-weight: var(--weight-semibold); cursor: pointer; }
+.usage-chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.usage-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.usage-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.usage-tile { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-control); padding: 10px 12px; }
+.usage-n { font-size: 26px; font-weight: var(--weight-bold); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.usage-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.usage-card { margin: 0; }
+.usage-card h2 { margin: 0; font-size: var(--text-md); }
+.usage-sub { margin: 2px 0 var(--space-2); }
+.ubars { display: grid; grid-template-columns: minmax(84px, max-content) minmax(0, 1fr) 44px; gap: 6px 8px; align-items: center; font-size: var(--text-sm); }
+.ubar-label { overflow-wrap: anywhere; }
+.ubar-track { min-width: 0; }
+.ubar { height: 12px; border-radius: 0 4px 4px 0; background: var(--accent); }
+.ubar-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.uline { display: block; overflow: visible; }
+.uline-grid { stroke: var(--line); stroke-width: 1; }
+.uline-axis { fill: var(--muted); font-size: 10px; }
+.uline-path { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.uline-hit { fill: transparent; }
+.uline-end { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+.uline-today { fill: var(--text); font-size: 11px; font-weight: var(--weight-bold); }
+.usage-table { width: 100%; border-collapse: collapse; margin-top: var(--space-2); font-size: var(--text-sm); }
+.usage-table td { padding: 6px 0; border-top: 1px solid var(--line); }
+.usage-table td.num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.usage-cant { margin: 0 0 var(--space-2); padding-left: 18px; }
+.usage-cant li { margin: 3px 0; }
+@media (min-width: 1024px) {
+  .usage-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .usage-n { font-size: 30px; }
+  .usage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .usage-grid > [data-testid="usage-days"] { grid-column: span 2; }
+}

@@ -167,7 +167,7 @@ export function userManagementView(ctx: ViewContext): View {
       el('section', { class: 'card' }, el('h2', null, 'User management'), el('p', { class: 'small muted' }, 'New accounts wait here for approval. Reject or disable signs them out.'), count),
       notice,
       list,
-      el('section', { class: 'card' }, rowGroup(null, linkRow('Ask costs', '#/admin', { hint: 'Which service answered and what it cost', testId: 'admin-costs-link' }))),
+      el('section', { class: 'card' }, rowGroup(null, linkRow('Usage', '#/admin/usage', { hint: 'Anonymous counts: screens, listens, devices, errors', testId: 'admin-usage-link' }), linkRow('Ask costs', '#/admin', { hint: 'Which service answered and what it cost', testId: 'admin-costs-link' }))),
     );
     notice.hidden = !notice.textContent;
     count.textContent = 'Loading…';

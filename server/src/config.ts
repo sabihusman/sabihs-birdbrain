@@ -32,6 +32,13 @@ const envSchema = z.object({
   ANTHROPIC_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
   /** eBird API 2.0 key (optional): without it /v1/ask answers without eBird sightings. Never logged. */
   EBIRD_API_KEY: z.string().trim().min(1).optional(),
+  /**
+   * Admin › Usage (DECISIONS.md #121): a PostHog personal API key with read-only query access to one project, and that
+   * project's id. Without both the page says it is not set up. The key is never logged or sent to the app.
+   */
+  POSTHOG_PERSONAL_API_KEY: z.string().trim().min(1).optional(),
+  POSTHOG_PROJECT_ID: z.string().trim().regex(/^\d+$/, 'a number').optional(),
+  POSTHOG_APP_HOST: z.string().trim().url().default('https://us.posthog.com'),
   ASK_DAILY_PER_USER: z.coerce.number().int().min(0).default(20),
   ASK_DAILY_GLOBAL: z.coerce.number().int().min(0).default(200),
   ASK_MAX_QUESTION_CHARS: z.coerce.number().int().min(1).max(500).default(500),

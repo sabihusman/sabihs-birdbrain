@@ -9,6 +9,7 @@ import { mapView } from './views/map';
 import { settingsView } from './views/settings';
 import { helpView } from './views/help';
 import { whatsNewView } from './views/whats-new';
+import { usageView } from './views/admin-usage';
 import { effectiveLayout } from '../app/access';
 import { UsageCounts, usageConfig } from '../app/usage-counts';
 import { audienceFor, pageOf, wireUsageCounts } from '../app/usage-wiring';
@@ -71,6 +72,7 @@ function tabGroup(route: Route): string {
     case 'whats-new':
     case 'admin':
     case 'admin-users':
+    case 'admin-usage':
     case 'signin':
     case 'signup':
     case 'forgot-password':
@@ -228,6 +230,9 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
         break;
       case 'admin-users':
         current = userManagementView(ctx);
+        break;
+      case 'admin-usage':
+        current = usageView(ctx);
         break;
       case 'signin':
         current = signInView(ctx);

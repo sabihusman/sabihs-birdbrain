@@ -1,3 +1,4 @@
+import type { UsageStats } from '../src/usage-stats.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { createApp, type App } from '../src/app.js';
 import type { AnswerModel } from '../src/ask.js';
@@ -36,7 +37,7 @@ export interface TestApp {
   db?: DatabaseSync;
 }
 
-export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerModel | null; env?: Partial<NodeJS.ProcessEnv>; limits?: Parameters<typeof createApp>[0]['limits']; mailer?: Mailer; now?: () => number; providerUsage?: ProviderUsageStore } = {}): Promise<TestApp> {
+export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerModel | null; env?: Partial<NodeJS.ProcessEnv>; limits?: Parameters<typeof createApp>[0]['limits']; mailer?: Mailer; now?: () => number; providerUsage?: ProviderUsageStore; usage?: UsageStats } = {}): Promise<TestApp> {
   const config = testConfig(opts.env);
   const db = openDatabase(':memory:');
   await migrateAuth(db, config);
@@ -52,7 +53,7 @@ export async function buildTestApp(opts: { wiki?: WikiFetcher; model?: AnswerMod
           return 'A plain answer from the source text.';
         }));
   const wiki: WikiFetcher = opts.wiki ?? (async (sci) => ({ title: sci, extract: `${sci} is a bird. It eats seeds.`, url: `https://en.wikipedia.org/wiki/${sci.replace(' ', '_')}` }));
-  const app = createApp({ config, db, auth, mailer: opts.mailer ?? mailer, labels: LABELS, wiki, model, limits: opts.limits, now: opts.now, providerUsage: opts.providerUsage });
+  const app = createApp({ config, db, auth, mailer: opts.mailer ?? mailer, labels: LABELS, wiki, model, limits: opts.limits, now: opts.now, providerUsage: opts.providerUsage, usage: opts.usage });
   return { app, mailer, config, modelCalls, db };
 }
 
