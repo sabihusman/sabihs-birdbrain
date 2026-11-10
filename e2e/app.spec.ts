@@ -3092,8 +3092,10 @@ test('usage counts: anonymous, route names only, nothing kept on the phone, off 
   // A bird was heard, but no bird name, position or species path left the page.
   const text = JSON.stringify(sent);
   expect(text).not.toMatch(/Redpoll|Acanthis|latitude|"lat"|"lon"/);
-  // Nothing written to the phone for the counts: no cookie, no PostHog storage.
-  expect(await context.cookies()).toEqual([]);
+  // Nothing written to the phone for the counts: no cookie for the app or PostHog (bird photos from Wikimedia set
+  // Wikimedia's own cookies when CI has network; those are not the counts'), no PostHog storage.
+  expect(await context.cookies(page.url())).toEqual([]);
+  expect((await context.cookies()).filter((c) => /posthog/i.test(c.domain))).toEqual([]);
   expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => /posthog|ph_/i.test(k)))).toEqual([]);
 
   // Off: not one more event.
