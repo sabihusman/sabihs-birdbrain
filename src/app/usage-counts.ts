@@ -12,7 +12,7 @@ import type { ListenLayout } from './settings';
  * by mistake. Pages are sent by route name only (`#/species-detail`, never the species).
  *
  * Off when the build has no key (`VITE_POSTHOG_KEY`), when the Settings › Privacy switch is off, and when the
- * browser sends Global Privacy Control or Do Not Track.
+ * browser sends Global Privacy Control or Do Not Track, and for browsers run by automation (`navigator.webdriver`).
  */
 
 /** Route names, the only part of the address that is sent. */
@@ -229,6 +229,8 @@ export class UsageCounts {
       enabled: () => boolean;
       audience: () => Audience;
       browserBlocked?: () => boolean;
+      /** Automation (test tools, many scrapers): `navigator.webdriver`. */
+      automated?: () => boolean;
       env?: () => PageEnv;
       send?: Sender;
       now?: () => Date;
@@ -245,8 +247,17 @@ export class UsageCounts {
     return (this.opts.browserBlocked ?? (() => browserSaysNo(typeof navigator === 'undefined' ? undefined : (navigator as Navigator & { globalPrivacyControl?: boolean }))))();
   }
 
+  /**
+   * A browser driven by automation says so in `navigator.webdriver` (test tools and many crawlers; never a person's
+   * phone). Its visits are not counted: the first live numbers (Nov 10) were all such visits, and they also filled
+   * "Couldn't run (old browser)", as crawlers often have no audio.
+   */
+  get automated(): boolean {
+    return (this.opts.automated ?? (() => typeof navigator !== 'undefined' && navigator.webdriver === true))();
+  }
+
   get active(): boolean {
-    return this.configured && !this.blockedByBrowser && this.opts.enabled();
+    return this.configured && !this.blockedByBrowser && !this.automated && this.opts.enabled();
   }
 
   /** Remember the page for later events; sends a page view. */

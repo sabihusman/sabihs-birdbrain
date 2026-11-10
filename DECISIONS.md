@@ -3210,7 +3210,9 @@ Each finding was checked against the code first.
   as Sabih asked, and in What we store.
 - **Off when:** the build has no `VITE_POSTHOG_KEY` (the project token, public by design; set in Vercel), the
   Settings › Privacy switch "Anonymous usage counts" is off (`usageCounts`, on by default), the browser sends Global
-  Privacy Control or Do Not Track (the switch then shows off and says why), or the phone is offline. Nothing is stored
+  Privacy Control or Do Not Track (the switch then shows off and says why), or the phone is offline. Since Nov 10 also when
+  `navigator.webdriver` is true (test tools and many crawlers): the first live numbers were three such desktop
+  visits in UTC, and four "Couldn't run" from crawlers without audio. e2e plays a person by overriding it. Nothing is stored
   for the counts; the switch itself is an ordinary setting.
 - **Tests:** `tests/usage-counts.test.ts` (no key / off / GPC send nothing; the exact body; bird names, positions,
   emails and questions dropped even when forced in; device names; the controller's events, including a BirdAmp
