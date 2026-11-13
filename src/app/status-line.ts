@@ -3,9 +3,9 @@ import type { PlaceLabel } from '../geo/geocode';
 
 /**
  * Listen's one status line before listening (DECISIONS.md #108), replacing the three pills (a plus code, "Week 41
- * birds", "Min. 70%"): plain words, nothing that looks tappable, the same in every layout.
- *   "Near Johnston · October birds · Only matches 70% or more"
- *   "No location · All year · Only matches 70% or more" + "Turn on location to filter for your area ›"
+ * birds", "Min. 60%"): plain words, nothing that looks tappable, the same in every layout.
+ *   "Near Johnston · October birds · Only matches 60% or more"
+ *   "No location · All year · Only matches 60% or more" + "Turn on location to filter for your area ›"
  */
 export interface StatusLine {
   text: string;
