@@ -3275,3 +3275,13 @@ Each finding was checked against the code first.
   told apart.
 - **Unchanged:** the auto-save bar for "Detection window" clips stays at 70 % (#95, #96); it is never below the
   detection minimum. The confidence words (`LIKELY = 0.7` in `src/ui/confidence-text.ts`) are labels, not the minimum.
+
+## 124. Auto-save bar back to 60 % too
+
+- **Why (Sabih, Nov 13):** "set the auto-save to 60 too", after #123 moved the detection minimum back to 60 %.
+- **Now:** `DEFAULT_SETTINGS.autoSaveMinConfidence` is 0.6. Settings version 6 moves a saved 70 % auto-save bar (its
+  default since Oct 25, #95, saved with every settings change) to 60 % once; any other value stays, and after the
+  move 70 % is a choice again. The bar is still never below the detection minimum, so a phone at 80 % keeps saving
+  from 80 %. The same caveat as #123: a deliberately chosen 70 % made before today also moves.
+- **Effect:** live detections from 60 % to 69 % now save their 3 s "Detection window" clip as well, still only when
+  more confident than the last one saved for that bird (#96), so Recordings may fill a little faster.

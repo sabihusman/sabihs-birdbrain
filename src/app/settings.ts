@@ -41,8 +41,8 @@ export interface Settings {
   usageCounts: boolean;
 }
 
-/** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. 5: back to 60 % from 70 %. */
-export const SETTINGS_VERSION = 5;
+/** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. 5: back to 60 % from 70 %. 6: auto-save too. */
+export const SETTINGS_VERSION = 6;
 /** Default confidence threshold before version 2; a saved 25 % is migrated once to the default of the time. */
 export const LEGACY_DEFAULT_THRESHOLD = 0.25;
 /**
@@ -69,7 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
   geoThreshold: GEO_FILTER_THRESHOLD,
   useWeek: true,
   autoSaveClips: true,
-  autoSaveMinConfidence: 0.7,
+  // 60 % like the detection minimum (Sabih, Nov 13, DECISIONS.md #124).
+  autoSaveMinConfidence: 0.6,
   backend: 'auto',
   occlusionResolution: 'medium',
   includeNonBird: false,
@@ -132,6 +133,7 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
  * (new default for everyone); turning it off afterwards is kept.
  * Version 3 → 4: "Why this ID" resolution set to Medium once; later choices are kept.
  * Version 4 → 5: a saved 70 % threshold (the default of Oct 25 – Nov 13) becomes 60 % once; any other value stays.
+ * Version 5 → 6: the same for the auto-save bar: a saved 70 % (its default since Oct 25) becomes 60 % once.
  */
 export function migrate(parsed: Partial<Settings>): Settings {
   const stored = { ...DEFAULT_SETTINGS, ...parsed };
@@ -146,6 +148,9 @@ export function migrate(parsed: Partial<Settings>): Settings {
   // phone (the whole settings object is saved on any change), so it moves; 55 %, 80 % and the rest were chosen.
   // Compared in whole percent, so a 70 % saved as 0.7000000000000001 by a slider counts too.
   if (from < 5 && typeof parsed.threshold === 'number' && Math.round(parsed.threshold * 100) === Math.round(DEFAULT_70_THRESHOLD * 100)) stored.threshold = DEFAULT_SETTINGS.threshold;
+  // Version 6: the auto-save bar follows (DECISIONS.md #124). Same reasoning: a stored 70 % is the old default; it is
+  // still never below the detection minimum (sanitize), so a phone at 80 % keeps saving from 80 %.
+  if (from < 6 && typeof parsed.autoSaveMinConfidence === 'number' && Math.round(parsed.autoSaveMinConfidence * 100) === Math.round(DEFAULT_70_THRESHOLD * 100)) stored.autoSaveMinConfidence = DEFAULT_SETTINGS.autoSaveMinConfidence;
   stored.version = SETTINGS_VERSION;
   return stored;
 }
