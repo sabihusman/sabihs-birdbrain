@@ -45,6 +45,9 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
       'Listen sends your position, rounded to about 1 km, to OpenStreetMap’s Nominatim to name the nearest town. The name is kept on this phone.',
       // src/geo/place-search.ts (DECISIONS.md #105): only when someone presses Search in Species › Pick a place.
       'Species › Pick a place sends the town name you type to OpenStreetMap’s Nominatim to find it. Nothing else.',
+      // Checked on the live app, Nov 13 (DECISIONS.md #125): photos from thumb.wikimedia.org set NetworkProbeLimit (1 hour)
+      // and WMF-Uniq (1 year); the Wikipedia text is fetched without cookies and sets none.
+      'Bird photos load from Wikimedia, which sees each request like any website and may leave its own cookies on this phone (one lasts a year). They are Wikimedia’s, not ours, and some browsers block them.',
     ],
   },
   {

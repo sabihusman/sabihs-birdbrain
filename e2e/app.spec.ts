@@ -891,6 +891,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(wws).toContainText('Sightings stay on your phone');
   await wws.getByText('What we store').click();
   await expect(wws).toContainText('Only on this phone');
+  await expect(wws).toContainText('Bird photos load from Wikimedia'); // Wikimedia's own cookies (DECISIONS.md #125)
   await expect(wws).toContainText('and from nightly backups within 14 days.');
   // My account: grouped rows, sharing and friends open (not folded), deleting on its own screen (DECISIONS.md #43, #57, #79).
   await page.getByTestId('my-account-link').click();
