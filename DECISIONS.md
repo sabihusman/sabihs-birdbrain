@@ -3285,3 +3285,14 @@ Each finding was checked against the code first.
   from 80 %. The same caveat as #123: a deliberately chosen 70 % made before today also moves.
 - **Effect:** live detections from 60 % to 69 % now save their 3 s "Detection window" clip as well, still only when
   more confident than the last one saved for that bird (#96), so Recordings may fill a little faster.
+
+## 125. What we store names Wikimedia's cookies
+
+- **Why (Sabih, Nov 13):** CI showed that bird photos leave Wikimedia cookies on the phone, and What we store did not
+  say so.
+- **Checked on the live app (Nov 13, headless Chromium):** a species page loads its photo from `thumb.wikimedia.org`,
+  which sets `NetworkProbeLimit` (1 hour) and `WMF-Uniq` (1 year, `SameSite=None`). The Wikipedia text comes from
+  `en.wikipedia.org` by `fetch` without credentials, so its `Set-Cookie` headers are ignored and nothing is kept.
+- **Now:** "Only on this phone" in What we store says: "Bird photos load from Wikimedia, which sees each request like
+  any website and may leave its own cookies on this phone (one lasts a year). They are Wikimedia’s, not ours, and
+  some browsers block them." No code change to the photos themselves.
