@@ -144,7 +144,8 @@ export function migrate(parsed: Partial<Settings>): Settings {
   if (from < 4) stored.occlusionResolution = 'medium';
   // Version 5: the minimum moved back to 60 % (DECISIONS.md #123). A stored 70 % is the old default on almost every
   // phone (the whole settings object is saved on any change), so it moves; 55 %, 80 % and the rest were chosen.
-  if (from < 5 && parsed.threshold === DEFAULT_70_THRESHOLD) stored.threshold = DEFAULT_SETTINGS.threshold;
+  // Compared in whole percent, so a 70 % saved as 0.7000000000000001 by a slider counts too.
+  if (from < 5 && typeof parsed.threshold === 'number' && Math.round(parsed.threshold * 100) === Math.round(DEFAULT_70_THRESHOLD * 100)) stored.threshold = DEFAULT_SETTINGS.threshold;
   stored.version = SETTINGS_VERSION;
   return stored;
 }

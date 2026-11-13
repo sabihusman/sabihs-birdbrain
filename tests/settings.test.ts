@@ -55,7 +55,8 @@ describe('SettingsStore', () => {
   it('moves a saved 70 % (the Oct 25 – Nov 13 default) to 60 % once, and keeps every other choice (DECISIONS.md #123)', () => {
     // Saved under the 70 % default: the whole object is stored on any change, so 70 % is almost always the default.
     expect(migrate({ ...DEFAULT_SETTINGS, threshold: 0.7, autoSaveMinConfidence: 0.7, version: 4 })).toMatchObject({ threshold: 0.6, autoSaveMinConfidence: 0.7, version: 5 });
-    for (const chosen of [0.5, 0.55, 0.65, 0.75, 0.8, 0.9]) expect(migrate({ ...DEFAULT_SETTINGS, threshold: chosen, version: 4 }).threshold).toBe(chosen);
+    expect(migrate({ threshold: 0.7000000000000001, version: 4 }).threshold).toBe(0.6);
+    for (const chosen of [0.5, 0.55, 0.65, 0.69, 0.71, 0.75, 0.8, 0.9]) expect(migrate({ ...DEFAULT_SETTINGS, threshold: chosen, version: 4 }).threshold).toBe(chosen);
     // Once on version 5, 70 % is a choice again and stays.
     const storage = new MemoryStorage();
     storage.setItem('birdbrain.settings.v1', JSON.stringify({ ...DEFAULT_SETTINGS, threshold: 0.7, version: 4 }));
