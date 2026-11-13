@@ -33,7 +33,7 @@ export interface BirdAmpParts {
   spectrogram: SpectrogramView;
   /** The Listen state as the other layouts see it. */
   status: () => ListenStatus;
-  /** The status line's words ("Near Johnston · November birds · Only matches 70% or more"). */
+  /** The status line's words ("Near Johnston · November birds · Only matches 60% or more"). */
   areaText: () => string;
   /** The town for NEAR YOU, when known. */
   place: () => string | null;

@@ -7,8 +7,8 @@ describe('SettingsStore', () => {
     const storage = new MemoryStorage();
     const s = new SettingsStore(storage);
     expect(s.get().threshold).toBe(DEFAULT_SETTINGS.threshold);
-    // New phones start at 70 % (DECISIONS.md #95).
-    expect(DEFAULT_SETTINGS.threshold).toBe(0.7);
+    // New phones start at 60 % again (DECISIONS.md #123; it was 70 % from Oct 25, #95).
+    expect(DEFAULT_SETTINGS.threshold).toBe(0.6);
     s.update({ threshold: 0.4 });
     expect(new SettingsStore(storage).get().threshold).toBe(0.4);
     s.update({ threshold: 5 });
@@ -46,19 +46,36 @@ describe('SettingsStore', () => {
   it('leaves a user-chosen threshold alone', () => {
     expect(migrate({ threshold: 0.3 }).threshold).toBe(0.3);
     expect(migrate({ threshold: 0.25, version: 2 }).threshold).toBe(0.25);
-    expect(migrate({}).threshold).toBe(0.7);
+    expect(migrate({}).threshold).toBe(0.6);
     expect(migrate({ threshold: 0.25, version: 1 }).threshold).toBe(0.6);
     // A phone that saved settings under the 60 % default keeps 60 %: the saved value wins over the new default.
     expect(migrate({ ...DEFAULT_SETTINGS, threshold: 0.6, version: 4 }).threshold).toBe(0.6);
   });
 
+  it('moves a saved 70 % (the Oct 25 – Nov 13 default) to 60 % once, and keeps every other choice (DECISIONS.md #123)', () => {
+    // Saved under the 70 % default: the whole object is stored on any change, so 70 % is almost always the default.
+    expect(migrate({ ...DEFAULT_SETTINGS, threshold: 0.7, autoSaveMinConfidence: 0.7, version: 4 })).toMatchObject({ threshold: 0.6, autoSaveMinConfidence: 0.7, version: 5 });
+    expect(migrate({ threshold: 0.7000000000000001, version: 4 }).threshold).toBe(0.6);
+    for (const chosen of [0.5, 0.55, 0.65, 0.69, 0.71, 0.75, 0.8, 0.9]) expect(migrate({ ...DEFAULT_SETTINGS, threshold: chosen, version: 4 }).threshold).toBe(chosen);
+    // Once on version 5, 70 % is a choice again and stays.
+    const storage = new MemoryStorage();
+    storage.setItem('birdbrain.settings.v1', JSON.stringify({ ...DEFAULT_SETTINGS, threshold: 0.7, version: 4 }));
+    const s = new SettingsStore(storage);
+    expect(s.get().threshold).toBe(0.6);
+    s.update({ threshold: 0.7 });
+    expect(new SettingsStore(storage).get().threshold).toBe(0.7);
+    // Sabih's own phone, at 80 %, is untouched.
+    expect(migrate({ threshold: 0.8, version: 4 }).threshold).toBe(0.8);
+  });
+
   it('never lets the auto-save threshold fall below the detection threshold', () => {
+    // Auto-saved clips keep their 70 % bar (#95); only the detection minimum moved (#123).
     expect(DEFAULT_SETTINGS.autoSaveMinConfidence).toBe(0.7);
     expect(sanitize({ ...DEFAULT_SETTINGS, threshold: 0.7, autoSaveMinConfidence: 0.5 }).autoSaveMinConfidence).toBe(0.7);
     expect(sanitize({ ...DEFAULT_SETTINGS, threshold: 0.3, autoSaveMinConfidence: 0.5 }).autoSaveMinConfidence).toBe(0.5);
     const s = new SettingsStore(new MemoryStorage());
     s.update({ autoSaveMinConfidence: 0.2 });
-    expect(s.get().autoSaveMinConfidence).toBe(0.7);
+    expect(s.get().autoSaveMinConfidence).toBe(0.6); // floored at the 60 % detection minimum
     s.update({ threshold: 0.8 });
     expect(s.get().autoSaveMinConfidence).toBe(0.8);
     // an old store with 50 % auto-save and the migrated threshold ends at 60 %

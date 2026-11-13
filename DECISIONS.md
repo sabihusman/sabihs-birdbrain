@@ -3262,3 +3262,16 @@ Each finding was checked against the code first.
   - Focus stays one column, as in the approved mockup. Phones are unchanged.
 - **Tests:** e2e at 1024, 1280 and 1440 px (tabs in the header with 44 px targets, two columns, no sideways scroll,
   a 2,400 px right column leaves the left blocks in place, Dock and Focus), then back to 390 px.
+
+## 123. Default confidence minimum back to 60 %
+
+- **Why (Sabih, Nov 13):** "Set the default detection score to 60 for all users, especially new ones. The ones that
+  have already updated their settings, let them be." This reverses #95 for the detection minimum.
+- **Now:** `DEFAULT_SETTINGS.threshold` is 0.6, so new phones start at 60 %. Settings version 5 moves a saved 70 % to
+  60 % once (`DEFAULT_70_THRESHOLD`): the app stores the whole settings object on any change, so a phone that never
+  touched the slider has 70 % saved, and that is the case to move. Any other saved value (55 %, 80 %, …) was chosen and
+  stays; after the migration 70 % is a choice again and stays too. A phone where someone picked exactly 70 % between
+  Oct 25 and Nov 13 also moves to 60 %: the app kept no record of whether the slider was touched, so the two cannot be
+  told apart.
+- **Unchanged:** the auto-save bar for "Detection window" clips stays at 70 % (#95, #96); it is never below the
+  detection minimum. The confidence words (`LIKELY = 0.7` in `src/ui/confidence-text.ts`) are labels, not the minimum.

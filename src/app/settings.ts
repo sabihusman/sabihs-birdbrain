@@ -41,8 +41,8 @@ export interface Settings {
   usageCounts: boolean;
 }
 
-/** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. */
-export const SETTINGS_VERSION = 4;
+/** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. 5: back to 60 % from 70 %. */
+export const SETTINGS_VERSION = 5;
 /** Default confidence threshold before version 2; a saved 25 % is migrated once to the default of the time. */
 export const LEGACY_DEFAULT_THRESHOLD = 0.25;
 /**
@@ -50,10 +50,17 @@ export const LEGACY_DEFAULT_THRESHOLD = 0.25;
  * always carry their threshold, so phones that saved one keep it; the 25 % migration still lands here.
  */
 export const PREVIOUS_DEFAULT_THRESHOLD = 0.6;
+/**
+ * The default for new phones from 2026-10-25 to 2026-11-13 (DECISIONS.md #95). Version 5 moves a saved 70 % back to the
+ * default once (#123): saved settings always carry the threshold, so a phone that never touched the slider has 70 %
+ * stored too. Any other value was chosen and stays.
+ */
+export const DEFAULT_70_THRESHOLD = 0.7;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
-  threshold: 0.7,
+  // 60 % for everyone who has not chosen another minimum (Sabih, Nov 13, DECISIONS.md #123).
+  threshold: 0.6,
   overlapSeconds: DEFAULT_OVERLAP_SECONDS,
   locationMode: 'auto',
   manualLat: null,
@@ -124,6 +131,7 @@ export class SettingsStore extends Emitter<{ change: Settings }> {
  * Version 2 → 3: auto-saving 3-second detection windows is switched on once
  * (new default for everyone); turning it off afterwards is kept.
  * Version 3 → 4: "Why this ID" resolution set to Medium once; later choices are kept.
+ * Version 4 → 5: a saved 70 % threshold (the default of Oct 25 – Nov 13) becomes 60 % once; any other value stays.
  */
 export function migrate(parsed: Partial<Settings>): Settings {
   const stored = { ...DEFAULT_SETTINGS, ...parsed };
@@ -134,6 +142,10 @@ export function migrate(parsed: Partial<Settings>): Settings {
   if (from < 3) stored.autoSaveClips = true;
   // Version 4: "Why this ID" resolution moved to Medium for everyone, once (DECISIONS.md #62).
   if (from < 4) stored.occlusionResolution = 'medium';
+  // Version 5: the minimum moved back to 60 % (DECISIONS.md #123). A stored 70 % is the old default on almost every
+  // phone (the whole settings object is saved on any change), so it moves; 55 %, 80 % and the rest were chosen.
+  // Compared in whole percent, so a 70 % saved as 0.7000000000000001 by a slider counts too.
+  if (from < 5 && typeof parsed.threshold === 'number' && Math.round(parsed.threshold * 100) === Math.round(DEFAULT_70_THRESHOLD * 100)) stored.threshold = DEFAULT_SETTINGS.threshold;
   stored.version = SETTINGS_VERSION;
   return stored;
 }
