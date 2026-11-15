@@ -64,6 +64,9 @@ Key modules:
   manual / off and BirdNET week (`src/model/geo.ts`).
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs; from 1024 px (`WIDE_SCREEN`) the same
   tabs move into the header and Consolidated / Dock use two columns (`.listen-two`, `.listen-side`; DECISIONS.md #122).
+- ⇅ Flip (`src/ui/flip.ts`, DECISIONS.md #126): while listening on a phone, turns the whole app 180°
+  (`html[data-flipped]` rotates `.app`, safe areas swap) for pointing the phone's bottom at a bird; a 3 s bubble after
+  Start points at it; back when listening stops. Elements appended to `<body>` (dialogs) do not turn.
 - `src/species/colors.ts` — deterministic OKLCH species colours;
   `src/species/wiki.ts` — Wikipedia REST summary with IndexedDB cache;
   `src/species/wiki-sections.ts` — Description / Song / Habitat / Diet

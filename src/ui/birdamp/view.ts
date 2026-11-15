@@ -3,6 +3,7 @@ import { groupRecent } from '../../species/recent';
 import { listSightedSpecies, listSightings } from '../../storage/db';
 import type { SightingRecord } from '../../storage/types';
 import { el } from '../dom';
+import { flipLabels, isFlipped, onFlip, setFlipped } from '../flip';
 import { keyedPool, syncChildren } from '../keyed';
 import { hrefFor } from '../router';
 import type { ListenStatus } from '../status';
@@ -42,6 +43,8 @@ export interface BirdAmpParts {
   stop: () => void;
   /** Start or stop saving what the mic hears, as the panel's ● Record does. */
   record: () => void;
+  /** ⇅ Flip was turned on here (for the usage counts, DECISIONS.md #126). */
+  onFlipOn?: () => void;
 }
 
 export interface BirdAmpView {
@@ -106,9 +109,12 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   const nextBtn = tKey('⏭', 'Next', 'Next bird', 'ba-next');
   // Where Winamp's ⏏ was: ● REC saves what the mic hears to Recordings (Sabih's choice, DECISIONS.md #119).
   const recBtn = tKey('●', 'Rec', 'Record', 'ba-rec');
+  // ⇅ beside ● REC turns the whole app for pointing the phone's bottom at a bird (DECISIONS.md #126); hidden on a computer.
+  const flipKey = tKey('⇅', 'Flip', flipLabels(false).aria, 'ba-flip');
+  flipKey.classList.add('flip-btn');
   const eqBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Confidence window', 'aria-pressed': 'true', 'data-testid': 'ba-eq' }, 'EQ');
   const plBtn = el('button', { class: 'ba-toggle', type: 'button', 'aria-label': 'Show or hide the Playlist window', 'aria-pressed': 'true', 'data-testid': 'ba-pl' }, 'PL');
-  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, recBtn, el('span', { class: 'ba-eqpl' }, eqBtn, plBtn));
+  const transport = el('div', { class: 'ba-transport' }, prevBtn, listenBtn, pauseBtn, stopBtn, nextBtn, recBtn, flipKey, el('span', { class: 'ba-eqpl' }, eqBtn, plBtn));
   // The area filter is shown, not set, here: it is edited in Settings.
   const area = el('a', { class: 'ba-area', href: '#/settings', 'data-testid': 'ba-area' }, '');
   const playerBody = el('div', { class: 'ba-body' }, el('div', { class: 'ba-main' }, lcdLeft, lcdRight), specSlot, transport, area);
@@ -281,6 +287,11 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
   for (const b of [pauseBtn, shadePause]) b.addEventListener('click', () => p.pause());
   for (const b of [stopBtn, shadeStop]) b.addEventListener('click', () => p.stop());
   recBtn.addEventListener('click', () => p.record());
+  flipKey.addEventListener('click', () => {
+    const next = !isFlipped();
+    setFlipped(next);
+    if (next) p.onFlipOn?.();
+  });
 
   // ---- playlist data --------------------------------------------------------------------------
   let sightings: SightingRecord[] | null = null;
@@ -412,6 +423,12 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     pauseBtn.disabled = shadePause.disabled = !live;
     stopBtn.disabled = shadeStop.disabled = !(live || paused || st === 'paused');
     prevBtn.disabled = nextBtn.disabled = groups.length < 2;
+    // Flip makes sense while the mic is on; once flipped it can always be turned back.
+    const flipped = isFlipped();
+    flipKey.disabled = !live && !flipped;
+    flipKey.setAttribute('aria-pressed', String(flipped));
+    flipKey.setAttribute('aria-label', flipLabels(flipped).aria);
+    flipKey.classList.toggle('on', flipped);
     // Recording needs the mic on; Pause and Stop save a recording in progress, as on the panel.
     const rec = controller.getRecordingState();
     recBtn.disabled = !live && !rec.recording;
@@ -449,6 +466,7 @@ export function birdAmpView(p: BirdAmpParts): BirdAmpView {
     controller.on('local-species', () => {
       if (tab === 'near') renderLibrary(false);
     }),
+    onFlip(() => render()),
   ];
 
   renderWindows();

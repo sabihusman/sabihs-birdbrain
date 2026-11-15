@@ -3296,3 +3296,30 @@ Each finding was checked against the code first.
 - **Now:** "Only on this phone" in What we store says: "Bird photos load from Wikimedia, which sees each request like
   any website and may leave its own cookies on this phone (one lasts a year). They are Wikimedia’s, not ours, and
   some browsers block them." No code change to the photos themselves.
+
+## 126. ⇅ Flip: turn the screen for pointing the phone at a bird
+
+- **Why (Sabih, Nov 15):** people point the bottom of the phone (where most phones have a microphone) at the bird,
+  which holds the screen upside down for them. Of the mockups (A Flip button, B automatic with the motion sensor,
+  C a simpler pointing view), Sabih chose A, plus a bubble during listening that shows for 3 seconds (mockup approved
+  the same day). Web pages cannot lock or set the screen orientation on iPhone (Safari has no
+  `screen.orientation.lock`), so the app turns itself. Which physical microphone Safari records from is not
+  documented; the feature does not depend on it.
+- **Now:** `src/ui/flip.ts`.
+  - ⇅ Flip sits next to Record on the listening panel (Consolidated, Focus), in the bar next to Stop (Bottom dock) and
+    beside ● REC in BirdAmp (on narrow phones BirdAmp's EQ and PL take their own row so the seven keys stay ~37 px
+    wide). It shows only while listening; tapping sets `html[data-flipped="true"]`, which turns `.app` 180° and swaps
+    the safe-area insets (the Dynamic Island and home bar change ends). "⇅ Flipped" (pressed) turns it back.
+  - It stays through a BirdAmp pause and turns back when listening stops (`src/ui/app.ts`). From 1024 px there is no
+    Flip and no bubble: a computer is not pointed at birds.
+  - The bubble: once per fresh start (not BirdAmp's carry-on), a `role="status"` line "Pointing the bottom at a bird?
+    Tap ⇅ Flip to turn the screen." points at the button for 3 s, fading over the last 300 ms (no motion with reduced
+    motion). Above a low panel (Focus, Dock) or under a button in the top half (Consolidated, BirdAmp), never over the
+    timer. Gone early on any tap or scroll, or when the screen flips; it never takes a tap itself.
+  - The usage counts get `screen_flipped` with the layout only (#120); Settings › Privacy and What we store say so.
+- **Checked here (Chromium):** taps hit the right buttons on the turned screen, and touch scrolling follows the finger
+  as the person sees it (a drag "up" in their view scrolls down, as when upright). **Not checked:** Safari on iPhone,
+  where scrolling a rotated page and the safe areas must be tried on a device.
+- **Tests:** `tests/flip.test.ts` (words, bubble placement, the count); e2e (bubble shows and leaves within ~3 s, tap
+  dismisses it, the turn and turn-back, Stop through the turned screen, header and tabs swap ends, Dock, BirdAmp
+  through Pause, none at 1280 px, 320 px without sideways scroll).
