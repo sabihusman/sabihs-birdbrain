@@ -925,3 +925,32 @@ html.wn-open, html.wn-open body { overflow: hidden; }
   .listen-birdamp-layout .ba-win[data-win="player"], .listen-birdamp-layout .ba-win[data-win="confidence"] { grid-column: 1; }
   .listen-birdamp-layout .ba-win[data-win="library"] { grid-column: 2; grid-row: 1 / span 2; }
 }
+
+/*
+ * ⇅ Flip (DECISIONS.md #126): the whole app turns 180° for pointing the phone's bottom (its microphone) at a bird.
+ * Turned, the Dynamic Island and the home bar swap ends, so the safe-area insets swap too. Phones and tablets only.
+ */
+@media (max-width: 1023px) {
+  html[data-flipped="true"] { --sat: env(safe-area-inset-bottom, 0px); --sab: env(safe-area-inset-top, 0px); --sal: env(safe-area-inset-right, 0px); --sar: env(safe-area-inset-left, 0px); }
+  html[data-flipped="true"] .app { transform: rotate(180deg); }
+}
+@media (min-width: 1024px) {
+  .flip-btn, .flip-hint { display: none !important; }
+}
+.flip-btn.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.flip-hint { position: fixed; z-index: 40; max-width: 250px; padding: 10px 14px; border-radius: 14px; background: var(--text); color: var(--page); font-size: 15px; line-height: 1.35; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35); pointer-events: none; animation: flip-hint-in 200ms ease-out; transition: opacity 300ms ease-in; }
+.flip-hint.leaving { opacity: 0; }
+.flip-hint-tip { position: absolute; width: 14px; height: 14px; background: var(--text); transform: rotate(45deg); border-radius: 2px; }
+.flip-hint.above .flip-hint-tip { bottom: -6px; }
+.flip-hint.below .flip-hint-tip { top: -6px; }
+.flip-hint > span:last-child { position: relative; }
+@keyframes flip-hint-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .flip-hint { animation: none; transition: none; }
+}
+/* With ⇅ Flip there are seven keys: on narrow phones EQ and PL take their own row, so each key keeps ~40 px of width. */
+@media (max-width: 400px) {
+  .ba-transport { flex-wrap: wrap; row-gap: 3px; }
+  .ba-transport .ba-eqpl { flex: 1 0 100%; margin-left: 0; }
+  .ba-transport .ba-eqpl .ba-toggle { flex: 1 1 0; width: auto; min-height: 36px; }
+}

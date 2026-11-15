@@ -2771,8 +2771,9 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('ba-clock')).toHaveText('00:00');
   await expect(page.getByTestId('ba-pause')).toBeDisabled();
   await expect(page.getByTestId('ba-area')).toContainText('No location');
-  // ● REC needs the mic on (DECISIONS.md #119).
+  // ● REC needs the mic on (DECISIONS.md #119), and so does ⇅ Flip (#126).
   await expect(page.getByTestId('ba-rec')).toBeDisabled();
+  await expect(page.getByTestId('ba-flip')).toBeDisabled();
   // Listen: the clock runs, the marquee and the Library get the bird.
   await page.getByTestId('ba-listen').click();
   await expect(page.getByTestId('model-status')).toHaveText('Live');
@@ -2798,8 +2799,15 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await rec.click();
   await expect(page.getByText(/^Saved “.+” \(\d+:\d{2}\)\. Find it under Recordings\.$/)).toBeVisible();
   await expect(rec).toHaveAttribute('aria-pressed', 'false');
+  // ⇅ Flip beside ● REC turns the whole app; it stays turned through Pause and turns back on Stop (below).
+  const flipKey = page.getByTestId('ba-flip');
+  await expect(flipKey).toBeEnabled();
+  await flipKey.click();
+  await expect(page.locator('html')).toHaveAttribute('data-flipped', 'true');
+  await expect(flipKey).toHaveAttribute('aria-pressed', 'true');
   // Pause: the mic is released, the clock holds, the birds stay.
   await page.getByTestId('ba-pause').click();
+  await expect(page.locator('html')).toHaveAttribute('data-flipped', 'true');
   await expect(page.getByTestId('model-status')).toHaveText('Paused');
   await expect(page.getByTestId('ba-state')).toContainText('Paused');
   await expect(page.getByTestId('ba-marquee')).toContainText('Paused · ▶ to go on · Last:');
@@ -2824,6 +2832,7 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('ba-shade-bird')).toContainText('%');
   await page.getByTestId('ba-shade-stop').click();
   await expect(page.getByTestId('model-status')).toHaveText('Ready');
+  await expect(page.locator('html')).not.toHaveAttribute('data-flipped', /.*/);
   await expect(page.getByTestId('ba-win-player').locator('.ba-titlebar')).toBeHidden();
   await page.getByTestId('ba-unshade-player').click();
   await expect(page.getByTestId('ba-shade')).toBeHidden();
@@ -3324,5 +3333,84 @@ test('desktop: tabs in the header, two columns on Listen (Consolidated, Dock), F
   const side = (await page.getByTestId('listen-side').boundingBox())!;
   expect(side.y).toBeGreaterThanOrEqual(ready.y + ready.height - 1);
   await noScroll('Consolidated at 390');
+  await context.close();
+});
+
+test('⇅ Flip: the bubble for 3 s after Start, the whole app turns and still works, back when listening stops; on every phone layout, never on a computer (DECISIONS.md #126)', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 320, height: 700 }, serviceWorkers: 'block', permissions: ['microphone'] });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/wikipedia\.org|wikimedia\.org|nominatim/, (route) => route.abort());
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  const html = page.locator('html');
+  const noScroll = async (label: string) => {
+    const m = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
+    expect(m.sw, label).toBeLessThanOrEqual(m.iw);
+  };
+
+  // Consolidated at 320 px: the bubble points at ⇅ Flip, then leaves on its own.
+  await page.getByTestId('start-stop').click();
+  const hint = page.getByTestId('flip-hint');
+  await expect(hint).toBeVisible({ timeout: 10_000 });
+  await expect(hint).toHaveText('Pointing the bottom at a bird? Tap ⇅ Flip to turn the screen.');
+  await expect(hint).toHaveAttribute('role', 'status');
+  await expect(hint).toBeHidden({ timeout: 4_500 });
+  const flip = page.getByTestId('flip');
+  await expect(flip).toHaveText('⇅ Flip');
+  await expect(flip).toHaveAttribute('aria-pressed', 'false');
+  expect((await flip.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await noScroll('panel with Flip at 320 px');
+
+  // One tap turns the whole app; buttons still work through the turn.
+  await flip.click();
+  await expect(html).toHaveAttribute('data-flipped', 'true');
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.app')!).transform)).toBe('matrix(-1, 0, 0, -1, 0, 0)');
+  await expect(flip).toHaveText('⇅ Flipped');
+  await expect(flip).toHaveAttribute('aria-pressed', 'true');
+  await noScroll('turned at 320 px');
+  // The header is now at the bottom of the glass (the end pointed at the bird), the tabs at the top.
+  const header = (await page.locator('.app-header').boundingBox())!;
+  const tabs = (await page.locator('nav.tabs').boundingBox())!;
+  expect(header.y).toBeGreaterThan(tabs.y);
+  // Tap again: back; tap once more, then Stop (a tap through the turned screen) turns it back too.
+  await flip.click();
+  await expect(html).not.toHaveAttribute('data-flipped', /.*/);
+  await flip.click();
+  await expect(html).toHaveAttribute('data-flipped', 'true');
+  await page.getByTestId('stop').click();
+  await expect(page.getByTestId('model-status')).not.toContainText('Listening');
+  await expect(html).not.toHaveAttribute('data-flipped', /.*/);
+
+  // A tap anywhere dismisses the bubble early.
+  await page.getByTestId('start-stop').click();
+  await expect(hint).toBeVisible({ timeout: 10_000 });
+  await page.mouse.click(10, 300);
+  await expect(hint).toBeHidden({ timeout: 1_000 });
+  await page.getByTestId('stop').click();
+
+  // Bottom dock: ⇅ Flip in the bar while listening.
+  await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'dock' })));
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.getByTestId('dock-flip')).toBeHidden();
+  await page.getByTestId('dock-start').click();
+  await expect(hint).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('dock-flip').click();
+  await expect(html).toHaveAttribute('data-flipped', 'true');
+  await page.getByTestId('dock-stop').click();
+  await expect(html).not.toHaveAttribute('data-flipped', /.*/);
+
+  // A computer: no Flip and no bubble.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated' })));
+  await page.reload();
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('listen-panel')).toBeVisible();
+  await expect(page.getByTestId('flip')).toBeHidden();
+  await page.waitForTimeout(1000);
+  await expect(hint).toHaveCount(0);
+  await page.getByTestId('stop').click();
   await context.close();
 });

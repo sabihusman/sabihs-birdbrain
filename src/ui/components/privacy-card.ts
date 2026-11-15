@@ -13,7 +13,7 @@ export const USAGE_NEVER_SENT = 'Never sent: audio, GPS position, bird names, yo
 export const USAGE_SENT_ITEMS: readonly string[] = [
   'Which screens are opened, by name only (like “Map”).',
   'When listening starts and stops, for how long, and how many birds it found (not which).',
-  'The Listen layout, how the phone ran the model and how long it took to load.',
+  'The Listen layout, whether ⇅ Flip was used, how the phone ran the model and how long it took to load.',
   'Microphone and model problems.',
   'Browser, type of device, screen width and time zone.',
 ];

@@ -54,7 +54,7 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
     // src/app/usage-counts.ts (DECISIONS.md #120): Settings › Privacy turns them off.
     title: 'Anonymous usage counts',
     items: [
-      'Unless switched off in Settings › Privacy: screens opened, listening times, how many birds were found (not which), layout, model speed, problems, browser, device type, screen width and time zone go to PostHog.',
+      'Unless switched off in Settings › Privacy: screens opened, listening times, how many birds were found (not which), layout, ⇅ Flip use, model speed, problems, browser, device type, screen width and time zone go to PostHog.',
       'Nothing is saved on your phone for this; PostHog makes a daily anonymous count from your IP address and browser, then throws both away.',
       USAGE_NEVER_SENT,
     ],

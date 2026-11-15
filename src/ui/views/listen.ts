@@ -29,6 +29,7 @@ import { WaveformView } from '../viz/waveform';
 import { effectiveLayout, isMember } from '../../app/access';
 import { birdAmpView, type BirdAmpView } from '../birdamp/view';
 import { setShellSkin } from '../skin';
+import { flipButton, showFlipHint } from '../flip';
 import { audienceOf } from '../../app/whats-new';
 import { openWhatsNewCards, whatsNewStrip } from '../components/whats-new';
 
@@ -68,6 +69,10 @@ export function listenView(ctx: ViewContext): View {
   const dockStartBtn = el('button', { class: 'btn primary', type: 'button', 'data-testid': 'dock-start' }, 'Start listening');
   const dockStopBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'dock-stop' }, 'Stop');
   const recordBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'record' }, '● Record');
+  // ⇅ Flip (DECISIONS.md #126): turns the whole app for pointing the phone's bottom at a bird; on the panel and the dock.
+  const countFlip = () => ctx.usage.track({ event: 'screen_flipped', layout });
+  const panelFlip = flipButton('flip', countFlip);
+  const dockFlip = flipButton('dock-flip', countFlip);
   const tryAgainBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'try-again' }, 'Try again');
   const resumeBtn = el('button', { class: 'btn primary', type: 'button', 'data-testid': 'resume' }, 'Resume listening');
 
@@ -109,7 +114,7 @@ export function listenView(ctx: ViewContext): View {
     conditionsTitle.textContent = `Conditions: ${a ? a.title : '–'}`;
     conditionsAdvice.textContent = a ? a.advice : 'measuring…';
   };
-  const panel = el('section', { class: 'listen-panel', 'data-testid': 'listen-panel' }, el('div', { class: 'row between' }, el('span', null, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' Listening · ', timer), wakeLine), level, conditionsLine, el('div', { class: 'row' }, stopBtn, recordBtn));
+  const panel = el('section', { class: 'listen-panel', 'data-testid': 'listen-panel' }, el('div', { class: 'row between' }, el('span', null, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' Listening · ', timer), wakeLine), level, conditionsLine, el('div', { class: 'row' }, stopBtn, recordBtn, panelFlip.el));
 
   // One plain status line before listening, in every layout, instead of the three pills (DECISIONS.md #108).
   const statusText = el('span', null, '');
@@ -244,7 +249,7 @@ export function listenView(ctx: ViewContext): View {
   const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), readyExtras, lastBirdLine, status);
   const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, notUsualBox, resultsEmpty);
   const dockTimer = el('span', { class: 'dock-time' }, ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00'));
-  const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn);
+  const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn, dockFlip.el);
   const focusLatest = el('div', { class: 'focus-latest', 'data-testid': 'focus-latest' });
   // Earlier birds open right under the highlighted one with a tap (DECISIONS.md #83; the swipe-up sheet is gone).
   const moreList = el('div', { class: 'focus-more', id: 'focus-more', 'data-testid': 'focus-more', hidden: true });
@@ -297,6 +302,7 @@ export function listenView(ctx: ViewContext): View {
       pause: () => void controller.pauseListening().then(renderState),
       stop: () => void stop(),
       record: () => void toggleRecording(),
+      onFlipOn: countFlip,
     }));
   const applyLayout = (next: ListenLayout) => {
     layout = next;
@@ -461,6 +467,7 @@ export function listenView(ctx: ViewContext): View {
       setHidden(dock, intro || listening);
       setHidden(dockStartBtn, listening || !canStart);
       setHidden(dockStopBtn, true);
+      setHidden(dockFlip.el, true);
       setHidden(dockTimer, true);
       (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.status === 'idle' ? 'Ready' : st.pill;
       dock.dataset.status = st.status;
@@ -473,6 +480,7 @@ export function listenView(ctx: ViewContext): View {
     if (layout === 'dock') {
       setHidden(dockStartBtn, listening || !canStart);
       setHidden(dockStopBtn, !listening);
+      setHidden(dockFlip.el, !listening);
       (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.pill;
       setHidden(dockTimer, !listening);
       dock.dataset.status = st.status;
@@ -628,7 +636,16 @@ export function listenView(ctx: ViewContext): View {
   raf = requestAnimationFrame(loop);
 
   // ---- actions ---------------------------------------------------------------
+  let hideHint: () => void = () => undefined;
+  /** The bubble after Start (Sabih's approved mockup, Nov 15): 3 s, pointing at the ⇅ Flip that this layout shows. */
+  const offerFlipHint = () => {
+    hideHint();
+    const target: [HTMLElement | null, HTMLElement | null] =
+      layout === 'dock' ? [dockFlip.el, dock] : layout === 'birdamp' ? [root.querySelector<HTMLElement>('[data-testid="ba-flip"]'), null] : [panelFlip.el, panel];
+    if (target[0]) hideHint = showFlipHint(target[0], target[1]);
+  };
   const start = async () => {
+    const fresh = !controller.paused;
     startBtn.disabled = true;
     dockStartBtn.disabled = true;
     try {
@@ -646,6 +663,8 @@ export function listenView(ctx: ViewContext): View {
       renderConditions(null);
       status.textContent = `Listening at ${controller.engine.contextSampleRate ?? '?'} Hz${controller.engine.contextSampleRate !== 48000 ? ' (resampling to 48 kHz)' : ''}`;
       pipeline.setResampling(controller.engine.contextSampleRate !== 48000);
+      // Once per listen, not on BirdAmp's carry-on after Pause; after the panel has been laid out.
+      if (fresh && !disposed) requestAnimationFrame(() => requestAnimationFrame(() => !disposed && controller.listening && offerFlipHint()));
     } catch {
       // The state block (title, hint, steps) and the toast already say why; a third copy on the status line would repeat it.
       status.textContent = '';
@@ -848,6 +867,9 @@ export function listenView(ctx: ViewContext): View {
       pipeline.dispose();
       bubble.dispose();
       amp?.dispose();
+      hideHint();
+      panelFlip.dispose();
+      dockFlip.dispose();
       setShellSkin(null);
     },
   };

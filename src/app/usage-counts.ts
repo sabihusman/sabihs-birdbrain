@@ -50,7 +50,8 @@ export type UsageEvent =
   | { event: 'model_failed'; unsupported: boolean }
   | { event: 'mic_problem'; problem: (typeof MIC_PROBLEMS)[number] }
   | { event: 'layout_changed'; layout: ListenLayout }
-  | { event: 'recording_saved'; seconds: number };
+  | { event: 'recording_saved'; seconds: number }
+  | { event: 'screen_flipped'; layout: ListenLayout };
 
 type Kind = 'count' | 'seconds' | 'boolean' | readonly string[];
 /** What each event may carry. Anything else is dropped before sending. */
@@ -63,6 +64,8 @@ export const SCHEMA: Record<UsageEvent['event'], Record<string, Kind>> = {
   mic_problem: { problem: MIC_PROBLEMS },
   layout_changed: { layout: LAYOUT_VALUES },
   recording_saved: { seconds: 'seconds' },
+  // ⇅ Flip turned on while listening (DECISIONS.md #126): only the layout it happened in.
+  screen_flipped: { layout: LAYOUT_VALUES },
 };
 
 export type Audience = 'signed-out' | 'pending' | 'member' | 'admin';

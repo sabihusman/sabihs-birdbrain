@@ -11,6 +11,7 @@ import { helpView } from './views/help';
 import { whatsNewView } from './views/whats-new';
 import { usageView } from './views/admin-usage';
 import { effectiveLayout } from '../app/access';
+import { setFlipped } from './flip';
 import { UsageCounts, usageConfig } from '../app/usage-counts';
 import { audienceFor, pageOf, wireUsageCounts } from '../app/usage-wiring';
 import { WhatsNewService } from '../app/whats-new';
@@ -159,7 +160,15 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     tabs.classList.toggle('tabs-top', top);
   };
   placeTabs();
-  wide?.addEventListener?.('change', placeTabs);
+  wide?.addEventListener?.('change', () => {
+    placeTabs();
+    // A computer is not pointed at birds: no ⇅ Flip from 1024 px (DECISIONS.md #126).
+    if (wide.matches) setFlipped(false);
+  });
+  // ⇅ Flip lasts while listening (a BirdAmp pause included) and turns back when listening stops.
+  controller.on('stats', (st) => {
+    if (!st.listening && !st.paused) setFlipped(false);
+  });
 
   const notify = (n: Notice) => {
     const node = el('div', { class: `notice ${n.kind}`, role: n.kind === 'error' ? 'alert' : 'status' }, n.text);
