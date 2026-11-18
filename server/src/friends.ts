@@ -165,13 +165,33 @@ export class FriendsStore {
 
   // ---- shared species ---------------------------------------------------------
 
-  /** Replace the user's whole list (an empty list clears it). */
-  replaceSharedSpecies(userId: string, list: SharedSpecies[]): void {
+  /**
+   * Add birds to the user's list, or move a bird's last-seen day later (DECISIONS.md #127). Never removes one: a
+   * phone that lacks a bird (a new device, cleared data) cannot empty what friends see. Removing is
+   * `removeSharedSpecies`, sent only for birds deleted in the app; turning sharing off is `clearSharedSpecies`.
+   */
+  mergeSharedSpecies(userId: string, list: SharedSpecies[]): void {
     this.transaction(() => {
-      this.db.prepare('DELETE FROM shared_species WHERE user_id = ?').run(userId);
-      const ins = this.db.prepare('INSERT OR REPLACE INTO shared_species (user_id, scientific, last_seen) VALUES (?, ?, ?)');
-      for (const s of list) ins.run(userId, s.sci, s.lastSeen);
+      const up = this.db.prepare(
+        'INSERT INTO shared_species (user_id, scientific, last_seen) VALUES (?, ?, ?) ON CONFLICT (user_id, scientific) DO UPDATE SET last_seen = max(last_seen, excluded.last_seen)',
+      );
+      for (const s of list) up.run(userId, s.sci, s.lastSeen);
     });
+  }
+
+  /** Birds the user deleted in the app; returns how many were on the list. */
+  removeSharedSpecies(userId: string, scientific: string[]): number {
+    let n = 0;
+    this.transaction(() => {
+      const del = this.db.prepare('DELETE FROM shared_species WHERE user_id = ? AND scientific = ?');
+      for (const sci of scientific) n += Number(del.run(userId, sci).changes);
+    });
+    return n;
+  }
+
+  /** How many birds the user shares now. */
+  sharedSpeciesCount(userId: string): number {
+    return Number((this.db.prepare('SELECT count(*) AS n FROM shared_species WHERE user_id = ?').get(userId) as { n: number }).n);
   }
 
   clearSharedSpecies(userId: string): void {

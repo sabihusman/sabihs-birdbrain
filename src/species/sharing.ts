@@ -26,6 +26,47 @@ export function sharingKey(userId: string): string {
   return KEY_PREFIX + userId;
 }
 
+/** The birds this phone last shared for the user, so a bird deleted here can be taken off (DECISIONS.md #127). */
+export function sentKey(userId: string): string {
+  return `${KEY_PREFIX}${userId}:sent`;
+}
+
+export function readSent(userId: string, storage: Storage | null): Set<string> {
+  try {
+    const raw = storage?.getItem(sentKey(userId));
+    const v: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSent(userId: string, species: Iterable<string>, storage: Storage | null): void {
+  try {
+    storage?.setItem(sentKey(userId), JSON.stringify([...species]));
+  } catch {
+    /* storage full or unavailable: the next sync simply removes nothing */
+  }
+}
+
+function forget(userId: string, storage: Storage | null): void {
+  try {
+    storage?.removeItem(sentKey(userId));
+  } catch {
+    /* nothing to forget */
+  }
+}
+
+/**
+ * Which birds to take off the shared list: those this phone shared before and no longer has at all, because they
+ * were deleted here. Never anything when the phone has no birds: an empty phone (cleared data, a new device, storage
+ * the browser emptied) must not empty what friends see, which is what happened to Kristopher's list on Nov 15.
+ */
+export function speciesToRemove(sentBefore: ReadonlySet<string>, onPhone: ReadonlySet<string>): string[] {
+  if (onPhone.size === 0) return [];
+  return [...sentBefore].filter((sci) => !onPhone.has(sci)).sort((a, b) => a.localeCompare(b));
+}
+
 export function isSharingOn(userId: string | null | undefined, storage: Storage | null = defaultStorage()): boolean {
   if (!userId || !storage) return false;
   try {
@@ -77,8 +118,9 @@ export function buildSharedSpeciesList(sightings: readonly Pick<SightingRecord, 
 /**
  * Keeps the server copy in step with the device while sharing is on: a
  * debounced upload after every `detections-changed`, on turning sharing on,
- * on sign-in and when the connection comes back. Turning sharing off clears
- * the server copy immediately. Failures are swallowed (the next change
+ * on sign-in and when the connection comes back. The server merges uploads and
+ * never drops a bird a phone lacks; a bird deleted on this phone is removed by
+ * name (DECISIONS.md #127). Turning sharing off clears the server copy immediately. Failures are swallowed (the next change
  * retries); nothing is uploaded while signed out or not yet approved.
  */
 /** Waits between upload attempts after a failure, in milliseconds (DECISIONS.md #64). */
@@ -121,6 +163,8 @@ export class SpeciesSharer {
     const user = this.api.user;
     if (!user) return;
     setSharingOn(user.id, on, this.storage);
+    // Either way this phone starts afresh: nothing it shared before is taken off by the next sync.
+    forget(user.id, this.storage);
     if (on) await this.syncNow();
     else {
       this.cancel();
@@ -132,6 +176,15 @@ export class SpeciesSharer {
         throw e;
       }
     }
+  }
+
+  /**
+   * Before Settings › "Delete all recordings and detections": clearing this phone keeps what friends see (Sabih's
+   * option B, DECISIONS.md #127). Turning sharing off is the way to remove the list.
+   */
+  forgetSent(): void {
+    const user = this.api.user;
+    if (user) forget(user.id, this.storage);
   }
 
   /** Debounced: the upload runs UPLOAD_DEBOUNCE_MS after the last change. */
@@ -156,8 +209,15 @@ export class SpeciesSharer {
     this.dirty = false;
     this.inFlight = (async () => {
       try {
-        const list = buildSharedSpeciesList(await listSightings());
+        const user = this.api.user!;
+        const sightings = await listSightings();
+        const onPhone = new Set(sightings.map((x) => x.scientific).filter(Boolean));
+        // The server only adds and updates (DECISIONS.md #127); birds deleted on this phone are removed by name.
+        const removed = speciesToRemove(readSent(user.id, this.storage), onPhone);
+        if (removed.length) await this.api.removeSharedSpecies(removed);
+        const list = buildSharedSpeciesList(sightings);
         await this.api.uploadSharedSpecies(list);
+        writeSent(user.id, list.map((e) => e.sci), this.storage);
         this.lastError = null;
         this.retries = 0;
       } catch (e) {

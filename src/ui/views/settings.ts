@@ -123,6 +123,8 @@ export function settingsView(ctx: ViewContext): View {
   const clearBtn = el('button', { class: 'btn small danger' }, 'Delete all recordings and detections');
   clearBtn.addEventListener('click', async () => {
     if (!confirm('Delete all recordings, detections and saved species pages on this phone? No undo.')) return;
+    // What friends see stays (DECISIONS.md #127): turning sharing off is the way to remove it.
+    ctx.sharing.forgetSent();
     await clearAllData();
     // A fresh start opens in the default Listen layout again (DECISIONS.md #63).
     controller.settings.update({ listenLayout: DEFAULT_SETTINGS.listenLayout });

@@ -177,7 +177,7 @@ describe('invites', () => {
 });
 
 describe('shared species list', () => {
-  it('upload replaces the whole set; friends see display name and (sci, lastSeen) only; clear and empty upload remove it', async () => {
+  it('uploads merge and never remove; friends see display name and (sci, lastSeen) only; only a removal or clear takes birds away (DECISIONS.md #127)', async () => {
     const { t, alex, sam } = await setup();
     await befriend(t, alex, sam);
     const up = await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-12' }, { sci: 'Parus major', lastSeen: '2026-09-01' }] }, bearer(sam.token));
@@ -185,16 +185,41 @@ describe('shared species list', () => {
     expect(await up.json()).toEqual({ ok: true, count: 2 });
     let seen = await speciesOf(t, alex.token);
     expect(seen.friends).toEqual([{ id: sam.id, displayName: 'Sam', species: [{ sci: 'Turdus merula', lastSeen: '2026-10-12' }, { sci: 'Parus major', lastSeen: '2026-09-01' }] }]);
-    // newer date for one species, the other dropped: the set is replaced, never merged
-    await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-18' }] }, bearer(sam.token));
+    // A newer day moves forward; a bird the upload lacks stays (a new phone or cleared data cannot empty the list).
+    const merged = await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-18' }] }, bearer(sam.token));
+    expect(await merged.json()).toEqual({ ok: true, count: 2 });
     seen = await speciesOf(t, alex.token);
-    expect(seen.friends[0].species).toEqual([{ sci: 'Turdus merula', lastSeen: '2026-10-18' }]);
+    expect(seen.friends[0].species).toEqual([{ sci: 'Turdus merula', lastSeen: '2026-10-18' }, { sci: 'Parus major', lastSeen: '2026-09-01' }]);
+    // An older day never moves a bird back.
+    await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-01' }] }, bearer(sam.token));
+    expect((await speciesOf(t, alex.token)).friends[0].species[0]).toEqual({ sci: 'Turdus merula', lastSeen: '2026-10-18' });
+    // Kristopher's case (Nov 15): an empty upload changes nothing.
+    await post(t.app, '/v1/me/species', { species: [] }, bearer(sam.token));
+    expect((await speciesOf(t, alex.token)).friends[0].species).toHaveLength(2);
     // Sam sees Alex (no list yet) but never their own list
     expect((await speciesOf(t, sam.token)).friends).toEqual([{ id: alex.id, displayName: 'Alex', species: [] }]);
+    // A bird deleted in the app is removed on purpose; unknown or repeated names are harmless.
+    const rm = await post(t.app, '/v1/me/species/remove', { species: ['Parus major', 'Parus major', 'Nope nope'] }, bearer(sam.token));
+    expect(rm.status).toBe(200);
+    expect(await rm.json()).toEqual({ ok: true, removed: 1, count: 1 });
+    expect((await speciesOf(t, alex.token)).friends[0].species).toEqual([{ sci: 'Turdus merula', lastSeen: '2026-10-18' }]);
+    // Turning sharing off still clears everything at once.
     expect((await post(t.app, '/v1/me/species/clear', {}, bearer(sam.token))).status).toBe(200);
     expect((await speciesOf(t, alex.token)).friends[0].species).toEqual([]);
-    await post(t.app, '/v1/me/species', { species: [{ sci: 'Parus major', lastSeen: '2026-09-01' }] }, bearer(sam.token));
-    await post(t.app, '/v1/me/species', { species: [] }, bearer(sam.token));
+  });
+
+  it('removal: members only, strict shape, 2,000 cap, only the caller’s own list', async () => {
+    const { t, alex, sam } = await setup();
+    await befriend(t, alex, sam);
+    await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-12' }] }, bearer(alex.token));
+    await post(t.app, '/v1/me/species', { species: [{ sci: 'Turdus merula', lastSeen: '2026-10-12' }] }, bearer(sam.token));
+    expect((await post(t.app, '/v1/me/species/remove', { species: ['Turdus merula'] })).status).toBe(401);
+    for (const body of [{}, { species: 'Turdus merula' }, { species: [''] }, { species: ['x'.repeat(81)] }, { species: [], extra: 1 }, { species: Array.from({ length: 2001 }, () => 'Turdus merula') }]) {
+      expect((await post(t.app, '/v1/me/species/remove', body, bearer(sam.token))).status, JSON.stringify(body).slice(0, 60)).toBe(400);
+    }
+    // Sam removing a bird leaves Alex's copy of the same bird alone.
+    await post(t.app, '/v1/me/species/remove', { species: ['Turdus merula'] }, bearer(sam.token));
+    expect((await speciesOf(t, sam.token)).friends[0].species).toEqual([{ sci: 'Turdus merula', lastSeen: '2026-10-12' }]);
     expect((await speciesOf(t, alex.token)).friends[0].species).toEqual([]);
   });
 

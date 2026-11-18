@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient, SESSION_KEY, type AuthUser } from '../src/api/client';
 import { Emitter } from '../src/shared/emitter';
-import { buildSharedSpeciesList, isSharingOn, localDay, setSharingOn, SHARING_CONSENT_TEXT, SpeciesSharer, UPLOAD_BACKOFF_MS, UPLOAD_DEBOUNCE_MS } from '../src/species/sharing';
-import { clearAllData, recordDetections } from '../src/storage/db';
+import { buildSharedSpeciesList, isSharingOn, localDay, readSent, sentKey, setSharingOn, SHARING_CONSENT_TEXT, SpeciesSharer, speciesToRemove, UPLOAD_BACKOFF_MS, UPLOAD_DEBOUNCE_MS } from '../src/species/sharing';
+import { clearAllData, deleteDetectionsForRecording, recordDetections } from '../src/storage/db';
 import type { DetectionRecord } from '../src/storage/types';
 import { MemoryStorage } from './helpers/memory-storage';
 
@@ -162,6 +162,65 @@ describe('SpeciesSharer', () => {
     await vi.advanceTimersByTimeAsync(10 * 60_000);
     await settle();
     expect(calls).toHaveLength(2);
+  });
+
+  it('a bird deleted on this phone is removed by name before the upload; nothing else ever is (DECISIONS.md #127)', async () => {
+    const { calls, controller, sharer, storage } = build(member, true);
+    await settle();
+    calls.length = 0;
+    const day = new Date(2026, 9, 12, 8).getTime();
+    await recordDetections([det('Turdus merula', day, { recordingId: 'r1' }), det('Parus major', day, { recordingId: 'r2' })]);
+    controller.emit('detections-changed', undefined);
+    await settle();
+    expect(calls.map((c) => c.url)).toEqual(['https://api.test/v1/me/species']);
+    expect([...readSent('u1', storage)].sort()).toEqual(['Parus major', 'Turdus merula']);
+    calls.length = 0;
+    // Deleting the recording that held the only blackbird takes the blackbird off; the tit stays.
+    await deleteDetectionsForRecording('r1');
+    controller.emit('detections-changed', undefined);
+    await settle();
+    expect(calls.map((c) => c.url)).toEqual(['https://api.test/v1/me/species/remove', 'https://api.test/v1/me/species']);
+    expect(calls[0].body).toEqual({ species: ['Turdus merula'] });
+    expect(calls[1].body).toEqual({ species: [{ sci: 'Parus major', lastSeen: '2026-10-12' }] });
+    calls.length = 0;
+    // Kristopher's case: the phone loses every bird (cleared data, storage emptied). Nothing is removed.
+    await deleteDetectionsForRecording('r2');
+    controller.emit('detections-changed', undefined);
+    await settle();
+    expect(calls.map((c) => c.url)).toEqual(['https://api.test/v1/me/species']);
+    expect(calls[0].body).toEqual({ species: [] });
+    sharer.dispose();
+  });
+
+  it('clearing the phone and a new device never remove anything; turning sharing on starts afresh', async () => {
+    const { calls, controller, sharer, storage } = build(member, true);
+    await settle();
+    const day = new Date(2026, 9, 12, 8).getTime();
+    await recordDetections([det('Turdus merula', day), det('Parus major', day)]);
+    controller.emit('detections-changed', undefined);
+    await settle();
+    // Settings › Delete all: forget what was sent first, then clear, then a new bird.
+    sharer.forgetSent();
+    expect(storage.getItem(sentKey('u1'))).toBeNull();
+    await clearAllData();
+    await recordDetections([det('Sitta europaea', day)]);
+    calls.length = 0;
+    controller.emit('detections-changed', undefined);
+    await settle();
+    expect(calls.map((c) => c.url)).toEqual(['https://api.test/v1/me/species']);
+    // A second device (no record of what was sent) only adds.
+    const second = build(member, true);
+    await recordDetections([det('Sitta europaea', day)]);
+    await settle();
+    expect(second.calls.every((c) => c.url.endsWith('/v1/me/species'))).toBe(true);
+    second.sharer.dispose();
+    sharer.dispose();
+  });
+
+  it('speciesToRemove: only birds shared before and gone now, never when the phone is empty', () => {
+    expect(speciesToRemove(new Set(['B', 'A', 'C']), new Set(['C']))).toEqual(['A', 'B']);
+    expect(speciesToRemove(new Set(['A']), new Set())).toEqual([]);
+    expect(speciesToRemove(new Set(), new Set(['A']))).toEqual([]);
   });
 
   it('the consent does not follow the session to another account', async () => {
