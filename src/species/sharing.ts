@@ -64,7 +64,7 @@ function forget(userId: string, storage: Storage | null): void {
  */
 export function speciesToRemove(sentBefore: ReadonlySet<string>, onPhone: ReadonlySet<string>): string[] {
   if (onPhone.size === 0) return [];
-  return [...sentBefore].filter((sci) => !onPhone.has(sci)).sort();
+  return [...sentBefore].filter((sci) => !onPhone.has(sci)).sort((a, b) => a.localeCompare(b));
 }
 
 export function isSharingOn(userId: string | null | undefined, storage: Storage | null = defaultStorage()): boolean {
