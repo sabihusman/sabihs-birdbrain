@@ -3443,6 +3443,9 @@ test('header: "Sign up / Sign in" signed out, name when signed in; model status 
   await page.goto('./#/species');
   const banner = page.getByTestId('share-banner');
   await expect(banner).toContainText('Share your birds with friends');
+  // Two lines of text under the heading on a phone (Sabih, Nov 18); 320 px here, so at most three.
+  const lines = await banner.locator('p').evaluate((p) => Math.round(p.getBoundingClientRect().height / parseFloat(getComputedStyle(p).lineHeight)));
+  expect(lines).toBeLessThanOrEqual(3);
   await expect(page.getByTestId('share-banner-signup')).toHaveAttribute('href', '#/signup');
   await expect(page.getByTestId('share-banner-signin')).toHaveAttribute('href', '#/signin');
   await noScroll('banner at 320 px');

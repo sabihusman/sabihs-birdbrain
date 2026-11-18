@@ -7,7 +7,7 @@ import { el } from '../dom';
  */
 export const SHARE_BANNER_KEY = 'birdbrain.sharebanner.v1';
 export const SHARE_BANNER_TITLE = 'Share your birds with friends';
-export const SHARE_BANNER_TEXT = 'With a free account, friends see which birds you’ve spotted, and you see theirs. Listening never needs one.';
+export const SHARE_BANNER_TEXT = 'Friends see which birds you’ve spotted, and you see theirs.';
 
 export function shareBannerWanted(user: AuthUser | null | undefined, storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null): boolean {
   if (user) return false;
