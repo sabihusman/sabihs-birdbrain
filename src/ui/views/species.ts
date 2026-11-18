@@ -1,3 +1,4 @@
+import { shareBanner, shareBannerWanted } from '../components/share-banner';
 import { searchSpecies, type Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
 import { listSightingsForSpecies, getRecordingMeta } from '../../storage/db';
@@ -181,7 +182,12 @@ export function speciesListView(ctx: ViewContext): View {
   refreshSpotted();
   void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
 
-  const root = el('div', null, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), recovery.el, friendsNote, shareBox, toggle, scopeFold, statusNote, count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  // Signed out only: why an account helps (DECISIONS.md #128).
+  const bannerSlot = el('div', null);
+  const renderBanner = () => bannerSlot.replaceChildren(...(shareBannerWanted(api.user) ? [shareBanner(() => undefined)] : []));
+  renderBanner();
+  unsubs.push(api.on('change', renderBanner));
+  const root = el('div', null, bannerSlot, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), recovery.el, friendsNote, shareBox, toggle, scopeFold, statusNote, count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {

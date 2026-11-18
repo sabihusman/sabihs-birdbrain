@@ -3345,3 +3345,20 @@ Each finding was checked against the code first.
   old app keep sending full lists, which now merge (their deletions do not reach friends until they update).
 - **Not done:** restoring Kristopher's 2 birds from the Nov 15 backup; that would undo a deletion he may have meant.
 - **Text:** What we store › If sharing is on says clearing the phone or a new device keeps the list.
+
+## 128. Account button in the header; model status in the Start card; share banner on Species
+
+- **Why (Sabih, Nov 18):** a way to sign up or sign in from every screen, and a reason to: sharing sightings with
+  friends. The mockups were approved with wording B for the button.
+- **Header (`src/ui/components/account-button.ts`):** where the model pill was. Signed out: "Sign up / Sign in"
+  (to `#/signup`, which links to Sign in). Approved: the initial and display name (to My account; on phones up to
+  360 px and in BirdAmp's skin, the initial only). Waiting for approval: "Waiting" (to My account). Never the email.
+  On a computer it sits after the tabs.
+- **Model status:** shown under "Ready" in the Start card on Listen (`card-model-status`, same words and tone as
+  before). The header pill stays in the DOM as a screen-reader `role="status"` (`sr-only`), and is shown only in
+  BirdAmp's skin as its LIVE / PAUSED / READY light. Other tabs no longer show the model status.
+- **Species banner (`src/ui/components/share-banner.ts`):** signed out only: "Share your birds with friends", "With a
+  free account, friends see which birds you've spotted, and you see theirs. Listening never needs one.", Create free
+  account and Sign in. × hides it on this phone for good (`birdbrain.sharebanner.v1`).
+- **Tests:** `tests/account-button.test.ts`; e2e for the button states, the card status, the banner and its ×, and
+  the header title never under the button at 320 / 375 px with a long name.
