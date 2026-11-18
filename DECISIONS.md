@@ -3357,8 +3357,8 @@ Each finding was checked against the code first.
 - **Model status:** shown under "Ready" in the Start card on Listen (`card-model-status`, same words and tone as
   before). The header pill stays in the DOM as a screen-reader `role="status"` (`sr-only`), and is shown only in
   BirdAmp's skin as its LIVE / PAUSED / READY light. Other tabs no longer show the model status.
-- **Species banner (`src/ui/components/share-banner.ts`):** signed out only: "Share your birds with friends", "With a
-  free account, friends see which birds you've spotted, and you see theirs. Listening never needs one.", Create free
+- **Species banner (`src/ui/components/share-banner.ts`):** signed out only: "Share your birds with friends", "Friends see which birds you’ve spotted, and you see theirs." (two lines on a
+  phone; Sabih, Nov 18), Create free
   account and Sign in. × hides it on this phone for good (`birdbrain.sharebanner.v1`).
 - **Tests:** `tests/account-button.test.ts`; e2e for the button states, the card status, the banner and its ×, and
   the header title never under the button at 320 / 375 px with a long name.
