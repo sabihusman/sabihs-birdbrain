@@ -2257,25 +2257,29 @@ test('a bird matched by sound but not usual here is counted, can be kept, is mar
   await browser.close();
 });
 
-test('the header title never sits under the status pill, at 320 and 375 px, with the longest statuses', async ({ browser }) => {
+test('the header title never sits under the account button, at 320 and 375 px, signed out and with a long name (DECISIONS.md #128)', async ({ browser }) => {
   for (const width of [320, 375]) {
-    const context = await browser.newContext({ viewport: { width, height: 700 }, serviceWorkers: 'block' });
-    const page = await context.newPage();
-    await page.addInitScript(returningVisitor);
-    await page.route(/\/models\/birdnet-v2\.4\/(?!labels\.json)/, (route) => route.abort());
-    await page.goto('./#/species');
-    for (const text of ['Not loaded', 'Model not loaded', 'Model ready · webgl', 'Something went wrong', 'Browser not supported', 'Loading model 100%']) {
-      const m = await page.evaluate((t) => {
-        const pill = document.querySelector('[data-testid="model-status"]') as HTMLElement;
-        (pill.querySelector('.model-pill-text') ?? pill).textContent = t;
+    for (const user of [null, { id: 'm1', email: 'm@example.com', name: 'Maximilianagrace', status: 'approved', role: 'member' }, { id: 'p1', email: 'p@example.com', name: 'Pat', status: 'pending', role: 'member' }]) {
+      const context = await browser.newContext({ viewport: { width, height: 700 }, serviceWorkers: 'block' });
+      const page = await context.newPage();
+      await page.addInitScript(returningVisitor);
+      await page.addInitScript((u) => {
+        if (u) localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 't', expiresAt: null, user: u }));
+      }, user);
+      await page.route(/\/v1\/|\/models\/birdnet-v2\.4\/(?!labels\.json)/, (route) => route.abort());
+      await page.goto('./#/species');
+      await expect(page.getByTestId('account-button')).toBeVisible();
+      const m = await page.evaluate(() => {
+        const btn = document.querySelector('[data-testid="account-button"]') as HTMLElement;
         const h1 = document.querySelector('.app-header h1') as HTMLElement;
-        return { titleRight: h1.getBoundingClientRect().right, pillLeft: pill.getBoundingClientRect().left, titleFits: h1.scrollWidth <= h1.clientWidth + 1, sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) };
-      }, text);
-      expect(m.titleRight, `${text} at ${width}px`).toBeLessThanOrEqual(m.pillLeft + 0.5);
-      expect(m.titleFits, `title fits at ${width}px with "${text}"`).toBe(true);
-      expect(m.sw, `no horizontal scroll at ${width}px`).toBeLessThanOrEqual(width);
+        return { titleRight: h1.getBoundingClientRect().right, btnLeft: btn.getBoundingClientRect().left, titleFits: h1.scrollWidth <= h1.clientWidth + 1, sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) };
+      });
+      const label = `${user?.name ?? 'signed out'} at ${width}px`;
+      expect(m.titleRight, label).toBeLessThanOrEqual(m.btnLeft + 0.5);
+      expect(m.titleFits, label).toBe(true);
+      expect(m.sw, label).toBeLessThanOrEqual(width);
+      await context.close();
     }
-    await context.close();
   }
 });
 
@@ -3274,7 +3278,8 @@ test('desktop: tabs in the header, two columns on Listen (Consolidated, Dock), F
       expect(b.y + b.height).toBeLessThanOrEqual(header!.y + header!.height + 1);
     }
     const title = (await page.locator('.app-header h1').boundingBox())!;
-    const pill = (await page.getByTestId('model-status').boundingBox())!;
+    // The account button (DECISIONS.md #128) comes after the tabs.
+    const pill = (await page.getByTestId('account-button').boundingBox())!;
     const first = (await tabs.locator('a').first().boundingBox())!;
     const last = (await tabs.locator('a').last().boundingBox())!;
     expect(first.x).toBeGreaterThan(title.x + title.width);
@@ -3412,5 +3417,55 @@ test('⇅ Flip: the bubble for 3 s after Start, the whole app turns and still wo
   await page.waitForTimeout(1000);
   await expect(hint).toHaveCount(0);
   await page.getByTestId('stop').click();
+  await context.close();
+});
+
+test('header: "Sign up / Sign in" signed out, name when signed in; model status in the Start card; share banner on Species for signed-out only (DECISIONS.md #128)', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 320, height: 700 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.route(/\/v1\/|wikipedia\.org|wikimedia\.org|nominatim/, (route) => route.abort());
+  await page.goto('./#/listen');
+  const btn = page.getByTestId('account-button');
+  await expect(btn).toHaveText('Sign up / Sign in');
+  await expect(btn).toHaveAttribute('href', '#/signup');
+  expect((await btn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  // The model status now reads in the Start card; the header copy is for screen readers only.
+  await expect(page.getByTestId('card-model-status')).toContainText('Model ready', { timeout: 200_000 });
+  expect((await page.getByTestId('model-status').boundingBox())!.width).toBeLessThanOrEqual(1);
+  const noScroll = async (label: string) => {
+    const m = await page.evaluate(() => ({ sw: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0), iw: window.innerWidth }));
+    expect(m.sw, label).toBeLessThanOrEqual(m.iw);
+  };
+  await noScroll('header at 320 px');
+
+  // Species: the banner, its two ways in, and × for good.
+  await page.goto('./#/species');
+  const banner = page.getByTestId('share-banner');
+  await expect(banner).toContainText('Share your birds with friends');
+  await expect(page.getByTestId('share-banner-signup')).toHaveAttribute('href', '#/signup');
+  await expect(page.getByTestId('share-banner-signin')).toHaveAttribute('href', '#/signin');
+  await noScroll('banner at 320 px');
+  await page.getByTestId('share-banner-close').click();
+  await expect(banner).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId('species-list')).toBeVisible();
+  await expect(banner).toHaveCount(0);
+
+  // Signed in: the name, no banner even with it never closed.
+  await page.evaluate(() => {
+    localStorage.removeItem('birdbrain.sharebanner.v1');
+    localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 't', expiresAt: null, user: { id: 'm1', email: 'm@example.com', name: 'Robin', status: 'approved', role: 'member' } }));
+  });
+  await page.reload();
+  await expect(btn).toHaveText('RRobin');
+  await expect(btn).toHaveAttribute('href', '#/account');
+  await expect(page.getByTestId('species-list')).toBeVisible();
+  await expect(banner).toHaveCount(0);
+  // Waiting for approval: "Waiting", still no banner.
+  await page.evaluate(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 't', expiresAt: null, user: { id: 'p1', email: 'p@example.com', name: 'Pat', status: 'pending', role: 'member' } })));
+  await page.reload();
+  await expect(btn).toContainText('Waiting');
+  await expect(banner).toHaveCount(0);
   await context.close();
 });

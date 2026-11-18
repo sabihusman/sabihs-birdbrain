@@ -246,7 +246,10 @@ export function listenView(ctx: ViewContext): View {
 
   // ---- layout ----------------------------------------------------------------
   const stateRow = el('div', { class: 'state-row' }, stateIcon, stateTitle);
-  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), readyExtras, lastBirdLine, status);
+  // The model status, moved here from the header (DECISIONS.md #128); the header keeps a screen-reader copy.
+  const cardPillText = el('span', null, '');
+  const cardPill = el('span', { class: 'model-pill card-model-pill', 'data-testid': 'card-model-status', 'aria-hidden': 'true' }, cardPillText);
+  const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, cardPill, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), readyExtras, lastBirdLine, status);
   const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, notUsualBox, resultsEmpty);
   const dockTimer = el('span', { class: 'dock-time' }, ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00'));
   const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn, dockFlip.el);
@@ -403,6 +406,9 @@ export function listenView(ctx: ViewContext): View {
   const renderState = () => {
     const st = listenStatus(controller);
     const text = STATE_TEXT[st.status];
+    const backend = controller.inference.getStatus().backend;
+    cardPillText.textContent = st.status === 'ready' && backend ? `${st.pill} · ${backend}` : st.pill;
+    cardPill.className = `model-pill card-model-pill ${st.status} tone-${st.tone}`;
     stateIcon.textContent = st.icon;
     stateTitle.textContent = text.title;
     stateHint.textContent = st.hint ?? text.hint;

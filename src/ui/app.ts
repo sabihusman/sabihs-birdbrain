@@ -12,6 +12,7 @@ import { whatsNewView } from './views/whats-new';
 import { usageView } from './views/admin-usage';
 import { effectiveLayout } from '../app/access';
 import { setFlipped } from './flip';
+import { accountButton } from './components/account-button';
 import { UsageCounts, usageConfig } from '../app/usage-counts';
 import { audienceFor, pageOf, wireUsageCounts } from '../app/usage-wiring';
 import { WhatsNewService } from '../app/whats-new';
@@ -116,7 +117,12 @@ export function showUpdateBanner(apply: () => Promise<void>): void {
 export function mountApp(root: HTMLElement, controller: AppController, api: ApiClient): void {
   // The text sits in its own span so a long status ends in "…" on a narrow phone instead of running under the title.
   const pillText = el('span', { class: 'model-pill-text' }, 'Loading model…');
-  const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status' }, pillText);
+  const modelPill = el('span', { class: 'model-pill', 'data-testid': 'model-status', role: 'status' }, pillText);
+  // The account button sits where the pill was (DECISIONS.md #128); the pill stays for screen readers and is shown
+  // only in BirdAmp's skin (its LIVE / PAUSED / READY light). The Start card on Listen shows the model status.
+  const account = accountButton();
+  account.render(api.user);
+  api.on('change', (u) => account.render(u));
   const themeToggle = el('button', { class: 'theme-toggle', type: 'button', 'data-testid': 'theme-toggle' });
   const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
   const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
@@ -133,7 +139,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     renderToggle();
   });
   renderToggle();
-  const header = el('header', { class: 'app-header' }, el('img', { class: 'app-logo', src: `${controller.baseUrl}icons/icon-192.png`, alt: '' }), el('h1', null, 'Sabih’s Birdbrain'), modelPill, themeToggle);
+  const header = el('header', { class: 'app-header' }, el('img', { class: 'app-logo', src: `${controller.baseUrl}icons/icon-192.png`, alt: '' }), el('h1', null, 'Sabih’s Birdbrain'), modelPill, account.el, themeToggle);
   const notices = el('div', { class: 'notices', 'aria-live': 'polite' });
   const main = el('main', { class: 'view' });
   const tabs = el('nav', { class: 'tabs', 'aria-label': 'Main' });
@@ -185,7 +191,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     pillText.textContent = amp ?? (st.status === 'ready' && model.backend ? `${st.pill} · ${model.backend}` : st.pill);
     modelPill.dataset.amp = amp ? amp.toLowerCase() : '';
     modelPill.title = pillText.textContent;
-    modelPill.className = `model-pill ${st.status} tone-${st.tone}`;
+    modelPill.className = `model-pill ${st.status} tone-${st.tone}${amp ? '' : ' sr-only'}`;
   };
   controller.on('model', renderPill);
   controller.on('engine', renderPill);
