@@ -67,6 +67,7 @@ export const BODY_LIMIT_BYTES = 16 * 1024;
 /** The shared species list is the one body that can be large: 2,000 entries of ~60 bytes. */
 export const SPECIES_BODY_LIMIT_BYTES = 256 * 1024;
 const SPECIES_UPLOAD_PATH = '/v1/me/species';
+const SPECIES_REMOVE_PATH = '/v1/me/species/remove';
 
 
 const loginSchema = z.object({ email: emailSchema, password: passwordSchema }).strict();
@@ -92,6 +93,7 @@ const sharedSpeciesSchema = z
     species: z.array(z.object({ sci: z.string().min(1).max(80), lastSeen: z.string().length(10).refine(isCalendarDay, 'not a calendar day') }).strict()).max(MAX_SHARED_SPECIES),
   })
   .strict();
+const removeSpeciesSchema = z.object({ species: z.array(z.string().min(1).max(80)).max(MAX_SHARED_SPECIES) }).strict();
 /** Account deletion: the password again and the word DELETE, nothing else. */
 const deleteSchema = z.object({ password: z.string().min(1).max(128), confirm: z.string().max(16) }).strict();
 /** Change my password: the current one (any length, older rules) and a new one within today's bounds. */
@@ -145,7 +147,7 @@ export function createApp(deps: AppDeps) {
   const tooLarge = (c: Context) => c.json({ error: 'payload_too_large' }, 413);
   const smallBody = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: tooLarge });
   const speciesBody = bodyLimit({ maxSize: SPECIES_BODY_LIMIT_BYTES, onError: tooLarge });
-  app.use('/v1/*', (c, next) => (c.req.path === SPECIES_UPLOAD_PATH ? speciesBody(c, next) : smallBody(c, next)));
+  app.use('/v1/*', (c, next) => (c.req.path === SPECIES_UPLOAD_PATH || c.req.path === SPECIES_REMOVE_PATH ? speciesBody(c, next) : smallBody(c, next)));
 
   app.onError((err, c) => {
     console.error(`[error] ${c.req.method} ${c.req.path}: ${err.name}: ${err.message}`);
@@ -585,7 +587,10 @@ export function createApp(deps: AppDeps) {
     return json(c, 200, { friends: friends.friendsSpecies(m.user.id) });
   });
 
-  /** The full current list replaces the stored one; unknown scientific names are refused outright. */
+  /**
+   * The phone's current list is merged in: new birds are added and last-seen days only move later; nothing is removed
+   * (DECISIONS.md #127, Kristopher's list was emptied by an upload on Nov 15). Unknown scientific names are refused.
+   */
   app.post(SPECIES_UPLOAD_PATH, async (c) => {
     const m = await requireMember(c);
     if ('error' in m) return m.error;
@@ -597,8 +602,18 @@ export function createApp(deps: AppDeps) {
       if (seen.has(s.sci)) return json(c, 400, { error: 'invalid_request' });
       seen.add(s.sci);
     }
-    friends.replaceSharedSpecies(m.user.id, body.species);
-    return json(c, 200, { ok: true, count: body.species.length });
+    friends.mergeSharedSpecies(m.user.id, body.species);
+    return json(c, 200, { ok: true, count: friends.sharedSpeciesCount(m.user.id) });
+  });
+
+  /** Birds the person deleted in the app (all their sightings of it are gone), taken off the shared list. */
+  app.post(SPECIES_REMOVE_PATH, async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const body = await readJson(c, removeSpeciesSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    const removed = friends.removeSharedSpecies(m.user.id, [...new Set(body.species)]);
+    return json(c, 200, { ok: true, removed, count: friends.sharedSpeciesCount(m.user.id) });
   });
 
   app.post('/v1/me/species/clear', async (c) => {

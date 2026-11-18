@@ -413,6 +413,11 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return this.call('/v1/me/species', { species });
   }
 
+  /** Birds deleted on this phone, taken off the shared list by name (DECISIONS.md #127). */
+  removeSharedSpecies(species: string[]): Promise<{ ok: boolean; removed: number; count: number }> {
+    return this.call('/v1/me/species/remove', { species });
+  }
+
   clearSharedSpecies(): Promise<{ ok: boolean }> {
     return this.call('/v1/me/species/clear', {});
   }

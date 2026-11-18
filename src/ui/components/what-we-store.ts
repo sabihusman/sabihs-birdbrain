@@ -63,6 +63,8 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
     title: 'If sharing is on',
     items: [
       'The server keeps each bird’s name and the last day you spotted it. Friends see only that and your display name.',
+      // DECISIONS.md #127: uploads merge; only deleting a bird here or turning sharing off takes it away.
+      'Clearing this phone or using a new one keeps the list; deleting a bird’s recordings removes that bird, and turning sharing off removes the whole list.',
     ],
   },
   {

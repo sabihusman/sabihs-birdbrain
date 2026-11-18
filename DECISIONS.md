@@ -3323,3 +3323,25 @@ Each finding was checked against the code first.
 - **Tests:** `tests/flip.test.ts` (words, bubble placement, the count); e2e (bubble shows and leaves within ~3 s, tap
   dismisses it, the turn and turn-back, Stop through the turned screen, header and tabs swap ends, Dock, BirdAmp
   through Pause, none at 1280 px, 320 px without sideways scroll).
+
+## 127. Shared bird lists merge; only a deletion or turning sharing off removes a bird
+
+- **Why (Nov 17):** Kristopher's 2 shared birds disappeared. The nightly backups showed them every night to Nov 15
+  and gone from Nov 16 (03:15 UTC copies); nginx showed two `POST /v1/me/species` (00:11 and 01:07 UTC, Nov 16) and no
+  `/clear`. Each upload replaced the whole stored list, so a phone with no birds (cleared data, a new device, storage
+  the browser emptied) silently emptied what friends see. Ellie's and Anam's lists were empty in every backup back to
+  Nov 3. Of the options (ask before shrinking, merge, a list per device, warnings), Sabih chose B: merge.
+- **Server:** `POST /v1/me/species` now merges (`mergeSharedSpecies`): new birds are added, a last-seen day only
+  moves later, and nothing is removed; the answer's `count` is the stored total. New `POST /v1/me/species/remove`
+  (`{ species: [scientific…] }`, up to 2,000, the large body limit) takes named birds off the caller's own list.
+  `/clear` (turning sharing off) still removes everything at once.
+- **App (`src/species/sharing.ts`):** each phone remembers, per user, the birds it last shared
+  (`birdbrain.share.v1:<id>:sent`). Before an upload, birds it shared before and no longer has at all are removed by
+  name (`speciesToRemove`), so deleting a bird's recordings still takes it off. Nothing is removed when the phone has no
+  birds at all, when nothing was recorded as sent (a new device, a cleared browser), after Settings › "Delete all
+  recordings and detections" (`forgetSent()` first), or after turning sharing off and on.
+- **Known edges:** deleting the very last bird on a phone leaves it shared until sharing is turned off; with two
+  devices, a bird deleted on one comes back when the other (which still has it) uploads. Phones still running the
+  old app keep sending full lists, which now merge (their deletions do not reach friends until they update).
+- **Not done:** restoring Kristopher's 2 birds from the Nov 15 backup; that would undo a deletion he may have meant.
+- **Text:** What we store › If sharing is on says clearing the phone or a new device keeps the list.
