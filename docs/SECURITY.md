@@ -14,9 +14,10 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 - Audio, identifications and recordings never leave the phone. The API only
   sees: email, password (hashed by Better Auth), login codes, and for members
   a species name plus a question of at most 500 characters.
-- Login is email + password, then a 6-digit code sent by email on every login.
-  The password step creates a Better Auth session but the token is held
-  server-side in `login_challenge` until the code is verified. Tokens are
+- Login is email + password. Since 2026-11-20 (DECISIONS.md #129) a verified member gets the session at once;
+  the admin (role `admin` or `ADMIN_EMAIL`) and any address never proven still get a 6-digit code by email, and
+  for them the password step's session token is held server-side in `login_challenge` until the code is verified.
+  Sign-up always ends with the emailed code, which proves the address. Tokens are
   reference tokens sent as `Authorization: Bearer`; no cookies.
 - New accounts are `pending`; only the account whose email equals
   `ADMIN_EMAIL` is created `approved` with role `admin`. Admin endpoints need an
@@ -55,8 +56,8 @@ text from the OWASP/ASVS repository, fetched 2026-10-19). Findings marked
 | 6.2.6 / 6.2.7 Masked input, paste allowed | Met | `type=password`, no paste blocking. |
 | 6.3.1 Credential stuffing / brute force | Met | Limits above; generic `invalid_credentials` for wrong email or password. |
 | 6.3.2 No default accounts | Met | The admin is an ordinary signup matched by `ADMIN_EMAIL`. |
-| 6.3.3 Multi-factor for sensitive functions | Met | Every login (including admin) requires the emailed code; admin actions require an admin session. |
-| 6.3.5 / 6.3.7 Notification of attempts and changes | Partially | A code email is sent on every successful password step, which also notifies the owner of attempts with the right password. **Gap:** no notification for repeated failed attempts or for email changes (email change is not offered). |
+| 6.3.3 Multi-factor for sensitive functions | Met for admin; **accepted deviation** for members | Every admin login requires the emailed code, and admin actions require an admin session. Members sign in with a password only (Sabih, 2026-11-20, DECISIONS.md #129: the code at every sign-in was too cumbersome); their address was proven by the code at sign-up. Risk accepted: a leaked or reused member password opens that member's account. |
+| 6.3.5 / 6.3.7 Notification of attempts and changes | Partially | For the admin, a code email is sent on every successful password step, which also notifies the owner of attempts with the right password; members get no such mail since #129. **Gap:** no notification for repeated failed attempts or for email changes (email change is not offered). |
 | 6.3.6 Email not used as an authentication factor (Level 3) | **Accepted deviation** | The brief requires an emailed 6-digit code as the second factor. ASVS Level 3 forbids email as a factor; this app targets Level 1-2. Documented so a TOTP/passkey option can replace it later. |
 | 6.3.8 No user enumeration | Met for public routes; **accepted deviation** for members | Signup always answers 200 with a challenge of the same shape (DECISIONS.md #77); forgot-password always answers `{ ok: true }` (#78). Accepted by Sabih (#80): an approved member who invites an address learns whether it has an account, because an address without one gets a Create account link and the answer says so; members are approved by hand and invites are capped at 10 a day. Previously: signup always answered 200 with the same body; login answers 401 for unknown email and wrong password alike; code verification answers 401 for unknown, expired or wrong codes alike. Response timing differs slightly between unknown-email and wrong-password paths because password hashing only happens for existing users; this is the same for most Better Auth deployments and is accepted at this level. |
 

@@ -294,8 +294,17 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
     return this.call('/v1/auth/invite-info', { token });
   }
 
-  login(email: string, password: string): Promise<{ challenge: string; expiresInSeconds: number }> {
-    return this.call('/v1/auth/login', { email, password });
+  /**
+   * Sign in. A verified member is signed in at once (DECISIONS.md #129) and gets their user back; the admin, or an
+   * address never proven, gets a challenge and the code by email, as before.
+   */
+  async login(email: string, password: string): Promise<{ challenge: string; expiresInSeconds: number } | { user: AuthUser }> {
+    const res = await this.call<{ challenge: string; expiresInSeconds: number } | StoredSession>('/v1/auth/login', { email, password });
+    if ('token' in res) {
+      this.setSession(res);
+      return { user: res.user };
+    }
+    return res;
   }
 
   /** "Forgot password?": the same answer for every address (DECISIONS.md #78). */

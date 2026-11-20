@@ -97,9 +97,8 @@ describe('admin reset password (a link, DECISIONS.md #78)', () => {
     expect((await login(t, 'sam@example.com', PASSWORD)).status).toBe(401);
     const li = await login(t, 'sam@example.com', 'a brand new password');
     expect(li.status).toBe(200);
-    const { challenge } = (await li.json()) as { challenge: string };
-    const ve = await post(t.app, '/v1/auth/verify', { challenge, code: codeFrom(t.mailer, 'sam@example.com') });
-    expect(((await ve.json()) as { user: { status: string } }).user.status).toBe('approved');
+    // A verified member is signed in at once, no code (DECISIONS.md #129).
+    expect(((await li.json()) as { user: { status: string } }).user.status).toBe('approved');
   });
 
   it('says emailed: false when the mail fails, and nothing changes', async () => {

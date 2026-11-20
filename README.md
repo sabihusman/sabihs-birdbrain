@@ -127,7 +127,7 @@ The name is always shown next to the colour.
   detections. One clip is kept per species and replaced only by a more
   confident detection. Free users see a short "Sign in to unlock" note
   instead.
-- **Accounts (optional):** email + password + emailed code; approved members
+- **Accounts (optional):** email + password (an emailed code at sign-up, and at every admin sign-in); approved members
   can ask AI questions about a species (on the species page and on each
   sighting card), answered only from its Wikipedia article with section
   citations; Sabih approves members on a User management page (Settings ›
@@ -185,7 +185,7 @@ What does leave the phone, and why:
   from the Birds view.
 - If you create an account (optional): your email address and password go to
   the Birdbrain API at `bird-brain.duckdns.org`, which emails you a 6-digit
-  code on every sign-in and keeps a short-lived session token (the API only
+  code when you create the account (and the admin at every sign-in) and keeps a short-lived session token (the API only
   accepts requests from `https://sabihs-birdbrain.vercel.app`). New accounts
   wait for Sabih's approval.
 - If you are an approved member and use "Ask about this bird": the species'

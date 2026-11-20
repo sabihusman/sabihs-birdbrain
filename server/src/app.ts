@@ -101,6 +101,11 @@ const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(1
 /** Admin deletes a user: the user's address typed again, nothing else. */
 const adminDeleteSchema = z.object({ confirm: z.string().max(254) }).strict();
 
+/** Who still gets the emailed code at sign-in (DECISIONS.md #129): the admin always; anyone whose address was never proven. */
+export function needsSignInCode(user: Pick<AppUser, 'role' | 'emailVerified'>): boolean {
+  return user.role === 'admin' || !user.emailVerified;
+}
+
 const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 502 | 503, body: unknown) => c.json(body, status);
 
 export function createApp(deps: AppDeps) {
@@ -271,6 +276,16 @@ export function createApp(deps: AppDeps) {
     if (user.status === 'disabled' || user.status === 'rejected') {
       users.revokeSessions(user.id);
       return json(c, 403, { error: 'account_disabled' });
+    }
+    // Sabih, Nov 20 (DECISIONS.md #129): password only for a verified member; the emailed code stays for the admin
+    // and for an address that was never proven (sign-up, where the code is still asked, is the proof).
+    // Read back from the database (role and emailVerified as stored), and the admin address counts as admin too.
+    const stored = users.get(user.id) ?? user;
+    if (!needsSignInCode(stored) && stored.email.toLowerCase() !== config.adminEmail) {
+      const expiresAt = users.sessionExpiry(token);
+      if (!expiresAt) return json(c, 401, { error: 'invalid_credentials' });
+      if (stored.status === 'approved') await befriendInviters(stored.id, null);
+      return json(c, 200, { token, expiresAt: expiresAt.toISOString(), user: publicUser(stored) });
     }
     const challenge = challenges.create(user.id, user.email, token);
     try {
