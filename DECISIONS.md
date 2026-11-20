@@ -3378,3 +3378,6 @@ Each finding was checked against the code first.
   address).
 - **Tests:** `server/test/sign-in-code.test.ts` (member straight in with no mail, admin still gets the code, an unproven
   address still gets it, wrong password and disabled still refused); two older tests updated; `tests/api-client.test.ts`.
+- **Follow-up (Nov 20):** the first deploy of this stopped at the server's lint (an unused import left in a test),
+  which PR checks never ran. `ci.yml` now has a `server` job (lint, typecheck, tests in `server/`) on every push and
+  pull request.

@@ -41,3 +41,22 @@ jobs:
           name: playwright-report
           path: playwright-report
           retention-days: 7
+
+  # The API's own checks on every push and pull request, not only on main (server-image.yml): an unused import in a
+  # server test once passed the PR checks and then stopped the deploy at lint (Nov 20, DECISIONS.md #129).
+  server:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
