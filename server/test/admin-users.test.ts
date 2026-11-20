@@ -3,7 +3,7 @@ import { createApp } from '../src/app.js';
 import { createAuth, migrateAuth } from '../src/auth.js';
 import { openDatabase } from '../src/db.js';
 import { FakeMailer } from '../src/mailer.js';
-import { ADMIN, approvedMember, bearer, codeFrom, get, LABELS, post, rowsReferencing, signUpAndLogin, testConfig, type TestApp } from './helpers.js';
+import { ADMIN, approvedMember, bearer, get, LABELS, post, rowsReferencing, signUpAndLogin, testConfig, type TestApp } from './helpers.js';
 
 const PASSWORD = 'correct horse battery staple';
 
