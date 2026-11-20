@@ -3362,3 +3362,19 @@ Each finding was checked against the code first.
   account and Sign in. × hides it on this phone for good (`birdbrain.sharebanner.v1`).
 - **Tests:** `tests/account-button.test.ts`; e2e for the button states, the card status, the banner and its ×, and
   the header title never under the button at 320 / 375 px with a long name.
+
+## 129. No emailed code at member sign-in; kept at sign-up and for the admin
+
+- **Why (Sabih, Nov 20):** a code at every sign-in made logging in too cumbersome. Of the options (remove everywhere,
+  remove at sign-in only, remember the device, longer sessions), Sabih chose: remove it at sign-in, keep it at
+  sign-up, and the admin always signs in with the code.
+- **Now (`server/src/app.ts`, `needsSignInCode`):** `POST /v1/auth/login` with the right password answers with the
+  session (`{ token, expiresAt, user }`) for a member whose address is verified. The admin (role `admin`, or the
+  `ADMIN_EMAIL` address) and an address never proven (signed up, code never entered) still get `{ challenge }` and
+  the code by email, as before. Sign-up always ends with the code. Disabled and rejected accounts are still refused.
+  The app (`ApiClient.login`, the Sign in page) handles either answer; the "We email you a code each time" line is gone.
+- **Accepted risk:** a leaked or reused member password now opens that account (SECURITY.md 6.3.3 marks it an
+  accepted deviation for members). Rate limits are unchanged (20 auth requests / 10 min per IP, 6 logins / 10 min per
+  address).
+- **Tests:** `server/test/sign-in-code.test.ts` (member straight in with no mail, admin still gets the code, an unproven
+  address still gets it, wrong password and disabled still refused); two older tests updated; `tests/api-client.test.ts`.

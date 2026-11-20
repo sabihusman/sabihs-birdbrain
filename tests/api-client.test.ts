@@ -36,7 +36,7 @@ describe('ApiClient', () => {
     );
     expect(api.signedIn).toBe(false);
     const res = await api.login('a@b.co', 'correct horse battery');
-    expect(res.challenge).toBe('c1');
+    expect('challenge' in res && res.challenge).toBe('c1');
     expect(seen[0].auth).toBeUndefined();
     await api.verify('c1', '123456');
     expect(api.user?.email).toBe('a@b.co');
@@ -127,5 +127,17 @@ describe('ApiClient: account and friends', () => {
     expect(describeApiError(new ApiError(400, 'confirm_mismatch'))).toMatch(/DELETE/);
     expect(describeApiError(new ApiError(404, 'not_found'))).toMatch(/invite/);
     expect(describeApiError(new ApiError(400, 'unknown_species'))).toMatch(/species/);
+  });
+});
+
+describe('sign-in without a code for verified members (DECISIONS.md #129)', () => {
+  it('a session in the answer signs in at once and is stored', async () => {
+    const storage = new MemoryStorage();
+    const user = { id: 'u1', email: 'a@b.co', name: 'A', status: 'approved', role: 'member' };
+    const api = new ApiClient('https://api.test', storage, async () => new Response(JSON.stringify({ token: 'tok2', expiresAt: '2999-01-01T00:00:00Z', user }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const res = await api.login('a@b.co', 'correct horse battery');
+    expect('user' in res && res.user.email).toBe('a@b.co');
+    expect(api.user?.email).toBe('a@b.co');
+    expect(JSON.parse(storage.getItem(SESSION_KEY)!).token).toBe('tok2');
   });
 });

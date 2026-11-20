@@ -156,7 +156,7 @@ export function signInView(ctx: ViewContext): View {
       field('Password', password),
       submit,
       el('p', null, el('a', { href: '#/forgot-password', 'data-testid': 'to-forgot' }, 'Forgot password?')),
-      el('p', { class: 'small muted' }, 'We email you a 6-digit code each time you sign in.'),
+      
       el('p', null, 'New here? ', el('a', { href: '#/signup', 'data-testid': 'to-signup' }, 'Create an account')),
     );
     let busy = false;
@@ -167,6 +167,11 @@ export function signInView(ctx: ViewContext): View {
       show(message, '');
       try {
         const res = await api.login(email.value.trim(), password.value);
+        // Members are in at once (DECISIONS.md #129); the admin and unproven addresses still get the code.
+        if ('user' in res) {
+          location.hash = MY_ACCOUNT_HREF;
+          return;
+        }
         body.replaceChildren(
           codeStep(ctx, {
             email: email.value.trim(),

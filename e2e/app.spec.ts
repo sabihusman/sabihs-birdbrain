@@ -3472,3 +3472,27 @@ test('header: "Sign up / Sign in" signed out, name when signed in; model status 
   await expect(banner).toHaveCount(0);
   await context.close();
 });
+
+test('Sign in: a member goes straight to My account; the admin (or an unproven address) still gets the code step (DECISIONS.md #129)', async ({ page }) => {
+  let answer: unknown = { token: 'tok', expiresAt: '2999-01-01T00:00:00Z', user: { id: 'm1', email: 'robin@example.com', name: 'Robin', status: 'approved', role: 'member' } };
+  await page.route(/\/v1\//, (route) => route.abort());
+  await page.route(/\/v1\/auth\/login$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(answer) }));
+  await page.goto('./#/signin');
+  await expect(page.getByTestId('signin-page')).not.toContainText('6-digit code each time');
+  await page.getByTestId('signin-email').fill('robin@example.com');
+  await page.getByTestId('signin-password').fill('correct horse battery staple');
+  await page.getByTestId('signin-submit').click();
+  await expect(page).toHaveURL(/#\/account$/);
+  await expect(page.getByTestId('code-step')).toHaveCount(0);
+  await expect(page.getByTestId('account-button')).toContainText('Robin');
+  // Signed out again, the admin's answer is a challenge: the code step appears.
+  await page.evaluate(() => localStorage.removeItem('birdbrain.auth.v1'));
+  answer = { challenge: 'c'.repeat(32), expiresInSeconds: 600 };
+  await page.goto('./#/signin');
+  await page.reload();
+  await page.getByTestId('signin-email').fill('admin@example.com');
+  await page.getByTestId('signin-password').fill('correct horse battery staple');
+  await page.getByTestId('signin-submit').click();
+  await expect(page.getByTestId('code-step')).toBeVisible();
+  await expect(page.getByTestId('code-sent')).toContainText('admin@example.com');
+});
