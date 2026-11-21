@@ -335,12 +335,11 @@ textarea { color: inherit; }
 .fold > summary::after { content: "›"; font-size: var(--text-lg); color: var(--muted); transform: rotate(90deg); transition: transform var(--motion); }
 .fold[open] > summary::after { transform: rotate(-90deg); }
 .fold > :not(summary) { padding-bottom: var(--space-3); }
-/* Bottom dock layout */
+/* The Start bar above the tabs (Focus). Bottom dock, the layout it came from, is gone (DECISIONS.md #130). */
 .listen-dock { position: fixed; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--sab)); z-index: 19; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) calc(var(--space-3) + var(--sar)) var(--space-2) calc(var(--space-3) + var(--sal)); background: var(--panel); color: var(--on-panel); border-top: 1px solid var(--line); }
 .listen-dock .dock-text { flex: 1; font-weight: var(--weight-semibold); }
 .listen-dock .btn { background: var(--card); color: var(--text); }
 .listen-dock .btn.primary { background: var(--accent); color: var(--on-accent); }
-.listen-dock-layout { padding-bottom: 72px; }
 /* Focus mode */
 .focus-block { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
 /* Focus after its introduction (DECISIONS.md #83): Stop / Record while listening, or Start when stopped,
@@ -503,10 +502,6 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
    differ in the Ready state as well as while listening; only the arrangement differs,
    the components and states are the same.
    --------------------------------------------------------------------------- */
-/* A section header above a list of cards, as on the dock layout's Ready screen. */
-.sect { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font-weight: var(--weight-semibold); margin: var(--space-1) 2px var(--space-2); }
-.recent-inline { display: block; }
-.recent-inline .recent-body > p:last-child { margin-bottom: var(--space-2); }
 
 /* Focus: one giant button in Ready, one giant card while listening. */
 .mic-button.big { width: 190px; height: 190px; font-size: var(--text-md); }
@@ -515,8 +510,6 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .listen-focus-layout .last-bird { text-align: center; }
 .focus-latest .result-card.large .result-name { font-size: var(--text-xl); }
 
-/* Bottom dock: no round mic button anywhere, and the cards fill the screen. */
-.listen-dock-layout .mic-wrap { display: none; }
 /* User management (DECISIONS.md #61): long addresses wrap at 320 px; the confirmation sits inside the row. */
 .user-item { display: flex; flex-direction: column; gap: 4px; }
 .user-email, .user-name { overflow-wrap: anywhere; min-width: 0; }
@@ -658,8 +651,6 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .listen-status-line a { color: var(--accent); font-weight: var(--weight-semibold); padding: 14px 0; }
 .listen-status-line a[hidden] { display: none; }
 .focus-block .ready-extras { margin-top: var(--space-3); }
-.listen-dock-layout .ready-extras { align-items: stretch; }
-.listen-dock-layout .listen-status-line { text-align: left; }
 
 /* "See the sound" (DECISIONS.md #109): title, ⓘ and "Hide" share one row, the chips below,
    the ⓘ for the captions on the same row (it lives in the body, so tapping it never toggles the section). */
@@ -898,7 +889,7 @@ html.wn-open, html.wn-open body { overflow: hidden; }
 
 /*
  * Desktop (DECISIONS.md #122, Sabih's 1-B on the Nov 9 mockup): from 1024 px the tabs sit in the header (app.ts
- * moves the same <nav> there), Consolidated and Bottom dock split into two columns (controls and live views left,
+ * moves the same <nav> there), Consolidated splits into two columns (controls and live views left,
  * result cards right), BirdAmp puts the playlist beside the player, and Focus stays one column.
  */
 @media (min-width: 1024px) {
@@ -918,7 +909,6 @@ html.wn-open, html.wn-open body { overflow: hidden; }
   .listen.listen-two > * { grid-column: 1; }
   .listen.listen-two > .listen-side { grid-column: 2; grid-row: 1 / 7; }
   .listen.listen-two > .source-credit { grid-column: 1 / -1; grid-row: 7; }
-  .listen-dock-layout .listen-dock { left: 50%; right: auto; transform: translateX(-50%); width: min(1200px, 100%); border-radius: var(--radius-card) var(--radius-card) 0 0; }
 
   .listen-birdamp-layout { max-width: 1200px; }
   .listen-birdamp-layout .ba-stack { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-items: start; }

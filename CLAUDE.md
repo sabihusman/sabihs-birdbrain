@@ -45,7 +45,10 @@ Key modules:
   `track.getSettings()` into the "Voice processing" status; `highpass.ts`,
   `conditions.ts`, `ring-buffer.ts` hold the filter, the indicator thresholds
   and the raw sample ring (see DECISIONS.md #24–26).
-- BirdAmp Hybrid (`src/ui/birdamp/`, DECISIONS.md #110): a fourth Listen layout for approved members
+- Listen layouts: Consolidated, Focus (first-run default) and, for members, BirdAmp. Bottom dock was switched off on
+  Nov 21 (DECISIONS.md #130): `migrate()` in `src/app/settings.ts` turns a saved `dock` into Consolidated; the
+  `listen-dock` bar that remains is Focus's Start bar.
+- BirdAmp Hybrid (`src/ui/birdamp/`, DECISIONS.md #110): a Listen layout for approved members
   (`effectiveLayout` in `src/app/access.ts` shows Focus to anyone else). `view.ts` builds the player, confidence and
   library windows and borrows Listen's canvases; `windows.ts` (order/state, `birdbrain.birdamp.v1`), `library.ts` (the "BirdAmp Playlist", Winamp look #111)
   (HEARD / TODAY / ALL BIRDS / NEAR YOU rows), `lcd.ts`, `icon.ts` (gold bolt). `src/ui/skin.ts` sets
@@ -65,7 +68,7 @@ Key modules:
 - `src/ui/app.ts` — shell, hash router (`src/ui/router.ts`), bottom tabs; the header has the account button
   (`src/ui/components/account-button.ts`) where the model pill was; the model status reads in Listen's Start card
   (`card-model-status`), the header pill is screen-reader only except in BirdAmp (DECISIONS.md #128); from 1024 px (`WIDE_SCREEN`) the same
-  tabs move into the header and Consolidated / Dock use two columns (`.listen-two`, `.listen-side`; DECISIONS.md #122).
+  tabs move into the header and Consolidated uses two columns (`.listen-two`, `.listen-side`; DECISIONS.md #122).
 - ⇅ Flip (`src/ui/flip.ts`, DECISIONS.md #126): while listening on a phone, turns the whole app 180°
   (`html[data-flipped]` rotates `.app`, safe areas swap) for pointing the phone's bottom at a bird; a 3 s bubble after
   Start points at it; back when listening stops. Elements appended to `<body>` (dialogs) do not turn.

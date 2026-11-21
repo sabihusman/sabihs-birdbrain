@@ -27,6 +27,7 @@ const SCREEN_GROUP: Record<string, string> = {
   'admin-usage': 'Admin',
 };
 
+// "Dock" stays for counts sent before Bottom dock was switched off (DECISIONS.md #130).
 const LAYOUT: Record<string, string> = { focus: 'Focus', consolidated: 'Consolidated', dock: 'Dock', birdamp: 'BirdAmp' };
 const BACKEND: Record<string, string> = { webgl: 'WebGL (fast)', wasm: 'WASM', cpu: 'CPU (slow)' };
 const MIC: Record<string, string> = {

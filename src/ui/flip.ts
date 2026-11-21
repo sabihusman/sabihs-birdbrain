@@ -32,7 +32,7 @@ export function flipLabels(on: boolean): { text: string; aria: string } {
   return on ? { text: '⇅ Flipped', aria: 'Turn the screen back' } : { text: '⇅ Flip', aria: 'Turn the screen upside down, for pointing the phone at a bird' };
 }
 
-/** A panel or dock button that flips; it keeps its words and pressed state in step wherever it is. */
+/** A panel button that flips; it keeps its words and pressed state in step wherever it is. */
 export function flipButton(testId: string, onTurnOn?: () => void): { el: HTMLButtonElement; dispose: () => void } {
   const btn = el('button', { class: 'btn small flip-btn', type: 'button', 'data-testid': testId }) as HTMLButtonElement;
   const render = (on: boolean) => {
@@ -65,7 +65,7 @@ export interface HintPlacement {
 }
 
 /**
- * Where the bubble goes (approved mockup, Nov 15): a button low on the screen (Focus's pinned panel, the dock) gets the
+ * Where the bubble goes (approved mockup, Nov 15): a button low on the screen (Focus's pinned panel) gets the
  * bubble above its panel with the tip pointing down; a button in the top half (Consolidated, BirdAmp) gets it just
  * under the button, pointing up. Never over the timer or the level.
  */

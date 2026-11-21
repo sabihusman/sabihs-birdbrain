@@ -3,8 +3,9 @@ import { el } from '../dom';
 import { birdAmpBolt } from '../birdamp/icon';
 
 /**
- * Settings → Listen layout: three preview tiles in one row (Consolidated, Bottom dock, Focus),
+ * Settings → Listen layout: preview tiles in one row (Consolidated, Focus, and BirdAmp for members),
  * each a small phone wireframe plus the layout name. Replaces the dropdown (DECISIONS.md #45).
+ * Bottom dock is no longer offered (DECISIONS.md #130).
  *
  * The group is a radiogroup of radio buttons: the selected tile has aria-checked="true" and
  * tabindex 0, the others tabindex -1 (roving tabindex); Left/Right and Up/Down move the
@@ -16,7 +17,6 @@ import { birdAmpBolt } from '../birdamp/icon';
 /** `label` is the visible text (may hold a soft hyphen for 320 px screens); `name` is the accessible one. */
 export const LAYOUT_OPTIONS: ReadonlyArray<{ value: ListenLayout; name: string; label?: string; description: string; membersOnly?: boolean }> = [
   { value: 'consolidated', name: 'Consolidated', label: 'Consoli\u00ADdated', description: 'Panel on top, results below' },
-  { value: 'dock', name: 'Bottom dock', description: 'Results fill the screen, controls above the tabs' },
   { value: 'focus', name: 'Focus', description: 'One large card for the latest bird' },
   // Approved members only (Sabih's 3A, DECISIONS.md #110): signed out or waiting, the tile is not shown.
   { value: 'birdamp', name: 'BirdAmp', description: 'Winamp player + library', membersOnly: true },
@@ -31,15 +31,6 @@ const WIREFRAMES: Record<ListenLayout, string> = {
     '<rect class="wf-row" x="6" y="33" width="40" height="8" rx="2"/>' +
     '<rect class="wf-row" x="6" y="45" width="40" height="8" rx="2"/>' +
     '<rect class="wf-row" x="6" y="57" width="40" height="4" rx="2"/>' +
-    '<rect class="wf-tabs" x="6" y="65" width="40" height="3" rx="1.5"/>',
-  // Result rows filling the screen, a control bar just above the tab bar.
-  dock:
-    '<rect class="wf-frame" x="1" y="1" width="50" height="71" rx="7"/>' +
-    '<rect class="wf-row" x="6" y="8" width="40" height="8" rx="2"/>' +
-    '<rect class="wf-row" x="6" y="20" width="40" height="8" rx="2"/>' +
-    '<rect class="wf-row" x="6" y="32" width="40" height="8" rx="2"/>' +
-    '<rect class="wf-row" x="6" y="44" width="40" height="4" rx="2"/>' +
-    '<rect class="wf-panel" x="6" y="53" width="40" height="9" rx="2.5"/>' +
     '<rect class="wf-tabs" x="6" y="65" width="40" height="3" rx="1.5"/>',
   // One large card (photo block and two text lines) with a big button under it.
   focus:

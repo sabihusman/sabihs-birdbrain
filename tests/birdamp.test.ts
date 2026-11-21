@@ -12,7 +12,7 @@ describe('BirdAmp is for approved members (DECISIONS.md #110)', () => {
     expect(effectiveLayout('birdamp', user('approved'))).toBe('birdamp');
     expect(effectiveLayout('birdamp', user('pending'))).toBe('focus');
     expect(effectiveLayout('birdamp', null)).toBe('focus');
-    expect(effectiveLayout('dock', null)).toBe('dock');
+    expect(effectiveLayout('consolidated', null)).toBe('consolidated');
   });
 });
 
