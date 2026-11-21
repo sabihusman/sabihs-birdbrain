@@ -115,6 +115,32 @@ describe('auto-save detection windows (settings version 3)', () => {
   });
 });
 
+describe('Bottom dock is switched off (DECISIONS.md #130)', () => {
+  it('moves a phone that saved Bottom dock to Consolidated, whatever version stored it, and keeps its other settings', () => {
+    for (const version of [undefined, 3, 6]) {
+      const storage = new MemoryStorage();
+      storage.setItem('birdbrain.settings.v1', JSON.stringify({ ...(version ? { version } : {}), listenLayout: 'dock', threshold: 0.8, lowCut: false }));
+      const s = new SettingsStore(storage).get();
+      expect(s.listenLayout).toBe('consolidated');
+      expect(s.threshold).toBe(0.8);
+      expect(s.lowCut).toBe(false);
+    }
+  });
+  it('cannot be chosen any more: asking for it gives the default layout', () => {
+    const store = new SettingsStore(new MemoryStorage());
+    store.update({ listenLayout: 'consolidated' });
+    store.update({ listenLayout: 'dock' as never });
+    expect(store.get().listenLayout).toBe('focus');
+  });
+  it('leaves the other layouts as saved', () => {
+    for (const layout of ['consolidated', 'focus', 'birdamp']) {
+      const storage = new MemoryStorage();
+      storage.setItem('birdbrain.settings.v1', JSON.stringify({ version: 6, listenLayout: layout }));
+      expect(new SettingsStore(storage).get().listenLayout).toBe(layout);
+    }
+  });
+});
+
 describe('Listen layout default (DECISIONS.md #63)', () => {
   it('opens in Focus on first run and when stored settings are gone', () => {
     expect(new SettingsStore(null).get().listenLayout).toBe('focus');
@@ -122,8 +148,8 @@ describe('Listen layout default (DECISIONS.md #63)', () => {
   });
   it('remembers a chosen layout across visits', () => {
     const storage = new MemoryStorage();
-    new SettingsStore(storage).update({ listenLayout: 'dock' });
-    expect(new SettingsStore(storage).get().listenLayout).toBe('dock');
+    new SettingsStore(storage).update({ listenLayout: 'birdamp' });
+    expect(new SettingsStore(storage).get().listenLayout).toBe('birdamp');
     new SettingsStore(storage).update({ listenLayout: 'consolidated' });
     expect(new SettingsStore(storage).get().listenLayout).toBe('consolidated');
     new SettingsStore(storage).update({ listenLayout: 'birdamp' });

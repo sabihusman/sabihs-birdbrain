@@ -3381,3 +3381,22 @@ Each finding was checked against the code first.
 - **Follow-up (Nov 20):** the first deploy of this stopped at the server's lint (an unused import left in a test),
   which PR checks never ran. `ci.yml` now has a `server` job (lint, typecheck, tests in `server/`) on every push and
   pull request.
+
+## 130. Bottom dock layout switched off
+
+- **Why (Sabih, Nov 21):** asked for alongside the UX-audit tidy-up; one layout fewer to choose from and to keep working.
+- **Now:** `ListenLayout` is `consolidated | focus | birdamp`. Bottom dock is gone from Settings › Listen layout and
+  from the layout bubble on Listen. A phone that saved `dock` gets Consolidated, the closest layout (the same list
+  of result cards, with the panel on top instead of a bar at the bottom): `migrate()` in `src/app/settings.ts` does
+  it whatever version stored the settings, because an old copy of the app still open could save `dock` again. The
+  rest of that phone's settings are untouched.
+- **Kept:** the `listen-dock` bar itself, because Focus uses it as its Start bar after the introduction (#83). Its
+  Stop, timer and ⇅ Flip buttons belonged to Bottom dock only and are removed. Admin › Usage still labels `dock`
+  as "Dock" for counts sent before the change; the app no longer sends that value.
+- **Left behind on purpose:** the grouped "Recent sightings" cards (`recentGroupCard`) were shown on the page only
+  by Bottom dock (#109 took the dropdown out of the other layouts). The code is still there, unused on screen; a
+  separate tidy-up can remove it or give it a home.
+- **To bring it back:** restore the layout from the commit before this one.
+- **Tests:** `tests/settings.test.ts` (a saved `dock` becomes Consolidated at any stored version, other settings
+  kept; it can no longer be chosen); e2e: two tiles for everyone, no `layout-bubble-dock`, each remaining layout
+  through ready / listening / stop.

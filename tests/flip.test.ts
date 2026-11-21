@@ -10,7 +10,7 @@ describe('⇅ Flip (DECISIONS.md #126)', () => {
     expect(FLIP_HINT_MS).toBe(3000);
   });
 
-  it('puts the bubble above a low panel (Focus, Dock) and under a button in the top half (Consolidated, BirdAmp)', () => {
+  it('puts the bubble above a low panel (Focus) and under a button in the top half (Consolidated, BirdAmp)', () => {
     const viewport = { width: 390, height: 844 };
     // Focus: Flip at the bottom right, the panel starts higher up; the bubble sits above the panel, tip under the button.
     const low = placeHint({ top: 680, bottom: 724, right: 374, width: 66 }, 600, viewport);

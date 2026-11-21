@@ -67,12 +67,10 @@ export function listenView(ctx: ViewContext): View {
   startBtn.innerHTML = `${MIC}<span>Start listening</span>`;
   const stopBtn = el('button', { class: 'btn big stop', type: 'button', 'data-testid': 'stop' }, 'Stop listening');
   const dockStartBtn = el('button', { class: 'btn primary', type: 'button', 'data-testid': 'dock-start' }, 'Start listening');
-  const dockStopBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'dock-stop' }, 'Stop');
   const recordBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'record' }, '● Record');
-  // ⇅ Flip (DECISIONS.md #126): turns the whole app for pointing the phone's bottom at a bird; on the panel and the dock.
+  // ⇅ Flip (DECISIONS.md #126): turns the whole app for pointing the phone's bottom at a bird; on the panel.
   const countFlip = () => ctx.usage.track({ event: 'screen_flipped', layout });
   const panelFlip = flipButton('flip', countFlip);
-  const dockFlip = flipButton('dock-flip', countFlip);
   const tryAgainBtn = el('button', { class: 'btn', type: 'button', 'data-testid': 'try-again' }, 'Try again');
   const resumeBtn = el('button', { class: 'btn primary', type: 'button', 'data-testid': 'resume' }, 'Resume listening');
 
@@ -200,9 +198,6 @@ export function listenView(ctx: ViewContext): View {
   /** The cards themselves, moved between the collapsed row and the page by applyLayout(). */
   const recentBody = el('div', { class: 'stack recent-body' }, recentEmpty, recentList, recentNote);
   const recentDetails = el('details', { class: 'fold', 'data-testid': 'recent-fold' }, el('summary', null, el('span', { class: 'fold-title' }, 'Recent sightings'), recentSummary), recentBody);
-  /** Bottom dock shows the same cards on the page instead, with a section header. */
-  const recentHeader = el('div', { class: 'sect' }, el('span', null, 'Recent sightings'), el('span', { class: 'small muted', 'data-testid': 'recent-inline-summary' }, ''));
-  const recentInline = el('section', { class: 'recent-inline', 'data-testid': 'recent-inline' }, recentHeader);
 
   // Visualisations inside "How it works"
   const waveCanvas = el('canvas', { class: 'waveform', 'aria-label': 'Live waveform' });
@@ -251,8 +246,7 @@ export function listenView(ctx: ViewContext): View {
   const cardPill = el('span', { class: 'model-pill card-model-pill', 'data-testid': 'card-model-status', 'aria-hidden': 'true' }, cardPillText);
   const readyBlock = el('div', { class: 'ready-block', 'data-testid': 'ready-block' }, stateRow, cardPill, stateHint, modelBar, modelText, micSteps, el('div', { class: 'mic-wrap' }, startBtn), el('div', { class: 'row' }, tryAgainBtn, resumeBtn), readyExtras, lastBirdLine, status);
   const resultsBlock = el('section', { class: 'results-block' }, resultsList, lowLine, notUsualBox, resultsEmpty);
-  const dockTimer = el('span', { class: 'dock-time' }, ' · ', el('span', { class: 'tabular', 'data-testid': 'dock-timer' }, '0:00'));
-  const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready'), dockTimer), dockStartBtn, dockStopBtn, dockFlip.el);
+  const dock = el('div', { class: 'listen-dock', 'data-testid': 'dock' }, el('span', { class: 'dock-text' }, el('span', { class: 'live-dot', 'aria-hidden': 'true' }), ' ', el('span', { 'data-testid': 'dock-state' }, 'Ready')), dockStartBtn);
   const focusLatest = el('div', { class: 'focus-latest', 'data-testid': 'focus-latest' });
   // Earlier birds open right under the highlighted one with a tap (DECISIONS.md #83; the swipe-up sheet is gone).
   const moreList = el('div', { class: 'focus-more', id: 'focus-more', 'data-testid': 'focus-more', hidden: true });
@@ -310,7 +304,7 @@ export function listenView(ctx: ViewContext): View {
   const applyLayout = (next: ListenLayout) => {
     layout = next;
     bubble.sync(next);
-    root.className = `listen${next === 'dock' ? ' listen-dock-layout' : next === 'focus' ? ' listen-focus-layout' : next === 'birdamp' ? ' listen-birdamp-layout' : ''}${(next === 'consolidated' || next === 'dock') && !controller.welcomePending ? ' listen-two' : ''}`;
+    root.className = `listen${next === 'focus' ? ' listen-focus-layout' : next === 'birdamp' ? ' listen-birdamp-layout' : ''}${next === 'consolidated' && !controller.welcomePending ? ' listen-two' : ''}`;
     root.dataset.layout = next;
     if (controller.welcomePending) {
       setShellSkin(null);
@@ -346,14 +340,6 @@ export function listenView(ctx: ViewContext): View {
       focusBlock.appendChild(notUsualBox);
       recentDetails.appendChild(recentBody);
       root.replaceChildren(readyBlock, focusBlock, helpLink, credit, panel, dock, bubble.el);
-    } else if (next === 'dock') {
-      resultsBlock.prepend(resultsList);
-      resultsBlock.prepend(banner);
-      lowLine.after(notUsualBox);
-      recentInline.appendChild(recentBody);
-      // The dock is fixed above the tab bar; the credit is the last line in flow, so it scrolls above the dock, never under it.
-      side.replaceChildren(recentInline, resultsBlock);
-      root.replaceChildren(readyBlock, side, how, helpLink, credit, dock, bubble.el);
     } else {
       resultsBlock.prepend(resultsList);
       panel.insertBefore(banner, panel.lastElementChild);
@@ -371,9 +357,7 @@ export function listenView(ctx: ViewContext): View {
   // This session's birds live in the controller, so they survive leaving Listen (DECISIONS.md #107).
   let lastResult: WindowResult | null = controller.getLastWindow();
   const expanded = new Set<string>();
-  /** Bottom dock opens every card (DECISIONS.md #109); this holds the ones closed by hand. Elsewhere `expanded` holds the open ones. */
-  const collapsed = new Set<string>();
-  const isOpen = (key: string) => (layout === 'dock' ? !collapsed.has(key) : expanded.has(key));
+  const isOpen = (key: string) => expanded.has(key);
   // Cards are kept per species and updated in place, so each window doesn't rebuild them (no flicker).
   const resultCards = keyedPool<ResultCardHandle>();
   const recentCards = keyedPool<RecentGroupCardHandle>();
@@ -431,28 +415,20 @@ export function listenView(ctx: ViewContext): View {
     setHidden(micSteps, st.status !== 'mic-blocked');
     setHidden(tryAgainBtn, !(st.status === 'mic-blocked' || st.status === 'error'));
     setHidden(resumeBtn, st.status !== 'paused');
-    // Ready differs per layout: Consolidated keeps the round mic button, Bottom dock has no
-    // mic button at all and fills the screen with cards, Focus shows one giant button.
+    // Ready differs per layout: Consolidated keeps the round mic button, Focus shows one giant button.
     const plainReady = st.status === 'ready' || st.status === 'offline';
     // Idle (model not loaded yet, DECISIONS.md #69) shows the same controls as Ready: the first tap loads the model.
     const canStart = st.status === 'ready' || st.status === 'offline' || st.status === 'idle';
     const noModel = st.status === 'unsupported';
-    setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || noModel || layout === 'dock');
+    setHidden(startBtn, listening || st.status === 'loading' || st.status === 'mic-blocked' || st.status === 'error' || noModel);
     setHidden(readyExtras, listening || noModel);
     setHidden(readyBlock, listening);
-    if (layout === 'dock') {
-      // Cards fill the screen, so the state row only appears when there is something to say
-      // (loading, mic blocked, paused, an error).
-      setHidden(stateRow, plainReady);
-      // "Point the bottom of your phone toward the sound." until the first bird (DECISIONS.md #108).
-      setHidden(stateHint, plainReady && controller.getSessionHits().length > 0);
-    } else {
-      setHidden(stateRow, false);
-      setHidden(stateHint, false);
-    }
+    setHidden(stateRow, false);
+    setHidden(stateHint, false);
     startBtn.classList.toggle('big', layout === 'focus');
-    setHidden(panel, !listening || layout === 'dock');
-    setHidden(dock, layout !== 'dock');
+    setHidden(panel, !listening);
+    // The bar above the tabs is Focus's Start bar (shown below); no other layout has one.
+    setHidden(dock, true);
     setHidden(focusBlock, layout !== 'focus' || !listening);
     if (layout === 'focus') {
       // The big Start page is an introduction, once per session and day (DECISIONS.md #83). After
@@ -472,24 +448,9 @@ export function listenView(ctx: ViewContext): View {
       setHidden(lastBirdLine, !intro || lastBirdLine.textContent === '');
       setHidden(dock, intro || listening);
       setHidden(dockStartBtn, listening || !canStart);
-      setHidden(dockStopBtn, true);
-      setHidden(dockFlip.el, true);
-      setHidden(dockTimer, true);
       (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.status === 'idle' ? 'Ready' : st.pill;
       dock.dataset.status = st.status;
       if (!intro) renderFocusLatestEmpty(listening);
-    }
-    if (layout === 'dock') {
-      setHidden(recentInline, listening);
-      setHidden(resultsBlock, !listening);
-    }
-    if (layout === 'dock') {
-      setHidden(dockStartBtn, listening || !canStart);
-      setHidden(dockStopBtn, !listening);
-      setHidden(dockFlip.el, !listening);
-      (dock.querySelector('[data-testid="dock-state"]') as HTMLElement).textContent = st.pill;
-      setHidden(dockTimer, !listening);
-      dock.dataset.status = st.status;
     }
     if (layout === 'birdamp') {
       // The player has Listen; the block only speaks when there is something to say.
@@ -588,7 +549,6 @@ export function listenView(ctx: ViewContext): View {
     setHidden(recentEmpty, groups.length > 0);
     const detections = groups.reduce((n, g) => n + g.detections.length, 0);
     recentSummary.textContent = groups.length ? `${groups.length} bird${groups.length === 1 ? '' : 's'} · ${detections} detection${detections === 1 ? '' : 's'}` : '';
-    (recentHeader.lastElementChild as HTMLElement).textContent = recentSummary.textContent;
     // Focus has no list, so it says what the last bird was instead.
     const newest = groups[0];
     lastBirdLine.textContent = newest ? `Last bird: ${newest.species.common} · ${new Date(newest.lastHeard).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
@@ -600,7 +560,7 @@ export function listenView(ctx: ViewContext): View {
           recentGroupCard(ctx, g, {
             expanded: isOpen(g.key),
             onToggle: (key) => {
-              toggleExpanded(layout === 'dock' ? collapsed : expanded, key);
+              toggleExpanded(expanded, key);
               renderRecent();
             },
           }),
@@ -647,7 +607,7 @@ export function listenView(ctx: ViewContext): View {
   const offerFlipHint = () => {
     hideHint();
     const target: [HTMLElement | null, HTMLElement | null] =
-      layout === 'dock' ? [dockFlip.el, dock] : layout === 'birdamp' ? [root.querySelector<HTMLElement>('[data-testid="ba-flip"]'), null] : [panelFlip.el, panel];
+      layout === 'birdamp' ? [root.querySelector<HTMLElement>('[data-testid="ba-flip"]'), null] : [panelFlip.el, panel];
     if (target[0]) hideHint = showFlipHint(target[0], target[1]);
   };
   const start = async () => {
@@ -698,7 +658,6 @@ export function listenView(ctx: ViewContext): View {
     void start();
   });
   stopBtn.addEventListener('click', () => void stop());
-  dockStopBtn.addEventListener('click', () => void stop());
   resumeBtn.addEventListener('click', () => void controller.resumeListening().then(renderState));
   /** ● Record on the panel and BirdAmp's ● REC key (DECISIONS.md #119): the same recording, saved to Recordings. */
   const toggleRecording = async () => {
@@ -783,7 +742,6 @@ export function listenView(ctx: ViewContext): View {
         wasPaused = st.paused;
         renderState();
       }
-      (dock.querySelector('[data-testid="dock-timer"]') as HTMLElement).textContent = fmtDuration(st.elapsedSec);
       if (controller.getRecordingState().recording) renderState();
     }),
     controller.on('recording', renderState),
@@ -875,7 +833,6 @@ export function listenView(ctx: ViewContext): View {
       amp?.dispose();
       hideHint();
       panelFlip.dispose();
-      dockFlip.dispose();
       setShellSkin(null);
     },
   };

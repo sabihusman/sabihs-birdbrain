@@ -58,6 +58,8 @@ describe('Admin › Usage labels', () => {
 
   it('plain words for layouts, backends, microphone problems and times', () => {
     expect(layoutLabel('birdamp')).toBe('BirdAmp');
+    // Counts from before Bottom dock was switched off still read "Dock" (DECISIONS.md #130).
+    expect(layoutLabel('dock')).toBe('Dock');
     expect(backendLabel('webgl')).toBe('WebGL (fast)');
     expect(micLabel('denied')).toBe('Microphone blocked');
     expect(shortDuration(250)).toBe('4m 10s');

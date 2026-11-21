@@ -13,10 +13,10 @@ const out = path.resolve(import.meta.dirname, '../docs/screenshots');
 fs.mkdirSync(out, { recursive: true });
 const GL = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'];
 const LAYOUT = process.env.LAYOUT ?? 'consolidated';
-// Bottom dock has no round mic button and Focus hides the sample button: both by design
+// Focus hides the sample button by design
 // (DECISIONS.md #59), so the script asks each layout for its own controls.
-const START = LAYOUT === 'dock' ? 'dock-start' : 'start-stop';
-const STOP = LAYOUT === 'dock' ? 'dock-stop' : 'stop';
+const START = 'start-stop';
+const STOP = 'stop';
 
 async function withPage(browser: Browser, theme: 'dark' | 'light', mic: 'fake' | 'denied', run: (page: import('@playwright/test').Page) => Promise<void>) {
   const context = await browser.newContext({ ...devices['iPhone 13'], permissions: mic === 'fake' ? ['microphone'] : [] });

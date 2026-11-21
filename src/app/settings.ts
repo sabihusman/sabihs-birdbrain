@@ -5,9 +5,14 @@ export type { BackendPreference } from '../model/protocol';
 import type { BackendPreference } from '../model/protocol';
 export type LocationMode = 'auto' | 'manual' | 'off';
 export type OcclusionResolution = 'coarse' | 'medium' | 'fine';
-/** Listen screen arrangement (docs/DESIGN_GUIDE.md §6). BirdAmp is for approved members (DECISIONS.md #110). */
-export type ListenLayout = 'consolidated' | 'dock' | 'focus' | 'birdamp';
-const LAYOUTS: readonly ListenLayout[] = ['consolidated', 'dock', 'focus', 'birdamp'];
+/**
+ * Listen screen arrangement (docs/DESIGN_GUIDE.md §6). BirdAmp is for approved members (DECISIONS.md #110).
+ * Bottom dock was switched off on Nov 21 (DECISIONS.md #130): a phone that saved it gets Consolidated (migrate()).
+ */
+export type ListenLayout = 'consolidated' | 'focus' | 'birdamp';
+const LAYOUTS: readonly ListenLayout[] = ['consolidated', 'focus', 'birdamp'];
+/** The stored name of the layout that is gone. */
+const RETIRED_DOCK = 'dock';
 /** Map tab: cards under the map, one per bird or one per place (DECISIONS.md #72). */
 export type MapCardsView = 'birds' | 'places';
 
@@ -151,6 +156,9 @@ export function migrate(parsed: Partial<Settings>): Settings {
   // Version 6: the auto-save bar follows (DECISIONS.md #124). Same reasoning: a stored 70 % is the old default; it is
   // still never below the detection minimum (sanitize), so a phone at 80 % keeps saving from 80 %.
   if (from < 6 && typeof parsed.autoSaveMinConfidence === 'number' && Math.round(parsed.autoSaveMinConfidence * 100) === Math.round(DEFAULT_70_THRESHOLD * 100)) stored.autoSaveMinConfidence = DEFAULT_SETTINGS.autoSaveMinConfidence;
+  // Not tied to a version: Bottom dock is gone (DECISIONS.md #130), and an old copy of the app still open in another
+  // tab could save it again. Consolidated is the closest layout (the same list of result cards).
+  if ((parsed.listenLayout as string | undefined) === RETIRED_DOCK) stored.listenLayout = 'consolidated';
   stored.version = SETTINGS_VERSION;
   return stored;
 }

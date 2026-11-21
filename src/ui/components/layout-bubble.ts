@@ -4,7 +4,7 @@ import { LAYOUT_OPTIONS, layoutArt } from './layout-picker';
 
 /**
  * Listen › layout bubble (DECISIONS.md #101): a small round button at the bottom right, above the tab bar
- * (and above the dock or Start bar when the layout has one), showing the current layout's picture. A tap
+ * (and above Focus's Start bar), showing the current layout's picture. A tap
  * opens a card that grows upward with the layouts (BirdAmp too for members, #110), each with its picture, name and one line; a tap
  * on one switches at once. Escape, a tap outside, or a choice closes it. Shown only when not listening,
  * so it is never next to Stop (the view hides it).
@@ -21,7 +21,6 @@ export interface LayoutBubble {
 
 const SHORT_DESCRIPTION: Record<ListenLayout, string> = {
   consolidated: 'Panel on top, results below',
-  dock: 'Results fill the screen',
   focus: 'One big card for the latest bird',
   birdamp: 'Winamp player + library',
 };

@@ -38,7 +38,7 @@ export const PAGES = [
 ] as const;
 export type PageName = (typeof PAGES)[number];
 
-const LAYOUT_VALUES: readonly ListenLayout[] = ['consolidated', 'dock', 'focus', 'birdamp'];
+const LAYOUT_VALUES: readonly ListenLayout[] = ['consolidated', 'focus', 'birdamp'];
 const BACKENDS = ['webgl', 'wasm', 'cpu'] as const;
 const MIC_PROBLEMS = ['denied', 'no-mic', 'insecure', 'unsupported', 'busy', 'other'] as const;
 

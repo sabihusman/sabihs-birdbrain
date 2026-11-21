@@ -6,13 +6,13 @@ import { devices, expect, test, type Page } from '@playwright/test';
  * (DECISIONS.md #117).
  */
 async function hearBird(page: Page): Promise<void> {
-  const layout = await page.locator('.listen').getAttribute('data-layout');
   const big = page.getByTestId('start-stop');
-  const start = layout !== 'dock' && (await big.isVisible()) ? big : page.getByTestId('dock-start');
+  // Focus after its introduction has its Start in the bar above the tabs.
+  const start = (await big.isVisible()) ? big : page.getByTestId('dock-start');
   await start.click();
   await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 200_000 });
   await expect(page.getByTestId('result-card').first()).toBeAttached({ timeout: 120_000 });
-  await page.getByTestId(layout === 'dock' ? 'dock-stop' : 'stop').click();
+  await page.getByTestId('stop').click();
   await expect(page.getByTestId('model-status')).not.toContainText('Listening');
 }
 
@@ -195,10 +195,10 @@ test('first run opens Listen in Focus, and a chosen layout is kept after a reloa
   await page.goto('./#/listen');
   await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'focus');
   await page.goto('./#/settings');
-  await page.getByTestId('listen-layout-dock').click();
+  await page.getByTestId('listen-layout-consolidated').click();
   await page.goto('./#/listen');
   await page.reload();
-  await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'dock');
+  await expect(page.locator('.listen')).toHaveAttribute('data-layout', 'consolidated');
   await context.close();
 });
 
@@ -1044,23 +1044,24 @@ test('Listen layout picker: tiles select and persist, arrow keys move, height bu
   await expect(group).toHaveAttribute('role', 'radiogroup');
   await expect(page.locator('select[aria-label="Listen layout"]')).toHaveCount(0);
   const tiles = group.getByRole('radio');
-  await expect(tiles).toHaveCount(3);
+  // Two for everyone (Bottom dock is gone, DECISIONS.md #130); BirdAmp joins them for approved members.
+  await expect(tiles).toHaveCount(2);
+  await expect(page.getByTestId('listen-layout-dock')).toHaveCount(0);
   // Visible names (the first may carry a soft hyphen for 320 px) and clean accessible names.
-  await expect(tiles).toHaveText([/^Consoli\u00AD?dated$/, 'Bottom dock', 'Focus']);
-  for (const name of [/^Consolidated: /, /^Bottom dock: /, /^Focus: /]) await expect(group.getByRole('radio', { name })).toHaveAttribute('aria-checked', /true|false/);
+  await expect(tiles).toHaveText([/^Consoli\u00AD?dated$/, 'Focus']);
+  for (const name of [/^Consolidated: /, /^Focus: /]) await expect(group.getByRole('radio', { name })).toHaveAttribute('aria-checked', /true|false/);
   // Default selection and roving tabindex: the checked tile is the only one in the tab order.
   // First run opens in Focus (DECISIONS.md #63).
   await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('tabindex', '0');
   await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('tabindex', '-1');
-  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('tabindex', '-1');
   // Height budget: the whole card is no taller than 1.5× the old dropdown card at 375 px.
   const card = group.locator('xpath=ancestor::section[contains(@class, "card")][1]');
   const cardBox = await card.boundingBox();
   expect(cardBox!.height).toBeLessThanOrEqual(1.5 * BASELINE_DROPDOWN_CARD_HEIGHT_PX);
   // Every tile is a 44 px target and fits inside the viewport in one row.
   const firstTile = await page.getByTestId('listen-layout-consolidated').boundingBox();
-  for (const l of ['consolidated', 'dock', 'focus']) {
+  for (const l of ['consolidated', 'focus']) {
     const b = await page.getByTestId(`listen-layout-${l}`).boundingBox();
     expect(b!.width, `${l} width`).toBeGreaterThanOrEqual(44);
     expect(b!.height, `${l} height`).toBeGreaterThanOrEqual(44);
@@ -1068,15 +1069,15 @@ test('Listen layout picker: tiles select and persist, arrow keys move, height bu
     expect(b!.y, `${l} in one row`).toBeCloseTo(firstTile!.y, 0);
   }
   // Tap switches at once, is written to the store and survives a reload; the Listen view uses it.
-  await page.getByTestId('listen-layout-dock').click();
-  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'false');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').listenLayout)).toBe('dock');
+  await page.getByTestId('listen-layout-consolidated').click();
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'false');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').listenLayout)).toBe('consolidated');
   await page.reload();
-  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByTestId('listen-layout-dock')).toHaveAttribute('tabindex', '0');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('listen-layout-consolidated')).toHaveAttribute('tabindex', '0');
   // Keyboard: arrows move focus and selection with wrap-around; Space/Enter select the focused tile.
-  await page.getByTestId('listen-layout-dock').focus();
+  await page.getByTestId('listen-layout-consolidated').focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByTestId('listen-layout-focus')).toBeFocused();
   await expect(page.getByTestId('listen-layout-focus')).toHaveAttribute('aria-checked', 'true');
@@ -1104,7 +1105,7 @@ test('Listen layout picker: tiles select and persist, arrow keys move, height bu
   });
   expect(widths.view, 'settings view scrollWidth at 320px').toBeLessThanOrEqual(320);
   expect(widths.cards, 'cards inside 320px').toBeLessThanOrEqual(320);
-  for (const l of ['consolidated', 'dock', 'focus']) {
+  for (const l of ['consolidated', 'focus']) {
     const b = await np.getByTestId(`listen-layout-${l}`).boundingBox();
     expect(b!.x + b!.width, `${l} inside 320px`).toBeLessThanOrEqual(320);
     expect(b!.width, `${l} width at 320px`).toBeGreaterThanOrEqual(44);
@@ -1112,7 +1113,7 @@ test('Listen layout picker: tiles select and persist, arrow keys move, height bu
   await narrow.close();
 });
 
-for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+for (const layout of ['consolidated', 'focus'] as const) {
   test(`Listen layout ${layout}: ready, listening with the fake microphone, result cards, stop`, async ({ page }) => {
     await page.addInitScript((l) => {
       const raw = localStorage.getItem('birdbrain.settings.v1');
@@ -1124,29 +1125,21 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
     await expect(page.locator('.listen')).toHaveAttribute('data-layout', layout);
     // One main action in the Ready state; nothing else is a filled button.
-    const start = layout === 'dock' ? page.getByTestId('dock-start') : page.getByTestId('start-stop');
+    const start = page.getByTestId('start-stop');
     await expect(start).toBeVisible();
-    if (layout !== 'dock') {
-      const box = await page.getByTestId('start-stop').boundingBox();
-      expect(box!.width).toBeGreaterThanOrEqual(120);
-    }
+    expect((await start.boundingBox())!.width).toBeGreaterThanOrEqual(120);
     // "How BirdNET decides" is the one row on Listen and starts closed, with its chip strip.
     // Focus shows no such row (DECISIONS.md #59).
     if (layout === 'focus') await expect(page.getByTestId('pipeline')).toHaveCount(0);
     else await expect(page.getByTestId('pipeline')).not.toHaveAttribute('open', /.*/);
     // No sample clip in any layout (DECISIONS.md #117).
     await expect(page.getByTestId('demo')).toHaveCount(0);
-    // Listening with the fake microphone: panel/dock/focus card, status text, conditions line, timer.
+    // Listening with the fake microphone: panel or focus card, status text, conditions line, timer.
     await start.click();
     await expect(page.getByTestId('model-status')).toContainText('Listening', { timeout: 30_000 });
-    if (layout === 'dock') {
-      await expect(page.getByTestId('dock')).toContainText('Listening');
-      await expect(page.getByTestId('dock-stop')).toBeVisible();
-    } else {
-      await expect(page.getByTestId('listen-panel')).toBeVisible();
-      await expect(page.getByTestId('conditions')).toContainText('Conditions:', { timeout: 15_000 });
-      await expect(page.getByTestId('stop')).toBeVisible();
-    }
+    await expect(page.getByTestId('listen-panel')).toBeVisible();
+    await expect(page.getByTestId('conditions')).toContainText('Conditions:', { timeout: 15_000 });
+    await expect(page.getByTestId('stop')).toBeVisible();
     // Result cards from the bird at the mic: thumbnail tile, dot + name, scientific name, confidence.
     const card = page.getByTestId('result-card').first();
     await expect(card).toBeAttached({ timeout: 120_000 });
@@ -1181,8 +1174,7 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
       // Mic runs before Result, so it is lit (active or done) before Result ever is.
       await expect(chips.locator('.pchip[data-stage="mic"]')).toHaveClass(/active|done/, { timeout: 15_000 });
     }
-    const stop = layout === 'dock' ? page.getByTestId('dock-stop') : page.getByTestId('stop');
-    await stop.click();
+    await page.getByTestId('stop').click();
     await expect(page.getByTestId('model-status')).toContainText('Model ready');
     await expect(page.getByTestId('listen-status')).toContainText('Stopped.');
     if (layout === 'consolidated') {
@@ -1278,7 +1270,7 @@ test('Listen layouts: the picker switches at once, each Ready state differs, and
   });
   const micCalls = () => page.evaluate(() => (window as unknown as { __mic: number }).__mic);
 
-  const pick = async (layout: 'consolidated' | 'dock' | 'focus') => {
+  const pick = async (layout: 'consolidated' | 'focus') => {
     await page.goto('./#/settings');
     await page.getByTestId(`listen-layout-${layout}`).click();
     await page.goto('./#/listen');
@@ -1290,13 +1282,6 @@ test('Listen layouts: the picker switches at once, each Ready state differs, and
   await expect(listen).toHaveAttribute('data-layout', 'consolidated');
   await expect(page.getByTestId('start-stop')).toBeVisible();
   await expect(page.getByTestId('dock')).toBeHidden();
-
-  await pick('dock');
-  await expect(listen).toHaveAttribute('data-layout', 'dock');
-  await expect(page.getByTestId('dock')).toBeVisible();
-  await expect(page.getByTestId('start-stop')).toBeHidden(); // no round mic button anywhere
-  await expect(page.getByTestId('recent-inline')).toBeVisible(); // cards fill the screen
-  await expect(page.getByTestId('dock-start')).toBeVisible();
 
   await pick('focus');
   await expect(listen).toHaveAttribute('data-layout', 'focus');
@@ -1323,13 +1308,12 @@ test('Listen layouts: the picker switches at once, each Ready state differs, and
   expect(callsWhileListening).toBeGreaterThan(0);
   await expect(page.getByTestId('listen-panel')).toBeVisible(); // Consolidated: panel at the top
 
-  for (const layout of ['dock', 'focus', 'consolidated'] as const) {
+  for (const layout of ['focus', 'consolidated'] as const) {
     await page.goto('./#/settings');
     await page.getByTestId(`listen-layout-${layout}`).click();
     await page.goto('./#/listen');
     await expect(listen).toHaveAttribute('data-layout', layout);
     await expect(page.getByTestId('model-status')).toContainText('Listening');
-    if (layout === 'dock') await expect(page.getByTestId('dock')).toContainText('Listening');
     if (layout === 'focus') {
       await expect(page.getByTestId('focus-latest')).toBeVisible();
       // "Earlier birds (N)" shows only when there are earlier birds (DECISIONS.md #83); none have been heard here.
@@ -1365,8 +1349,8 @@ test('mic blocked state explains the iPhone steps and offers Try again and impor
 });
 
 
-for (const layout of ['consolidated', 'dock', 'focus'] as const) {
-  test(`Recent sightings (${layout}): one card per species with best + Heard once + last; Bottom dock opens them, Consolidated has no extra dropdown, Focus says it in words (DECISIONS.md #109)`, async ({ page }) => {
+for (const layout of ['consolidated', 'focus'] as const) {
+  test(`Heard birds (${layout}): best + Heard once on the card; Consolidated has no extra dropdown, Focus says it in words (DECISIONS.md #109)`, async ({ page }) => {
     await page.addInitScript((l) => {
       const raw = localStorage.getItem('birdbrain.settings.v1');
       const s = raw ? JSON.parse(raw) : {};
@@ -1375,10 +1359,9 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     }, layout);
     await page.goto('./#/listen');
     await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-    // Bottom dock lists the birds on the page; Consolidated's result cards are the list (no "Recent sightings"
-    // dropdown any more); Focus shows the latest bird (DECISIONS.md #59, #109).
-    if (layout !== 'dock') await expect(page.getByTestId('recent-fold')).toHaveCount(0);
-    else await expect(page.getByTestId('recent-empty')).toBeAttached();
+    // Consolidated's result cards are the list (no "Recent sightings" dropdown any more); Focus shows the latest
+    // bird (DECISIONS.md #59, #109).
+    await expect(page.getByTestId('recent-fold')).toHaveCount(0);
     await hearBird(page);
     // The live results list shows the best confidence labelled "best" and the count.
     if (layout === 'focus') {
@@ -1391,36 +1374,6 @@ for (const layout of ['consolidated', 'dock', 'focus'] as const) {
     const result = page.getByTestId('result-card').first();
     await expect(result).toContainText(/best\s*\d+%/);
     await expect(result).toContainText('Heard once');
-    if (layout === 'consolidated') return;
-    await expect(page.getByTestId('recent-inline-summary')).toHaveText(/^\d+ birds? · \d+ detections?$/);
-    await expect(page.getByTestId('recent-inline')).toBeVisible();
-    await expect(page.getByTestId('recent-empty')).toBeHidden();
-    const cards = page.getByTestId('recent-card');
-    const n = await cards.count();
-    expect(n).toBeGreaterThanOrEqual(1);
-    const keys = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-species')));
-    expect(new Set(keys).size, 'no duplicate species cards').toBe(keys.length);
-    const card = cards.first();
-    await expect(card).toHaveAttribute('aria-label', /^.+, heard once, best \d+%, last at .+$/);
-    await expect(card).toContainText(/Acanthis/);
-    await expect(card).toContainText(/best\s*\d+%/);
-    await expect(card.getByTestId('recent-count')).toHaveText('Heard once');
-    await expect(card).toContainText(/last\s*\d/);
-    const box = await card.boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-    expect(box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    // Open from the start in Bottom dock: the lumped detections, each with time (or range), hit count and best.
-    await expect(card).toHaveAttribute('aria-expanded', 'true');
-    const rows = page.getByTestId('recent-rows').first();
-    await expect(rows).toBeVisible();
-    await expect(rows.locator('.recent-row').first()).toContainText(/\d{1,2}:\d{2}:\d{2}/);
-    await expect(rows.locator('.recent-row').first()).toContainText(/\d+ hits? · best \d+%/);
-    // A tap closes it, and another opens it again.
-    await card.click();
-    await expect(page.getByTestId('recent-card').first()).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.getByTestId('recent-rows').first()).toBeHidden();
-    await page.getByTestId('recent-card').first().click();
-    await expect(page.getByTestId('recent-card').first()).toHaveAttribute('aria-expanded', 'true');
     // Nothing on the screen overflows the phone width.
     const overflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
@@ -1507,10 +1460,10 @@ test('User management: admin-only button in Settings, confirmations, plain resul
   await member.close();
 });
 
-test('Listen credits BirdNET, inside the viewport and clear of the dock and tab bar, in all three layouts at 320 px, with no eBird text', async ({ browser }) => {
+test('Listen credits BirdNET, inside the viewport and clear of the tab bar, in Consolidated and Focus at 320 px, with no eBird text', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await context.newPage();
-  for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+  for (const layout of ['consolidated', 'focus'] as const) {
     await page.addInitScript((l) => {
       const raw = localStorage.getItem('birdbrain.settings.v1');
       const s = raw ? JSON.parse(raw) : {};
@@ -1528,7 +1481,7 @@ test('Listen credits BirdNET, inside the viewport and clear of the dock and tab 
     // Small and muted, never larger than body text.
     const size = await credit.evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
     expect(size, `${layout} credit size`).toBeLessThanOrEqual(12);
-    // Inside the viewport, above the dock (when there is one) and the tab bar, no horizontal overflow.
+    // Inside the viewport, above the tab bar, no horizontal overflow.
     await credit.evaluate((e) => e.scrollIntoView({ block: 'center' }));
     await expect(credit).toBeVisible();
     const box = (await credit.boundingBox())!;
@@ -1537,13 +1490,12 @@ test('Listen credits BirdNET, inside the viewport and clear of the dock and tab 
         const n = document.querySelector<HTMLElement>(sel);
         return n && n.offsetParent !== null && getComputedStyle(n).display !== 'none' ? n.getBoundingClientRect().top : Number.POSITIVE_INFINITY;
       };
-      return { tabs: top('.tabs'), dock: top('[data-testid="dock"]'), innerHeight: window.innerHeight, scrollWidth: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) };
+      return { tabs: top('.tabs'), innerHeight: window.innerHeight, scrollWidth: Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) };
     });
     expect(box.x, `${layout} left edge`).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width, `${layout} right edge`).toBeLessThanOrEqual(320);
     expect(box.y, `${layout} top edge`).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height, `${layout} above the tab bar`).toBeLessThanOrEqual(Math.min(bars.tabs, bars.innerHeight) + 1);
-    if (layout === 'dock') expect(box.y + box.height, 'above the dock').toBeLessThanOrEqual(bars.dock + 1);
     expect(bars.scrollWidth, `${layout} no horizontal scroll`).toBeLessThanOrEqual(320);
     // Listen shows no eBird data, so it carries no eBird credit or mention.
     expect(await page.locator('.listen').innerText()).not.toMatch(/ebird/i);
@@ -2447,26 +2399,26 @@ test('Listen layout bubble: bottom right, opens upward, switches at once, never 
     if (theme === 'light') await page.getByTestId('theme-toggle').click();
     const bubble = page.getByTestId('layout-bubble');
     await expect(bubble).toBeVisible();
-    await expect(bubble).toHaveAttribute('aria-label', /^Listen layout: (Consolidated|Bottom dock|Focus)\. Change$/);
+    await expect(bubble).toHaveAttribute('aria-label', /^Listen layout: (Consolidated|Focus)\. Change$/);
     const box = (await bubble.boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(44);
     const tabsTop = (await page.locator('.tabs').boundingBox())!.y;
     expect(box.y + box.height, 'above the tab bar').toBeLessThanOrEqual(tabsTop);
-    // Open: three layouts, the current one ticked; Escape closes and gives focus back.
+    // Open: the layouts (no Bottom dock, DECISIONS.md #130), the current one ticked; Escape closes and gives focus back.
     await bubble.click();
     await expect(bubble).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('radio', { checked: true })).toHaveCount(1);
+    await expect(page.getByTestId('layout-bubble-dock')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(bubble).toHaveAttribute('aria-expanded', 'false');
     await expect(bubble).toBeFocused();
-    // Pick Bottom dock: the page switches at once and the bubble moves above the dock.
+    // Pick Focus: the page switches at once and the bubble stays above the tab bar.
     await bubble.click();
-    await page.getByTestId('layout-bubble-dock').click();
-    await expect(page.locator('main .listen')).toHaveAttribute('data-layout', 'dock');
-    await expect(bubble).toHaveAttribute('aria-label', 'Listen layout: Bottom dock. Change');
-    await expect(page.getByTestId('layout-bubble-dock')).toBeHidden();
-    const dockTop = (await page.getByTestId('dock').boundingBox())!.y;
-    await expect.poll(async () => (await bubble.boundingBox())!.y + (await bubble.boundingBox())!.height, { message: 'above the dock' }).toBeLessThanOrEqual(dockTop);
+    await page.getByTestId('layout-bubble-focus').click();
+    await expect(page.locator('main .listen')).toHaveAttribute('data-layout', 'focus');
+    await expect(bubble).toHaveAttribute('aria-label', 'Listen layout: Focus. Change');
+    await expect(page.getByTestId('layout-bubble-focus')).toBeHidden();
+    await expect.poll(async () => (await bubble.boundingBox())!.y + (await bubble.boundingBox())!.height, { message: 'above the tab bar' }).toBeLessThanOrEqual(tabsTop);
     // A tap outside closes it.
     await bubble.click();
     await page.mouse.click(20, 120);
@@ -2493,7 +2445,7 @@ test('a one-line location banner while listening, in each layout, grey with no l
   const browser = await playwright.chromium.launch({
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
   });
-  for (const [layout, where] of [['consolidated', 'listen-panel'], ['dock', 'results'], ['focus', 'focus-latest']] as const) {
+  for (const [layout, where] of [['consolidated', 'listen-panel'], ['focus', 'focus-latest']] as const) {
     for (const mode of ['off', 'manual'] as const) {
       const context = await browser.newContext({ viewport: { width: 320, height: 640 }, permissions: ['microphone'], baseURL: test.info().project.use.baseURL });
       await context.addInitScript(
@@ -2529,8 +2481,7 @@ test('a one-line location banner while listening, in each layout, grey with no l
       }, where);
       expect(placed, `banner placed for ${layout}`).toBe(true);
       expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
-      const stop = page.getByTestId(layout === 'dock' ? 'dock-stop' : 'stop');
-      await stop.click();
+      await page.getByTestId('stop').click();
       await expect(banner).toBeHidden();
       await context.close();
     }
@@ -2697,15 +2648,15 @@ test('the birds heard this session are still on Listen after visiting another ta
   await expect(page.getByTestId('results').getByTestId('result-card').first()).toContainText(species!, { timeout: 2_000 });
   // A layout change in Settings and back: still there.
   await page.goto('./#/settings');
-  await page.getByTestId('listen-layout-dock').click();
+  await page.getByTestId('listen-layout-focus').click();
   await page.goto('./#/listen');
-  await expect(page.getByTestId('recent-inline').getByTestId('recent-card').first()).toContainText(species!, { timeout: 2_000 });
+  await expect(page.getByTestId('focus-latest')).toContainText(species!, { timeout: 2_000 });
   await browser.close();
 });
 
-test('Listen: one plain status line with the town, in every layout; the dock tip (DECISIONS.md #108)', async ({ browser }) => {
+test('Listen: one plain status line with the town, in every layout (DECISIONS.md #108)', async ({ browser }) => {
   const month = new Date().toLocaleString('en-US', { month: 'long' });
-  for (const layout of ['consolidated', 'dock', 'focus'] as const) {
+  for (const layout of ['consolidated', 'focus'] as const) {
     const context = await browser.newContext({ viewport: { width: 320, height: 700 }, serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
     await context.route(/bird-brain\.duckdns\.org\/models/, (route) => route.abort());
     const reverse: string[] = [];
@@ -2723,8 +2674,6 @@ test('Listen: one plain status line with the town, in every layout; the dock tip
     await expect(line).toContainText('No location · All year · Only matches 60% or more');
     await expect(page.getByTestId('listen-status-link')).toHaveText('Turn on location to filter for your area ›');
     await expect(page.getByTestId('demo')).toHaveCount(0); // no sample clip (DECISIONS.md #117)
-    // Bottom dock now shows the state's tip until the first bird ("Point the bottom…" once the model is ready).
-    if (layout === 'dock') await expect(page.locator('.state-hint')).toBeVisible();
     // With a position: the nearest town, asked once with a position rounded to ~1 km.
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: 41.67349, longitude: -93.69812 });
@@ -3029,7 +2978,7 @@ test('no sample clip anywhere: not on Listen in any layout, not on BirdAmp’s p
   });
   const page = await context.newPage();
   await page.goto('./#/listen');
-  for (const layout of ['consolidated', 'dock', 'focus', 'birdamp'] as const) {
+  for (const layout of ['consolidated', 'focus', 'birdamp'] as const) {
     await page.evaluate((l) => {
       const s = JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}');
       localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ ...s, listenLayout: l }));
@@ -3252,7 +3201,7 @@ test('usage counts: a browser run by automation sends nothing (DECISIONS.md #120
   await context.close();
 });
 
-test('desktop: tabs in the header, two columns on Listen (Consolidated, Dock), Focus one column, phone unchanged (DECISIONS.md #122)', async ({ browser }) => {
+test('desktop: tabs in the header, two columns on Listen (Consolidated), Focus one column, phone unchanged (DECISIONS.md #122)', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
   const page = await context.newPage();
   await page.addInitScript(returningVisitor);
@@ -3311,15 +3260,6 @@ test('desktop: tabs in the header, two columns on Listen (Consolidated, Dock), F
   });
   expect(Math.abs(gapAfter - gapBefore)).toBeLessThan(2);
   await page.evaluate(() => document.getElementById('e2e-filler')?.remove());
-
-  // Dock: two columns too, the dock bar centred at the bottom of the screen.
-  await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'dock' })));
-  await page.reload();
-  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-  await expect(page.locator('.listen')).toHaveClass(/listen-two/);
-  const dock = (await page.locator('.listen-dock').boundingBox())!;
-  expect(dock.y + dock.height).toBeGreaterThan(799);
-  await noScroll('Dock at 1440');
 
   // Focus stays one column.
   await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'focus' })));
@@ -3393,18 +3333,6 @@ test('⇅ Flip: the bubble for 3 s after Start, the whole app turns and still wo
   await page.mouse.click(10, 300);
   await expect(hint).toBeHidden({ timeout: 1_000 });
   await page.getByTestId('stop').click();
-
-  // Bottom dock: ⇅ Flip in the bar while listening.
-  await page.evaluate(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'dock' })));
-  await page.reload();
-  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-  await expect(page.getByTestId('dock-flip')).toBeHidden();
-  await page.getByTestId('dock-start').click();
-  await expect(hint).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId('dock-flip').click();
-  await expect(html).toHaveAttribute('data-flipped', 'true');
-  await page.getByTestId('dock-stop').click();
-  await expect(html).not.toHaveAttribute('data-flipped', /.*/);
 
   // A computer: no Flip and no bubble.
   await page.setViewportSize({ width: 1280, height: 800 });

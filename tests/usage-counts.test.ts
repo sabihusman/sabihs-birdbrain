@@ -257,11 +257,11 @@ describe('usage counts: from the controller', () => {
     f.state.micError = { kind: 'denied' };
     f.em.emit('notice', {});
     f.em.emit('notice', {});
-    f.controller.settings.update({ listenLayout: 'dock' });
+    f.controller.settings.update({ listenLayout: 'consolidated' });
     f.controller.settings.update({ threshold: 0.8 });
     f.em.emit('recording-saved', { durationSec: 42 });
     expect(f.names()).toEqual(['mic_problem', 'layout_changed', 'recording_saved']);
-    expect(f.sent.map((s) => s.body.properties)).toMatchObject([{ problem: 'denied' }, { layout: 'dock' }, { seconds: 42 }]);
+    expect(f.sent.map((s) => s.body.properties)).toMatchObject([{ problem: 'denied' }, { layout: 'consolidated' }, { seconds: 42 }]);
   });
 
   it('marks the admin apart, so Sabih can leave his own use out', () => {
