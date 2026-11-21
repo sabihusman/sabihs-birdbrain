@@ -16,6 +16,15 @@ export interface StatusView {
   hint?: string;
 }
 
+/**
+ * True when the small status pill would only repeat the Start card's heading ("Not loaded" under "Model not
+ * loaded", "Mic blocked" under "Mic blocked"). It stays when it adds something: "Model ready · webgl" under
+ * "Ready", the download percentage (DECISIONS.md #131).
+ */
+export function pillRepeatsTitle(pill: string, title: string): boolean {
+  return pill.trim() !== '' && title.toLowerCase().includes(pill.trim().toLowerCase());
+}
+
 export function listenStatus(controller: AppController, online = typeof navigator === 'undefined' ? true : navigator.onLine): StatusView {
   const model = controller.inference.getStatus();
   const mic = controller.getMicError();

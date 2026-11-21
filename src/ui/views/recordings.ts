@@ -13,6 +13,7 @@ import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
 import { closestCandidates, NO_MATCH_TIP, NO_MATCH_TITLE, noMatchLines } from '../../species/no-match';
 import { el, fmtDateTime, fmtDuration, pct } from '../dom';
+import { pageTitle } from '../components/page-title';
 import { whyExplanationText } from '../why-text';
 import { hrefFor } from '../router';
 import { SpectrogramView } from '../viz/spectrogram';
@@ -93,7 +94,7 @@ export function recordingsView(ctx: ViewContext): View {
   // A recording's bird is known only once its analysis is saved, which can finish after this list is shown.
   const subs = [controller.on('recording-saved', () => void render()), controller.on('detections-changed', () => void render())];
 
-  const root = el('div', null, el('section', { class: 'card' }, el('div', { class: 'row' }, importBtn, fileInput), hint), list);
+  const root = el('div', null, pageTitle('Recordings'), el('section', { class: 'card' }, el('div', { class: 'row' }, importBtn, fileInput), hint), list);
   return {
     el: root,
     dispose() {

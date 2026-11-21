@@ -12,6 +12,7 @@ import { birdCardLine, birdsCountLine, placeCardLine, summarizeBirds, type BirdS
 import { birdPlaceholder, birdThumb, speciesThumbnail } from '../components/bird-thumb';
 import { placeIcon } from '../components/place-icon';
 import type { View, ViewContext } from '../app';
+import { pageTitle } from '../components/page-title';
 import { el, fmtDateTime, pct } from '../dom';
 import { speciesHref } from '../router';
 import { copyText, locationBlock } from '../components/location-block';
@@ -248,6 +249,7 @@ export function mapView(ctx: ViewContext): View {
   const root = el(
     'div',
     null,
+    pageTitle('Map'),
     container,
     switcher,
     countLine,

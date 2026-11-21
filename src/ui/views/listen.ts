@@ -20,7 +20,7 @@ import { focusIntroDone, markFocusIntroDone } from '../focus-intro';
 import { el, fmtDuration } from '../dom';
 import { hrefFor } from '../router';
 import { describeModelProgress } from '../model-progress';
-import { listenStatus, type ListenStatus } from '../status';
+import { listenStatus, pillRepeatsTitle, type ListenStatus } from '../status';
 import { micHelp } from '../mic-help';
 import { PipelineView } from '../viz/pipeline';
 import { SpectrogramView } from '../viz/spectrogram';
@@ -276,7 +276,7 @@ export function listenView(ctx: ViewContext): View {
    * the canvases are untouched. The three layouts differ in the Ready state as well as
    * while listening, which is the whole point of the setting.
    */
-  // The layout bubble (DECISIONS.md #101): switch layouts from here, only while not listening.
+  // The layout button (DECISIONS.md #101, #131): switch layouts from here, only while not listening.
   const bubble = layoutBubble(layout, (listenLayout) => settings.update({ listenLayout }), isMember(ctx.api.user));
   /** BirdAmp's windows, built the first time it is the layout (DECISIONS.md #110). */
   let amp: BirdAmpView | null = null;
@@ -393,6 +393,8 @@ export function listenView(ctx: ViewContext): View {
     const backend = controller.inference.getStatus().backend;
     cardPillText.textContent = st.status === 'ready' && backend ? `${st.pill} · ${backend}` : st.pill;
     cardPill.className = `model-pill card-model-pill ${st.status} tone-${st.tone}`;
+    // Said once: no "Not loaded" pill under a heading that already says "Model not loaded" (DECISIONS.md #131).
+    setHidden(cardPill, pillRepeatsTitle(cardPillText.textContent ?? '', text.title));
     stateIcon.textContent = st.icon;
     stateTitle.textContent = text.title;
     stateHint.textContent = st.hint ?? text.hint;

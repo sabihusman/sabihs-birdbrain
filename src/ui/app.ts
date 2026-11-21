@@ -1,6 +1,6 @@
 import type { AppController, Notice } from '../app/controller';
 import { el, clear } from './dom';
-import { hrefFor, noteInAppNavigation, parseHash, type Route } from './router';
+import { hrefFor, noteInAppNavigation, parseHash, tabFor, type Route } from './router';
 import { listenView } from './views/listen';
 import { recordingsView, recordingDetailView } from './views/recordings';
 import { speciesListView, speciesDetailView } from './views/species';
@@ -63,31 +63,6 @@ const TABS: Array<{ route: Route; label: string; icon: string }> = [
   { route: { name: 'map' }, label: 'Map', icon: 'map' },
   { route: { name: 'settings' }, label: 'Settings', icon: 'settings' },
 ];
-
-function tabGroup(route: Route): string {
-  switch (route.name) {
-    case 'recording':
-      return 'recordings';
-    case 'species-detail':
-    case 'species-history':
-      return 'species';
-    // Help is reached from Listen and from Settings › About, so no tab lights up there (Sabih's option 1, DECISIONS.md #114).
-    case 'help':
-      return 'none';
-    case 'whats-new':
-    case 'admin':
-    case 'admin-users':
-    case 'admin-usage':
-    case 'signin':
-    case 'signup':
-    case 'forgot-password':
-    case 'reset-password':
-    case 'account':
-      return 'settings';
-    default:
-      return route.name;
-  }
-}
 
 let updateBannerHost: { mount: (node: HTMLElement) => void; listening: () => boolean } | null = null;
 let pendingUpdate: (() => Promise<void>) | null = null;
@@ -223,7 +198,7 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
     const route = parseHash(location.hash);
     current?.dispose?.();
     clear(main);
-    for (const [name, a] of tabLinks) a.classList.toggle('active', name === tabGroup(route));
+    for (const [name, a] of tabLinks) a.classList.toggle('active', name === tabFor(route));
     switch (route.name) {
       case 'listen':
         current = listenView(ctx);

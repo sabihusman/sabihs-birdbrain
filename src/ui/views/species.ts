@@ -7,6 +7,7 @@ import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
 import { foldHint } from '../components/rows';
 import { locationRecovery } from '../components/location-recovery';
+import { pageTitle } from '../components/page-title';
 import { el, fmtDateTime, pct } from '../dom';
 import { hrefFor, speciesHref } from '../router';
 import { createMiniMap } from './map';
@@ -24,6 +25,8 @@ import { sharingRow } from '../components/friends-panel';
 
 const PAGE = 60;
 
+export const COLOUR_NOTE = 'The square is each bird’s own colour, the same on the map.';
+
 /** Set by the tick on the Species tab so the detail view lands on the ID card (members only). */
 let focusIdCardOnOpen = false;
 
@@ -39,7 +42,9 @@ export function speciesListView(ctx: ViewContext): View {
   const note = el('p', { class: 'small muted', 'data-testid': 'local-note' }, '');
   const totalLine = el('p', null, '');
   const offlineLine = el('p', null, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.');
-  const scopeFold = foldHint(localLine, [totalLine, offlineLine], { testId: 'species-about' });
+  // " · showing 60" beside the count, so the count is said once (DECISIONS.md #131).
+  const showing = el('span', { 'data-testid': 'species-showing' }, '');
+  const scopeFold = foldHint(el('span', null, localLine, showing), [totalLine, offlineLine], { testId: 'species-about' });
   const statusNote = el('div', { class: 'small muted' });
   // No location: one banner with the way back, in place of the note that asked for coordinates (DECISIONS.md #105).
   const recovery = locationRecovery(controller);
@@ -56,7 +61,7 @@ export function speciesListView(ctx: ViewContext): View {
   );
   // "Spotted by me": species with at least one sighting on this device (DECISIONS.md #41).
   const spottedCount = el('span', { class: 'filter-chip-count' }, '');
-  const spottedChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': String(settings.get().speciesSpottedOnly), 'data-testid': 'spotted-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'), 'Spotted by me', spottedCount);
+  const spottedChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': String(settings.get().speciesSpottedOnly), 'data-testid': 'spotted-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '✓'), el('span', { class: 'sr-only' }, 'Spotted by '), 'Me', spottedCount);
   spottedChip.addEventListener('click', () => {
     const on = !settings.get().speciesSpottedOnly;
     settings.update({ speciesSpottedOnly: on });
@@ -68,7 +73,7 @@ export function speciesListView(ctx: ViewContext): View {
   const friendsCount = el('span', { class: 'filter-chip-count' }, '');
   /** Says so when friends' birds could not be refreshed, instead of quietly showing a stale list. */
   const friendsNote = el('p', { class: 'small muted', 'data-testid': 'friends-note', hidden: true }, '');
-  const friendsChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': 'false', 'data-testid': 'friends-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '👥'), 'Spotted by friends', friendsCount);
+  const friendsChip = el('button', { class: 'filter-chip', type: 'button', 'aria-pressed': 'false', 'data-testid': 'friends-filter' }, el('span', { class: 'tick', 'aria-hidden': 'true' }, '👥'), el('span', { class: 'sr-only' }, 'Spotted by '), 'Friends', friendsCount);
   friendsChip.addEventListener('click', () => {
     friendsOnly = !friendsOnly;
     friendsChip.setAttribute('aria-pressed', String(friendsOnly));
@@ -109,9 +114,12 @@ export function speciesListView(ctx: ViewContext): View {
     for (const sp of next) list.appendChild(row(sp));
     shown += next.length;
     more.style.display = shown < results.length ? '' : 'none';
-    count.textContent = results.length ? `${results.length.toLocaleString()} species${shown < results.length ? `, showing ${shown}` : ''}` : controller.species.length ? 'No matches.' : 'Loading species list…';
-    // The fold's line already gives the count; repeat it only when it says something more.
-    count.hidden = results.length > 0 && shown >= results.length && !input.value.trim();
+    const querying = input.value.trim() !== '';
+    const partly = results.length > 0 && shown < results.length;
+    // The heading line gives the count; a search has its own count under the box.
+    showing.textContent = partly && !querying ? ` · showing ${shown}` : '';
+    count.textContent = results.length ? (querying ? `${results.length.toLocaleString()} species${partly ? `, showing ${shown}` : ''}` : '') : controller.species.length ? 'No matches.' : 'Loading species list…';
+    count.hidden = count.textContent === '';
   };
   const search = () => {
     const all = controller.species.filter((s) => s.isBird || settings.get().includeNonBird);
@@ -187,7 +195,11 @@ export function speciesListView(ctx: ViewContext): View {
   const renderBanner = () => bannerSlot.replaceChildren(...(shareBannerWanted(api.user) ? [shareBanner(() => undefined)] : []));
   renderBanner();
   unsubs.push(api.on('change', renderBanner));
-  const root = el('div', null, bannerSlot, el('section', { class: 'card' }, input, el('div', { class: 'chip-row' }, spottedChip, friendsChip), recovery.el, friendsNote, shareBox, toggle, scopeFold, statusNote, count), list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
+  const chipRow = el('div', { class: 'chip-row spotted-chips' }, el('span', { class: 'small muted', 'aria-hidden': 'true' }, 'Spotted by'), spottedChip, friendsChip);
+  // Each bird's square is its own colour (src/species/colors.ts), not a status: say so once, above the list.
+  const colourNote = el('p', { class: 'small muted colour-note', 'data-testid': 'colour-note' }, COLOUR_NOTE);
+  const head = el('div', { class: 'page-head' }, pageTitle('Species'), scopeFold);
+  const root = el('div', null, head, bannerSlot, el('section', { class: 'card' }, input, chipRow, recovery.el, friendsNote, shareBox, toggle, statusNote, count), colourNote, list, el('div', { class: 'center', style: 'margin-top:12px' }, more));
   return {
     el: root,
     dispose() {
