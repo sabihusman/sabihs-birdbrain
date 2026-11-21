@@ -3400,3 +3400,40 @@ Each finding was checked against the code first.
 - **Tests:** `tests/settings.test.ts` (a saved `dock` becomes Consolidated at any stored version, other settings
   kept; it can no longer be chosen); e2e: two tiles for everyone, no `layout-bubble-dock`, each remaining layout
   through ready / listening / stop.
+
+## 131. UX-audit tidy-up: what was built, what was already done, what was left out
+
+- **Why (Sabih, Nov 21):** an outside UX audit of the site (Nov 4 and Nov 21, read-only, desktop width, never
+  started listening). Each finding was checked against the running app at 390 px and 1440 px before anything was
+  built; Sabih approved the mockup of the eight that held up.
+- **Built:**
+  - *Layout button* (`src/ui/components/layout-bubble.ts`): the round icon-only button is a pill that reads
+    "Layout: Focus". It opens a sheet from the bottom over a dimmed page (on `<body>`, `role="dialog"`), with a
+    title, one line, the layouts, ✕ and Done. A tap on a layout switches the page behind at once and the sheet
+    stays; Done, ✕, Escape or a tap on the dimmed page closes it. Still hidden while listening.
+  - *Status said once* (`pillRepeatsTitle`, `src/ui/status.ts`): the Start card's pill is hidden when it only
+    repeats the heading ("Not loaded" under "Model not loaded"); it stays for "Model ready · webgl" and the
+    download percentage.
+  - *Page headings* (`src/ui/components/page-title.ts`): Recordings, Species, Map and Settings open with an `h1`.
+    Not Listen, whose state title is the heading.
+  - *Tabs* (`tabFor`, `src/ui/router.ts`): Sign in, Create account and the two password pages light no tab (they
+    open from the header on any page). My account keeps Settings lit: it opens from Settings and has "‹ Settings".
+  - *Species header*: the count once, beside the heading (" · showing 60" joins the fold's line; a search keeps its
+    own count); the two filters read "Spotted by [Me] [Friends]" on one row at 390 px (screen readers still hear
+    "Spotted by Me"); a blocked location is one line with "Fix" that opens the steps, Try again and Pick a place
+    (the "every species in the world" banner with its two buttons, #105, is unchanged); one line says what the
+    squares are; scientific names are 13 px; the Share row is capped at 460 px so its switch stays by its words on
+    a computer.
+  - *Settings*: a row of jump buttons (`src/ui/components/jump-row.ts`, `SETTINGS_JUMPS`), one per card; a tap
+    scrolls to the card and focuses its heading. Nothing is folded. "How it works" got a 44 px tap area.
+  - *Switches*: on/off tick boxes (`.switch`, `.row-switch`) are drawn as switches app-wide; they are the same
+    `<input type="checkbox">` underneath.
+- **Already done or not true:** Help lighting Settings (#114); the sample clip (#117); download progress (#70);
+  Listen's links are all at least 44 px tall (measured); Map's empty state; the listening screen.
+- **Left out, and why:** an "Install app" pill (the auditor guessed the layout button was Install); a
+  green/yellow/blue/red legend (false: a square is the bird's own colour); folding every Settings card (hides each
+  setting behind a tap; the jump row gives the reach); removing Share from My account (one switch in two sensible
+  places); a desktop side panel for Focus (Consolidated already has two columns); new fonts and a light-first look.
+  Search and sort on Recordings is a real gap but a feature of its own.
+- **Tests:** `tests/ux-tidy.test.ts`; e2e "UX-audit tidy-up…", the layout button test (sheet, ✕, Done, dimmed page),
+  the Species location test (one line, then Fix), and the tab test (sign-in pages light none).

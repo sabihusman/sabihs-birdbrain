@@ -596,6 +596,17 @@ test('Map tab photo pins: a bird card shows round photo pins and no popup; a pin
   // After Show all, the unclustered sightings are plain SVG dots (clusters are div icons).
   const dot = page.locator('path.leaflet-interactive').first();
   await expect(dot).toBeAttached();
+  // "Show all" sits under the map, so reaching it scrolled the page. Bring the map back and wait until the dot is
+  // really the thing under its own middle (the scroll has settled) before tapping it.
+  await page.getByTestId('map').scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      dot.evaluate((d) => {
+        const r = d.getBoundingClientRect();
+        return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === d;
+      }),
+    )
+    .toBe(true);
   await dot.click();
   await expect(page.getByTestId('map')).toHaveAttribute('data-focus', /^bird:/);
   const chosen = (await page.getByTestId('map').getAttribute('data-focus'))!.slice(5);
@@ -2382,7 +2393,7 @@ test('extra text folds under one line: tapping the line opens it and never flips
   await context.close();
 });
 
-test('Listen layout bubble: bottom right, opens upward, switches at once, never shown while listening; 320 px in both themes (DECISIONS.md #101)', async ({ playwright }) => {
+test('Listen layout button: labelled, bottom right, opens a sheet with ✕ and Done, switches at once, never shown while listening; 320 px in both themes (DECISIONS.md #101, #131)', async ({ playwright }) => {
   const browser = await playwright.chromium.launch({
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${process.cwd()}/public/samples/birdnet-sample.wav`],
   });
@@ -2400,32 +2411,63 @@ test('Listen layout bubble: bottom right, opens upward, switches at once, never 
     const bubble = page.getByTestId('layout-bubble');
     await expect(bubble).toBeVisible();
     await expect(bubble).toHaveAttribute('aria-label', /^Listen layout: (Consolidated|Focus)\. Change$/);
+    // It says what it is in words, not only as a picture (DECISIONS.md #131).
+    await expect(bubble).toHaveText(/^Layout: (Consolidated|Focus)$/);
     const box = (await bubble.boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
     const tabsTop = (await page.locator('.tabs').boundingBox())!.y;
     expect(box.y + box.height, 'above the tab bar').toBeLessThanOrEqual(tabsTop);
     // Open: the layouts (no Bottom dock, DECISIONS.md #130), the current one ticked; Escape closes and gives focus back.
     await bubble.click();
     await expect(bubble).toHaveAttribute('aria-expanded', 'true');
+    // A sheet from the bottom over a dimmed page: a dialog with a title, one plain line, ✕ and Done.
+    const sheet = page.getByTestId('layout-sheet');
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toHaveAttribute('role', 'dialog');
+    await expect(sheet).toHaveAttribute('aria-modal', 'true');
+    await expect(sheet.getByRole('heading', { name: 'Listen layout' })).toBeVisible();
+    await expect(sheet).toContainText('How the Listen screen is arranged. Change it any time.');
+    // It slides up over 200 ms, so wait for it to settle on the bottom edge before measuring.
+    await expect.poll(async () => Math.abs((await sheet.boundingBox())!.y + (await sheet.boundingBox())!.height - 640), { message: 'the sheet sits on the bottom edge' }).toBeLessThanOrEqual(1);
+    const sb = (await sheet.boundingBox())!;
+    expect(sb.x).toBeGreaterThanOrEqual(0);
+    expect(sb.x + sb.width).toBeLessThanOrEqual(320);
+    for (const id of ['layout-sheet-close', 'layout-sheet-done']) expect((await page.getByTestId(id).boundingBox())!.height, id).toBeGreaterThanOrEqual(44);
+    // The dimmed page covers the header and the tab bar.
+    const dim = (await page.getByTestId('layout-sheet-backdrop').boundingBox())!;
+    expect([dim.x, dim.y, dim.width, dim.height]).toEqual([0, 0, 320, 640]);
     await expect(page.getByRole('radio', { checked: true })).toHaveCount(1);
     await expect(page.getByTestId('layout-bubble-dock')).toHaveCount(0);
+    await expect(page.getByTestId('layout-bubble-birdamp')).toBeHidden(); // members only
     await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
     await expect(bubble).toHaveAttribute('aria-expanded', 'false');
     await expect(bubble).toBeFocused();
-    // Pick Focus: the page switches at once and the bubble stays above the tab bar.
+    // Pick Focus: the page behind switches at once, the sheet stays with the tick moved, Done closes it.
     await bubble.click();
     await page.getByTestId('layout-bubble-focus').click();
     await expect(page.locator('main .listen')).toHaveAttribute('data-layout', 'focus');
+    await expect(page.getByTestId('layout-bubble-focus')).toHaveAttribute('aria-checked', 'true');
+    await expect(sheet).toBeVisible();
+    await page.getByTestId('layout-sheet-done').click();
+    await expect(sheet).toHaveCount(0);
+    await expect(bubble).toBeFocused();
     await expect(bubble).toHaveAttribute('aria-label', 'Listen layout: Focus. Change');
-    await expect(page.getByTestId('layout-bubble-focus')).toBeHidden();
+    await expect(bubble).toHaveText('Layout: Focus');
     await expect.poll(async () => (await bubble.boundingBox())!.y + (await bubble.boundingBox())!.height, { message: 'above the tab bar' }).toBeLessThanOrEqual(tabsTop);
-    // A tap outside closes it.
+    // ✕ closes it; so does a tap on the dimmed page.
+    await bubble.click();
+    await page.getByTestId('layout-sheet-close').click();
+    await expect(sheet).toHaveCount(0);
     await bubble.click();
     await page.mouse.click(20, 120);
+    await expect(sheet).toHaveCount(0);
     await expect(bubble).toHaveAttribute('aria-expanded', 'false');
     // Back to Consolidated for the next theme; nothing wider than the screen.
     await bubble.click();
     await page.getByTestId('layout-bubble-consolidated').click();
+    await page.getByTestId('layout-sheet-done').click();
     await expect(page.locator('main .listen')).toHaveAttribute('data-layout', 'consolidated');
     expect(await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   }
@@ -2551,8 +2593,14 @@ test('Species with no location: one banner, Use my location, Pick a place by nam
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
   // Location is refused in this browser: one banner, no coordinates, no greyed-out switch.
   const banner = page.getByTestId('species-location');
+  // One line first (DECISIONS.md #131); "Fix" opens the steps and the two ways out.
+  await expect(banner).toHaveText('Location is blocked, so this shows every species in the world.Fix');
+  expect((await banner.boundingBox())!.height).toBeLessThanOrEqual(96);
+  await expect(page.getByTestId('pick-a-place')).toHaveCount(0);
+  await page.getByTestId('location-fix').click();
   await expect(banner).toContainText('Your phone is blocking location for this site.');
   await expect(banner).toContainText('Safari: tap “aA” in the address bar');
+  await expect(page.getByTestId('use-my-location')).toBeFocused();
   await expect(page.getByTestId('local-note')).toBeHidden();
   await expect(page.getByTestId('show-all-species')).toBeHidden();
   // Pick a place: typing alone sends nothing; Search does.
@@ -2965,6 +3013,12 @@ test('Help lights no tab: opened from Listen or from Settings › About (DECISIO
   // Every other page keeps its tab.
   await page.goto('./#/whats-new');
   await expect(page.locator('.tabs a.active')).toHaveText('Settings');
+  // Sign in and Create account open from the header on any page, so they light no tab either (DECISIONS.md #131).
+  for (const hash of ['signin', 'signup', 'forgot-password']) {
+    await page.goto(`./#/${hash}`);
+    await expect(page.locator('main .card').first()).toBeVisible();
+    await expect(page.locator('.tabs a.active'), hash).toHaveCount(0);
+  }
 });
 
 
@@ -3423,4 +3477,89 @@ test('Sign in: a member goes straight to My account; the admin (or an unproven a
   await page.getByTestId('signin-submit').click();
   await expect(page.getByTestId('code-step')).toBeVisible();
   await expect(page.getByTestId('code-sent')).toContainText('admin@example.com');
+});
+
+test('UX-audit tidy-up: page headings, the status said once, Settings jump buttons, the Species header; 320 px in both themes (DECISIONS.md #131)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 }, serviceWorkers: 'block', reducedMotion: 'reduce', baseURL: test.info().project.use.baseURL });
+  // Nothing asks for the model here, so Listen stays at "Model not loaded".
+  await context.route(/bird-brain\.duckdns\.org\/models/, (route) => route.abort());
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ locationMode: 'off' }));
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+  });
+  const page = await context.newPage();
+  const overflow = () => page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth);
+  const title = page.locator('main').getByTestId('page-title');
+  await page.goto('./#/listen');
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await page.getByTestId('theme-toggle').click();
+    // Listen: its state title is the heading, and the status is said once (no "Not loaded" pill under it).
+    await page.goto('./#/listen');
+    await expect(page.locator('.state-title')).toHaveText('Model not loaded');
+    await expect(page.getByTestId('card-model-status')).toBeHidden();
+    await expect(title).toHaveCount(0);
+    // The four other main pages each open with their name.
+    for (const [hash, name] of [['recordings', 'Recordings'], ['species', 'Species'], ['map', 'Map'], ['settings', 'Settings']] as const) {
+      await page.goto(`./#/${hash}`);
+      await expect(title, `${theme} ${hash}`).toHaveText(name);
+      expect(await title.evaluate((e) => e.tagName)).toBe('H1');
+      expect(await overflow(), `${theme} ${hash} overflow`).toBeLessThanOrEqual(0);
+    }
+  }
+
+  // Species: the count once, beside the heading; a search has its own count; one true line about the squares.
+  await page.goto('./#/species');
+  await expect(page.getByTestId('species-list').locator('.chip').first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('local-count')).toHaveText(/^[\d,]+ species$/);
+  await expect(page.getByTestId('species-showing')).toHaveText('· showing 60');
+  await expect(page.locator('.page-head').getByTestId('species-about')).toBeVisible();
+  await expect(page.getByText(/species, showing/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Spotted by Me/ })).toBeVisible();
+  await expect(page.getByTestId('spotted-filter')).toHaveText(/^✓\s*Spotted by\s*Me/);
+  await expect(page.getByTestId('colour-note')).toHaveText('The square is each bird’s own colour, the same on the map.');
+  await page.getByRole('searchbox').fill('warbler');
+  await expect(page.getByTestId('species-showing')).toHaveText('');
+  await expect(page.getByText(/^\d+ species, showing 60$/)).toBeVisible();
+  await page.getByRole('searchbox').fill('');
+  await expect(page.getByTestId('species-showing')).toHaveText('· showing 60');
+
+  // Settings: a jump button per card; a tap brings that card to the top and moves focus to its heading.
+  await page.goto('./#/settings');
+  const jumps = page.getByTestId('jump-row').getByRole('button');
+  await expect(jumps).toHaveText(['Account', 'Layout', 'Detection', 'Microphone', 'Location', 'Recording', 'Analysis', 'Storage', 'Export', 'Data', 'Privacy', 'About']);
+  const missing = await page.evaluate(() => {
+    const headings = [...document.querySelectorAll('main h2')].map((h) => h.textContent?.trim() ?? '');
+    return [...document.querySelectorAll<HTMLElement>('[data-jump]')].map((b) => b.dataset.jump ?? '').filter((j) => !headings.includes(j));
+  });
+  expect(missing, 'every jump button has its card').toEqual([]);
+  expect((await jumps.first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  const exportTitle = page.locator('main h2', { hasText: /^Export$/ });
+  await expect(exportTitle).not.toBeInViewport();
+  await page.locator('[data-jump="Export"]').click();
+  await expect(exportTitle).toBeInViewport();
+  await expect(exportTitle).toBeFocused();
+  const headerBottom = await page.evaluate(() => document.querySelector('.app-header')!.getBoundingClientRect().bottom);
+  expect((await exportTitle.boundingBox())!.y - headerBottom, 'the card is at the top of the page').toBeLessThan(80);
+  expect(await overflow(), 'the jump row scrolls inside itself').toBeLessThanOrEqual(0);
+  // The one short text link in the app has a 44 px tap area now.
+  expect((await page.getByRole('link', { name: 'How it works' }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  // On/off boxes look like switches and still work as tick boxes.
+  const lowCut = page.locator('.row-switch input[type="checkbox"], .switch input[type="checkbox"]').first();
+  expect((await lowCut.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+  const was = await lowCut.isChecked();
+  await lowCut.click();
+  expect(await lowCut.isChecked()).toBe(!was);
+  await lowCut.click();
+  await context.close();
+
+  // A 390 px phone: "Spotted by" and its button share one row.
+  const wider = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
+  await wider.addInitScript(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ locationMode: 'off' })));
+  const wp = await wider.newPage();
+  await wp.goto('./#/species');
+  const chip = (await wp.getByTestId('spotted-filter').boundingBox())!;
+  const label = (await wp.locator('.spotted-chips > span').first().boundingBox())!;
+  expect(label.y + label.height / 2, 'label beside the button').toBeGreaterThan(chip.y);
+  expect(label.y + label.height / 2).toBeLessThan(chip.y + chip.height);
+  await wider.close();
 });

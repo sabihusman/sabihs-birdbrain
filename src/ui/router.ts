@@ -71,6 +71,40 @@ export function parseHash(hash: string): Route {
   }
 }
 
+/**
+ * The tab that lights up for a page, or 'none'. A page opened from inside a tab keeps that tab (a recording, a
+ * species page, My account and What's new under Settings). Help is reached from Listen and from Settings › About, so
+ * no tab lights up there (Sabih's option 1, DECISIONS.md #114). Sign in, Create account and the two password pages
+ * are opened from the header button on any page, so they light none either (DECISIONS.md #131).
+ */
+export function tabFor(route: Route): 'listen' | 'recordings' | 'species' | 'map' | 'settings' | 'none' {
+  switch (route.name) {
+    case 'listen':
+    case 'recordings':
+    case 'species':
+    case 'map':
+    case 'settings':
+      return route.name;
+    case 'recording':
+      return 'recordings';
+    case 'species-detail':
+    case 'species-history':
+      return 'species';
+    case 'help':
+    case 'signin':
+    case 'signup':
+    case 'forgot-password':
+    case 'reset-password':
+      return 'none';
+    case 'whats-new':
+    case 'admin':
+    case 'admin-users':
+    case 'admin-usage':
+    case 'account':
+      return 'settings';
+  }
+}
+
 export function hrefFor(route: Route): string {
   switch (route.name) {
     case 'listen':

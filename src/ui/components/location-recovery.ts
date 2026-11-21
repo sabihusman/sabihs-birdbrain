@@ -11,6 +11,8 @@ import { el } from '../dom';
 export const RECOVERY_TEXT = {
   worldTitle: 'Showing every species in the world.',
   worldBody: 'Share your location, or pick a place, to see the birds found there.',
+  /** The one line shown first; "Fix" opens the steps (DECISIONS.md #131). */
+  blockedShort: 'Location is blocked, so this shows every species in the world.',
   blockedTitle: 'Your phone is blocking location for this site.',
   blockedSafari: 'Safari: tap “aA” in the address bar › Website Settings › Location › Allow.',
   blockedChrome: 'Chrome: iPhone Settings › Apps › Chrome › Location › While Using.',
@@ -29,6 +31,8 @@ export function locationRecovery(controller: AppController, search: (q: string) 
   const root = el('div', { 'data-testid': 'species-location' });
   /** The open picker, kept while it is open so a location change never wipes what was typed. */
   let pickerEl: HTMLElement | null = null;
+  /** The blocked box starts as one line with "Fix"; this is true once it has been opened. */
+  let blockedOpen = false;
 
   const usePosition = () => {
     pickerEl = null;
@@ -109,6 +113,18 @@ export function locationRecovery(controller: AppController, search: (q: string) 
       return;
     }
     const blocked = l.status === 'denied';
+    if (!blocked) blockedOpen = false;
+    if (blocked && !blockedOpen) {
+      const fix = el('button', { class: 'btn small', type: 'button', 'aria-expanded': 'false', 'data-testid': 'location-fix' }, 'Fix');
+      fix.addEventListener('click', () => {
+        blockedOpen = true;
+        render();
+        root.querySelector<HTMLElement>('[data-testid="use-my-location"]')?.focus();
+      });
+      root.replaceChildren(el('div', { class: 'loc-recovery compact', 'data-kind': 'blocked' }, el('span', null, RECOVERY_TEXT.blockedShort), fix));
+      root.hidden = false;
+      return;
+    }
     const useBtn = el('button', { class: 'btn primary small', type: 'button', 'data-testid': 'use-my-location' }, blocked ? 'Try again' : 'Use my location');
     useBtn.addEventListener('click', usePosition);
     const pickBtn = el('button', { class: 'btn small', type: 'button', 'data-testid': 'pick-a-place' }, 'Pick a place');

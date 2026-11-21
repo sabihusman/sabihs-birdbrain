@@ -11,9 +11,27 @@ import { hasDot } from '../../app/whats-new';
 import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
 import { privacyCard } from '../components/privacy-card';
+import { pageTitle } from '../components/page-title';
+import { jumpRow, type Jump } from '../components/jump-row';
 import { layoutPicker } from '../components/layout-picker';
 import { effectiveLayout, isMember } from '../../app/access';
 import { describeVoiceProcessing } from '../../audio/mic-constraints';
+
+/** Jump buttons at the top of Settings: the label, and the heading of the card it scrolls to. */
+export const SETTINGS_JUMPS: readonly Jump[] = [
+  ['Account', 'Account'],
+  ['Layout', 'Listen layout'],
+  ['Detection', 'Detection'],
+  ['Microphone', 'Microphone'],
+  ['Location', 'Location & season filter'],
+  ['Recording', 'Recording'],
+  ['Analysis', 'Analysis'],
+  ['Storage', 'Storage'],
+  ['Export', 'Export'],
+  ['Data', 'Data'],
+  ['Privacy', 'Privacy'],
+  ['About', 'About'],
+];
 
 export function settingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -150,9 +168,13 @@ export function settingsView(ctx: ViewContext): View {
   // What's new (DECISIONS.md #112): features, fixes and what's coming; a dot until the page is opened.
   const whatsNewRow = linkRow('What’s new', '#/whats-new', { hint: 'New features and fixes', testId: 'whats-new-link' });
   if (hasDot(ctx.whatsNew.get(), new Date())) whatsNewRow.insertBefore(el('span', { class: 'wn-dot', 'data-testid': 'whats-new-dot', 'aria-label': 'New' }), whatsNewRow.lastChild);
-  const root = el(
+  // The page is about four phone screens long: these jump to a card, and nothing is folded away (DECISIONS.md #131).
+  const jumps = jumpRow(() => root, SETTINGS_JUMPS, 'Jump to a setting');
+  const root: HTMLElement = el(
     'div',
     null,
+    pageTitle('Settings'),
+    jumps,
     account.el,
     el('section', { class: 'card wn-settings' }, whatsNewRow),
     el(
@@ -228,7 +250,7 @@ export function settingsView(ctx: ViewContext): View {
     el('section', { class: 'card' }, el('h2', null, 'Export'), el('div', { class: 'row' }, exportCsv, exportGeo), foldHint('What’s in the file', [el('p', null, 'One row per sighting: times, species, peak confidence, windows, position, recording.')])),
     el('section', { class: 'card' }, el('h2', null, 'Data'), el('div', { class: 'row' }, clearBtn)),
     privacyCard(settings, ctx.usage),
-    el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { href: '#/help' }, 'How it works')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
+    el('section', { class: 'card' }, el('h2', null, 'About'), el('p', null, el('a', { class: 'tap-link', href: '#/help' }, 'How it works')), el('p', { class: 'small muted' }, 'Sabih’s Birdbrain · BirdNET V2.4 (CC BY-NC-SA 4.0) · app code MIT · audio never leaves this device.')),
     // Last thing on the page, closed: the full privacy facts are there when wanted and out of the way otherwise.
     whatWeStoreFold(),
   );

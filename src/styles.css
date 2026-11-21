@@ -145,7 +145,7 @@ main.view { flex: 1; padding: var(--space-3) calc(var(--space-3) + var(--sar)) c
 .chip .swatch, .legend-item .swatch, .swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; box-shadow: 0 0 0 1px var(--muted); }
 .chip-names { display: flex; flex-direction: column; flex: 1; min-width: 0; overflow-wrap: break-word; }
 .chip-common { font-weight: 600; }
-.chip-sci { font-size: var(--text-xs); color: var(--muted); font-style: italic; }
+.chip-sci { font-size: 13px; color: var(--muted); font-style: italic; }
 .chip-conf { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; width: 84px; flex: none; }
 .conf-bar { width: 100%; height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
 .conf-fill { display: block; height: 100%; }
@@ -594,25 +594,42 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .fold-hint .stat-line { color: var(--text); font-weight: var(--weight-semibold); font-size: var(--text-md); }
 
 /* Listen › layout bubble (DECISIONS.md #101): bottom right, above the tab bar and above the dock or Start bar. */
-.layout-bubble { position: fixed; right: calc(var(--space-3) + var(--sar)); bottom: calc(var(--tab-h) + var(--sab) + var(--bubble-lift, 0px) + var(--space-3)); z-index: 21; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
-.layout-bubble-btn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text); box-shadow: 0 2px 10px rgb(0 0 0 / 0.22); cursor: pointer; }
+.layout-bubble { position: fixed; right: calc(var(--space-3) + var(--sar)); bottom: calc(var(--tab-h) + var(--sab) + var(--bubble-lift, 0px) + var(--space-3)); z-index: 21; }
+/* A pill with words ("Layout: Focus"), not a bare icon (DECISIONS.md #131). */
+.layout-bubble-btn { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-3) 0 12px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; box-shadow: 0 2px 10px rgb(0 0 0 / 0.22); cursor: pointer; }
 .layout-bubble-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .layout-bubble.open .layout-bubble-btn { border-color: var(--accent); }
-.layout-bubble-card { width: min(260px, calc(100vw - 2 * var(--space-3))); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); }
-.layout-bubble-card[hidden] { display: none; }
-.layout-bubble-title { padding: 2px var(--space-2) 6px; font-size: var(--text-sm); color: var(--muted); }
-.layout-bubble-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 48px; padding: 8px var(--space-2); border: 0; border-radius: var(--radius-control); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-.layout-bubble-row.on { background: var(--surface-2); }
-.layout-bubble-row:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.layout-bubble-btn-art { display: grid; place-items: center; flex: none; }
+.layout-bubble-btn.bolt .layout-bubble-btn-art { background: #ffffff; border-radius: 4px; padding: 1px; }
+/* The sheet: from the bottom over a dimmed page, on <body> so it covers the header and the tab bar. */
+.layout-sheet-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(0 0 0 / 0.55); }
+.layout-sheet { width: min(480px, 100%); max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) calc(var(--space-3) + var(--sar)) calc(var(--space-3) + var(--sab)) calc(var(--space-3) + var(--sal)); border: 1px solid var(--line); border-bottom: 0; border-radius: var(--radius-card) var(--radius-card) 0 0; background: var(--surface); color: var(--text); box-shadow: 0 -6px 24px rgb(0 0 0 / 0.3); animation: layout-sheet-up var(--motion); }
+@keyframes layout-sheet-up { from { transform: translateY(24px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .layout-sheet { animation: none; } }
+.layout-sheet-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto; }
+.layout-sheet-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.layout-sheet-title { margin: 0; font-size: var(--text-lg); }
+.layout-sheet-intro { margin: 0; }
+.layout-sheet-close { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--on-panel); font: inherit; cursor: pointer; }
+.layout-sheet-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.layout-sheet-rows { display: flex; flex-direction: column; gap: var(--space-2); }
+.layout-bubble-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 60px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.layout-bubble-row.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.layout-bubble-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .layout-bubble-art { flex: none; display: block; }
 .layout-bubble-btn .layout-wireframe { width: 16px; height: 23px; }
 .layout-bubble-art .layout-wireframe { width: 20px; height: 28px; }
 .layout-bubble-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .layout-bubble-name { font-weight: var(--weight-semibold); }
-.layout-bubble-desc { font-size: var(--text-xs); color: var(--muted); }
+.layout-bubble-desc { font-size: var(--text-sm); color: var(--muted); }
 .layout-bubble-tick { flex: none; color: var(--accent); font-weight: var(--weight-bold); visibility: hidden; }
 .layout-bubble-row.on .layout-bubble-tick { visibility: visible; }
-/* Room at the end of the page so the bubble never sits on the last card. */
+@media (min-width: 1024px) {
+  .layout-sheet-backdrop { align-items: center; }
+  .layout-sheet { border-bottom: 1px solid var(--line); border-radius: var(--radius-card); padding-bottom: var(--space-3); }
+  .layout-sheet-grab { display: none; }
+}
+/* Room at the end of the page so the layout button never sits on the last card. */
 .listen.has-layout-bubble::after { content: ""; display: block; height: 56px; }
 
 /* Listen › location banner while listening (DECISIONS.md #103): one line, a pill. */
@@ -674,7 +691,6 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 
 /* ---- BirdAmp Hybrid (DECISIONS.md #110): dark Winamp skin in both themes, Listen only ---- */
 .layout-bolt { display: grid; place-items: center; width: 52px; height: 73px; }
-.layout-bubble-btn.bolt { background: #ffffff; }
 .ba-bolt { display: block; }
 :root[data-skin="birdamp"] {
   --ba-bg: #15171b; --ba-win: #2a2e36; --ba-win-2: #20232a; --ba-edge: #4a505c; --ba-edge-dark: #0e1013;
@@ -976,3 +992,33 @@ html.wn-open, html.wn-open body { overflow: hidden; }
   .account-btn[data-kind="member"] .account-text, .account-btn[data-kind="other"] .account-text { display: none; }
   .account-btn[data-kind="member"], .account-btn[data-kind="other"] { padding: 0 6px; }
 }
+
+/* ---------------------------------------------------------------------------
+   UX-audit tidy-up (DECISIONS.md #131): page headings, Settings jump buttons, the Species header.
+   --------------------------------------------------------------------------- */
+.page-title { font-size: var(--text-xl); margin: 0 2px var(--space-2); }
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: var(--space-3); margin: 0 2px var(--space-1); }
+.page-head .page-title { margin: 0; }
+.page-head > .fold-hint[open] { flex-basis: 100%; }
+.jump-row { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; margin-bottom: var(--space-3); padding: 2px; }
+.jump-row::-webkit-scrollbar { display: none; }
+.jump-chip { flex: none; min-height: 44px; padding: 0 14px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
+.jump-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+@media (min-width: 1024px) { .jump-row { flex-wrap: wrap; overflow-x: visible; } }
+/* A lone text link gets a 44 px tall tap area without moving the text around it. */
+.tap-link { display: inline-block; padding: 12px 0; }
+.spotted-chips { align-items: center; }
+.spotted-chips .filter-chip { padding-left: 12px; padding-right: 12px; }
+.loc-recovery.compact { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 8px 8px 12px; font-size: var(--text-sm); }
+.loc-recovery.compact .btn { flex: none; }
+.colour-note { margin: var(--space-2) 2px; }
+/* The Share row keeps its switch next to its words on a wide screen instead of a screen-width away. */
+.species-share { max-width: 460px; }
+/* Tick boxes that switch something on or off look like switches (the same boxes, restyled). */
+.switch input[type="checkbox"], .row-switch input[type="checkbox"] { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 46px; height: 28px; margin: 0; border-radius: var(--radius-pill); border: 1px solid var(--line); background: color-mix(in srgb, var(--muted) 35%, var(--card)); cursor: pointer; transition: background var(--motion); }
+.switch input[type="checkbox"]::after, .row-switch input[type="checkbox"]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #ffffff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.35); transition: transform var(--motion); }
+.switch input[type="checkbox"]:checked, .row-switch input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.switch input[type="checkbox"]:checked::after, .row-switch input[type="checkbox"]:checked::after { transform: translateX(18px); }
+.switch input[type="checkbox"]:focus-visible, .row-switch input[type="checkbox"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.switch input[type="checkbox"]:disabled, .row-switch input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .switch input[type="checkbox"], .switch input[type="checkbox"]::after, .row-switch input[type="checkbox"], .row-switch input[type="checkbox"]::after { transition: none; } }

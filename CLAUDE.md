@@ -48,6 +48,11 @@ Key modules:
 - Listen layouts: Consolidated, Focus (first-run default) and, for members, BirdAmp. Bottom dock was switched off on
   Nov 21 (DECISIONS.md #130): `migrate()` in `src/app/settings.ts` turns a saved `dock` into Consolidated; the
   `listen-dock` bar that remains is Focus's Start bar.
+- UX-audit tidy-up (DECISIONS.md #131): main pages open with `pageTitle()` (`src/ui/components/page-title.ts`; not
+  Listen); the lit tab comes from `tabFor()` in `src/ui/router.ts`; the layout button
+  (`src/ui/components/layout-bubble.ts`) reads "Layout: Focus" and opens a sheet appended to `<body>`; Settings has
+  jump buttons (`jump-row.ts`, `SETTINGS_JUMPS`: keep it in step with the cards' `h2` text); on/off tick boxes are
+  styled as switches in CSS only.
 - BirdAmp Hybrid (`src/ui/birdamp/`, DECISIONS.md #110): a Listen layout for approved members
   (`effectiveLayout` in `src/app/access.ts` shows Focus to anyone else). `view.ts` builds the player, confidence and
   library windows and borrows Listen's canvases; `windows.ts` (order/state, `birdbrain.birdamp.v1`), `library.ts` (the "BirdAmp Playlist", Winamp look #111)
