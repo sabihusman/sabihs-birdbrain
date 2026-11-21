@@ -596,6 +596,17 @@ test('Map tab photo pins: a bird card shows round photo pins and no popup; a pin
   // After Show all, the unclustered sightings are plain SVG dots (clusters are div icons).
   const dot = page.locator('path.leaflet-interactive').first();
   await expect(dot).toBeAttached();
+  // "Show all" sits under the map, so reaching it scrolled the page. Bring the map back and wait until the dot is
+  // really the thing under its own middle (the scroll has settled) before tapping it.
+  await page.getByTestId('map').scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      dot.evaluate((d) => {
+        const r = d.getBoundingClientRect();
+        return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === d;
+      }),
+    )
+    .toBe(true);
   await dot.click();
   await expect(page.getByTestId('map')).toHaveAttribute('data-focus', /^bird:/);
   const chosen = (await page.getByTestId('map').getAttribute('data-focus'))!.slice(5);
