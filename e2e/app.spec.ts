@@ -1298,7 +1298,6 @@ test('Listen layouts: the picker switches at once, each Ready state differs, and
   await expect(listen).toHaveAttribute('data-layout', 'focus');
   await expect(page.getByTestId('start-stop')).toHaveClass(/big/);
   await expect(page.getByTestId('dock')).toBeHidden();
-  await expect(page.getByTestId('recent-fold')).toHaveCount(0); // no lists on the Focus screen
   await expect(page.getByTestId('pipeline')).toHaveCount(0);
   // Focus has the same status line as the other layouts (DECISIONS.md #108); no sample clip (#117).
   await expect(page.getByTestId('listen-status-line')).toBeVisible();
@@ -1370,9 +1369,7 @@ for (const layout of ['consolidated', 'focus'] as const) {
     }, layout);
     await page.goto('./#/listen');
     await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
-    // Consolidated's result cards are the list (no "Recent sightings" dropdown any more); Focus shows the latest
-    // bird (DECISIONS.md #59, #109).
-    await expect(page.getByTestId('recent-fold')).toHaveCount(0);
+    // Consolidated's result cards are the list; Focus shows the latest bird (DECISIONS.md #59, #109).
     await hearBird(page);
     // The live results list shows the best confidence labelled "best" and the count.
     if (layout === 'focus') {
@@ -2321,14 +2318,14 @@ test('live listening updates the result cards in place, so they do not flicker (
   const card = page.getByTestId('results').getByTestId('result-card').first();
   await expect(card).toBeVisible({ timeout: 90_000 });
   // Mark today's card and count every card the page throws away from now on, and every window that reaches
-  // the Result step (its chip lights up once per window). The "Recent sightings" dropdown is gone (#109).
+  // the Result step (its chip lights up once per window).
   await page.evaluate(() => {
     const w = window as unknown as { removedCards: number; marked: Element[]; results: number };
     w.removedCards = 0;
     w.results = 0;
     w.marked = [document.querySelector('[data-testid="results"] .result-wrap')!];
     new MutationObserver((records) => {
-      for (const r of records) for (const n of r.removedNodes) if (n instanceof Element && (n.matches('.result-wrap, .recent-card') || n.querySelector('.result-wrap, .recent-card'))) w.removedCards++;
+      for (const r of records) for (const n of r.removedNodes) if (n instanceof Element && (n.matches('.result-wrap') || n.querySelector('.result-wrap'))) w.removedCards++;
     }).observe(document.body, { childList: true, subtree: true });
     const chip = document.querySelector('.pchip[data-stage="result"]')!;
     new MutationObserver(() => {

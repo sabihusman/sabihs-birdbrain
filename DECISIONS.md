@@ -3437,3 +3437,15 @@ Each finding was checked against the code first.
   Search and sort on Recordings is a real gap but a feature of its own.
 - **Tests:** `tests/ux-tidy.test.ts`; e2e "UX-audit tidy-up…", the layout button test (sheet, ✕, Done, dimmed page),
   the Species location test (one line, then Fix), and the tab test (sign-in pages light none).
+
+## 132. The grouped "Recent sightings" cards are removed
+
+- **Why (Sabih, Nov 22):** after #109 took the "Recent sightings" dropdown out of Consolidated and Focus, and #130
+  switched off Bottom dock, nothing put these cards on screen any more; the code still built them on every result.
+- **Removed:** `src/ui/components/recent-group-card.ts`, its nodes and card pool in `src/ui/views/listen.ts`, its
+  CSS (`.recent-*`), the helpers only it used in `src/species/recent.ts` (`toggleExpanded`, `describeGroup`,
+  `detectionTimeLabel`, `fmtClock`), `scripts/recent-screenshots.ts` and its four screenshots.
+- **Kept:** `groupRecent`, `lumpHits`, `heardLabel` and `fmtClockShort` (the live result cards, Focus's "Last bird"
+  line and BirdAmp's playlist use them). Nothing a person sees changes.
+- **Tests:** the three unit tests of the removed helpers went with them; the e2e layout, Focus and flicker tests
+  cover what remains.

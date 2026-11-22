@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeGroup, detectionTimeLabel, groupRecent, heardLabel, LUMP_GAP_SECONDS, lumpHits, toggleExpanded, type KeyedHit } from '../src/species/recent';
+import { groupRecent, heardLabel, LUMP_GAP_SECONDS, lumpHits, type KeyedHit } from '../src/species/recent';
 
 const T = Date.parse('2026-10-19T15:34:00');
 const GAP = LUMP_GAP_SECONDS * 1000;
@@ -76,25 +76,5 @@ describe('recent: grouping by species', () => {
   it('ties on last heard are stable by species key', () => {
     const groups = groupRecent([k(DOVE, 5), k(BLUEBIRD, 5)], GAP);
     expect(groups.map((g) => g.key)).toEqual(['Sialia sialis', 'Zenaida macroura']);
-  });
-});
-
-describe('recent: labels', () => {
-  it('describes a group for screen readers', () => {
-    const g = groupRecent([k(BLUEBIRD, 15, 0.9), k(BLUEBIRD, 17, 1), k(BLUEBIRD, 100), k(BLUEBIRD, 200), k(BLUEBIRD, 300)], GAP)[0];
-    expect(describeGroup(g.species.common, g, 'en-US')).toBe('Eastern Bluebird, heard 4 times, best 100%, last at 3:39 PM');
-    expect(describeGroup('Mourning Dove', { detections: [{ start: T, end: T, hits: 1, best: 0.62 }], best: 0.62, lastHeard: T }, 'en-US')).toBe('Mourning Dove, heard once, best 62%, last at 3:34 PM');
-  });
-  it('a multi-hit detection shows a time range with one AM/PM suffix; a single hit shows one time', () => {
-    expect(detectionTimeLabel({ start: T + 15_000, end: T + 20_000, hits: 4, best: 1 }, 'en-US')).toBe('3:34:15–3:34:20 PM');
-    expect(detectionTimeLabel({ start: T + 15_000, end: T + 15_000, hits: 1, best: 1 }, 'en-US')).toBe('3:34:15 PM');
-  });
-  it('expand and collapse toggle per species', () => {
-    const open = new Set<string>();
-    expect(toggleExpanded(open, 'Sialia sialis')).toBe(true);
-    expect(open.has('Sialia sialis')).toBe(true);
-    expect(toggleExpanded(open, 'Zenaida macroura')).toBe(true);
-    expect(toggleExpanded(open, 'Sialia sialis')).toBe(false);
-    expect([...open]).toEqual(['Zenaida macroura']);
   });
 });
