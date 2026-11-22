@@ -144,7 +144,7 @@ running (DECISIONS.md #59).
 
 1. **Consolidated (default).** Everything in one scrolling column. No dock.
    - **Ready:** title, short hint, the round mic button in the middle, context chips, then the
-     collapsed "How BirdNET decides" and "Recent sightings" rows.
+     collapsed "How BirdNET decides" row.
    - **Listening:** the listening panel at the top of the content (timer, "screen stays on",
      level meter, conditions, full-width Stop), the grouped bird cards below it, newest first,
      then "How BirdNET decides" with its chips lighting up.

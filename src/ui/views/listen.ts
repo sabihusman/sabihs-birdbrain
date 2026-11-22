@@ -5,11 +5,10 @@ import type { ListenLayout } from '../../app/settings';
 import { WINDOW_SECONDS } from '../../model/constants';
 import { selectDetections } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
-import { groupRecent, LUMP_GAP_SECONDS, toggleExpanded } from '../../species/recent';
+import { groupRecent } from '../../species/recent';
 import { geocoder } from '../../geo/geocode';
 import { nearCell, nearName, pickedName, statusLine } from '../../app/status-line';
 import type { View, ViewContext } from '../app';
-import { recentGroupCard, type RecentGroupCardHandle } from '../components/recent-group-card';
 import { resultCard, type ResultCardHandle } from '../components/result-card';
 import { keyedPool, syncChildren } from '../keyed';
 import { layoutBubble } from '../components/layout-bubble';
@@ -191,14 +190,6 @@ export function listenView(ctx: ViewContext): View {
     if (showNotUsual) notUsualList.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   });
   const resultsEmpty = el('p', { class: 'muted', 'data-testid': 'results-empty' }, 'Nothing above your minimum yet. Dawn is best.');
-  const recentList = el('div', { class: 'recent-list', 'data-testid': 'recent' });
-  const recentEmpty = el('p', { class: 'small muted', 'data-testid': 'recent-empty' }, 'Birds you hear appear here, one card each.');
-  const recentSummary = el('span', { class: 'small muted recent-summary', 'data-testid': 'recent-summary' });
-  const recentNote = el('p', { class: 'small muted' }, `Repeats within ${LUMP_GAP_SECONDS} s count once. Tap a card for details. On this phone only. `, el('a', { href: '#/map' }, 'Map'));
-  /** The cards themselves, moved between the collapsed row and the page by applyLayout(). */
-  const recentBody = el('div', { class: 'stack recent-body' }, recentEmpty, recentList, recentNote);
-  const recentDetails = el('details', { class: 'fold', 'data-testid': 'recent-fold' }, el('summary', null, el('span', { class: 'fold-title' }, 'Recent sightings'), recentSummary), recentBody);
-
   // Visualisations inside "How it works"
   const waveCanvas = el('canvas', { class: 'waveform', 'aria-label': 'Live waveform' });
   const specCanvas = el('canvas', { style: 'height:180px', 'aria-label': 'Live spectrogram' });
@@ -315,11 +306,10 @@ export function listenView(ctx: ViewContext): View {
     setShellSkin(next === 'birdamp' ? 'birdamp' : null);
     // The live views go back into "See the sound" when BirdAmp had them.
     if (next !== 'birdamp' && waveCanvas.parentElement !== liveViews) liveViews.prepend(waveCanvas, specBox, timelineCanvas, legend);
-    // These three nodes live in a different parent per layout; a node has one parent, so
+    // These nodes live in a different parent per layout; a node has one parent, so
     // detach them first and let each branch place them.
     panel.remove();
     resultsList.remove();
-    recentBody.remove();
     dock.remove();
     notUsualBox.remove();
     banner.remove();
@@ -338,14 +328,12 @@ export function listenView(ctx: ViewContext): View {
       focusBlock.prepend(banner);
       moreList.appendChild(resultsList);
       focusBlock.appendChild(notUsualBox);
-      recentDetails.appendChild(recentBody);
       root.replaceChildren(readyBlock, focusBlock, helpLink, credit, panel, dock, bubble.el);
     } else {
       resultsBlock.prepend(resultsList);
       panel.insertBefore(banner, panel.lastElementChild);
       lowLine.after(notUsualBox);
-      recentDetails.appendChild(recentBody);
-      // The result cards under the panel are the list; the "Recent sightings" dropdown repeated them (#109).
+      // The result cards under the panel are the list (DECISIONS.md #109).
       side.replaceChildren(resultsBlock);
       root.replaceChildren(readyBlock, panel, side, how, helpLink, credit, bubble.el);
     }
@@ -356,11 +344,8 @@ export function listenView(ctx: ViewContext): View {
   // ---- state -----------------------------------------------------------------
   // This session's birds live in the controller, so they survive leaving Listen (DECISIONS.md #107).
   let lastResult: WindowResult | null = controller.getLastWindow();
-  const expanded = new Set<string>();
-  const isOpen = (key: string) => expanded.has(key);
   // Cards are kept per species and updated in place, so each window doesn't rebuild them (no flicker).
   const resultCards = keyedPool<ResultCardHandle>();
-  const recentCards = keyedPool<RecentGroupCardHandle>();
   let showLow = false;
   let raf = 0;
   let dirty = true;
@@ -539,39 +524,18 @@ export function listenView(ctx: ViewContext): View {
           }
           ctx.notify({ kind: 'info', text: `${sp.common} kept. ${SOUND_ONLY_NOTE}` });
           renderResults();
-          renderRecent();
+          renderLastBird();
         });
         return [el('div', { class: 'not-usual-row', 'data-testid': 'not-usual-row', 'data-species': sp.scientific }, speciesChip(sp, { confidence: b.prob, subtitle: NOT_USUAL_SUBTITLE }), keep)];
       }),
     );
   };
 
-  const renderRecent = () => {
-    const groups = groupRecent(controller.getSessionHits());
-    setHidden(recentEmpty, groups.length > 0);
-    const detections = groups.reduce((n, g) => n + g.detections.length, 0);
-    recentSummary.textContent = groups.length ? `${groups.length} bird${groups.length === 1 ? '' : 's'} · ${detections} detection${detections === 1 ? '' : 's'}` : '';
-    // Focus has no list, so it says what the last bird was instead.
-    const newest = groups[0];
+  /** Focus has no list on its Start page, so it says what the last bird was instead. */
+  const renderLastBird = () => {
+    const newest = groupRecent(controller.getSessionHits())[0];
     lastBirdLine.textContent = newest ? `Last bird: ${newest.species.common} · ${new Date(newest.lastHeard).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
     if (layout === 'focus') setHidden(lastBirdLine, controller.listening || !newest);
-    syncChildren(
-      recentList,
-      groups.map((g) => {
-        const card = recentCards.take(g.key, () =>
-          recentGroupCard(ctx, g, {
-            expanded: isOpen(g.key),
-            onToggle: (key) => {
-              toggleExpanded(expanded, key);
-              renderRecent();
-            },
-          }),
-        );
-        card.update(g, isOpen(g.key));
-        return card.el;
-      }),
-    );
-    recentCards.sweep();
   };
 
   const onResult = (r: WindowResult) => {
@@ -582,7 +546,7 @@ export function listenView(ctx: ViewContext): View {
     const names = r.detections.map((d) => controller.species[d.index]?.common ?? '');
     spectrogram.addMark({ startSec: segmentBase + r.offsetSec, endSec: segmentBase + r.offsetSec + WINDOW_SECONDS, colors, labels: names });
     renderResults();
-    renderRecent();
+    renderLastBird();
     if (layout === 'birdamp') amp?.onResult();
   };
 
@@ -752,7 +716,7 @@ export function listenView(ctx: ViewContext): View {
       // "Start identifying" took the layer down: put the layout back and show the loading state.
       applyLayout(layout);
       offerWhatsNew(); // a brand-new visitor sees the strip right after the welcome (Sabih's option 2)
-      renderRecent();
+      renderLastBird();
       renderResults();
       renderState();
     }),
@@ -768,7 +732,7 @@ export function listenView(ctx: ViewContext): View {
       // Switching layout rearranges the same nodes; the mic and the analysis keep running.
       if (chosenLayout() !== layout) {
         applyLayout(chosenLayout());
-        renderRecent();
+        renderLastBird();
       }
       resolvePlace();
       renderResults();
@@ -781,7 +745,7 @@ export function listenView(ctx: ViewContext): View {
       bubble.setMember(isMember(u));
       if (chosenLayout() !== layout) {
         applyLayout(chosenLayout());
-        renderRecent();
+        renderLastBird();
         renderResults();
       }
       renderState();
@@ -817,7 +781,7 @@ export function listenView(ctx: ViewContext): View {
     if (controller.listening) status.textContent = 'Listening…';
     renderState();
     renderResults();
-    renderRecent();
+    renderLastBird();
     renderNotUsual();
     offerWhatsNew();
   }
@@ -829,7 +793,6 @@ export function listenView(ctx: ViewContext): View {
       cancelAnimationFrame(raf);
       for (const u of subs) u();
       resultCards.clear();
-      recentCards.clear();
       pipeline.dispose();
       bubble.dispose();
       amp?.dispose();

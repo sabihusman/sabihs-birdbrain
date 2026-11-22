@@ -1,6 +1,6 @@
 /**
- * Display-only grouping for Listen → "Recent sightings" and the live results
- * list. Nothing here touches storage: the per-window hits stay individual in
+ * Display-only grouping for the live results list on Listen and BirdAmp's
+ * playlist. Nothing here touches storage: the per-window hits stay individual in
  * IndexedDB (and keep feeding sightings, history, the heat map, clips and
  * ticks); this module only decides how the Listen screen shows them.
  */
@@ -105,43 +105,7 @@ export function heardLabel(detections: number): string {
   return detections === 1 ? 'Heard once' : `Heard ${detections} times`;
 }
 
-/** Clock time with seconds, e.g. "3:34:15 PM". */
-export function fmtClock(ms: number, locale?: string): string {
-  return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-}
-
-/** Clock time without seconds, e.g. "3:34 PM" (used in the screen-reader summary). */
+/** Clock time without seconds, e.g. "3:34 PM". */
 export function fmtClockShort(ms: number, locale?: string): string {
   return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-}
-
-/**
- * Label for one lumped detection: a range when it spans several hits
- * ("3:34:15–3:34:20 PM"), else the single time. The shared AM/PM suffix is
- * written once when both ends carry the same one.
- */
-export function detectionTimeLabel(d: LumpedDetection, locale?: string): string {
-  const start = fmtClock(d.start, locale);
-  if (d.hits === 1 || d.end === d.start) return start;
-  const end = fmtClock(d.end, locale);
-  const suffix = /\s[AP]M$/i.exec(start)?.[0];
-  if (suffix && end.endsWith(suffix)) return `${start.slice(0, -suffix.length)}–${end}`;
-  return `${start}–${end}`;
-}
-
-/** Screen-reader summary: "Eastern Bluebird, heard 4 times, best 100%, last at 3:34 PM". */
-export function describeGroup(common: string, g: Pick<SpeciesGroup<unknown>, 'detections' | 'best' | 'lastHeard'>, locale?: string): string {
-  const n = g.detections.length;
-  const heard = n === 1 ? 'heard once' : `heard ${n} times`;
-  return `${common}, ${heard}, best ${Math.round(g.best * 100)}%, last at ${fmtClockShort(g.lastHeard, locale)}`;
-}
-
-/** Expanded-card state: toggles a key in the set and returns whether it is now expanded. */
-export function toggleExpanded(expanded: Set<string>, key: string): boolean {
-  if (expanded.has(key)) {
-    expanded.delete(key);
-    return false;
-  }
-  expanded.add(key);
-  return true;
 }
