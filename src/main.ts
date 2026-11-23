@@ -7,7 +7,7 @@ import { mountApp, showUpdateBanner } from './ui/app';
 import { registerPwa } from './pwa';
 import { ApiClient } from './api/client';
 import { API_BASE_URL } from './api/config';
-import { isMember } from './app/access';
+import { effectiveModel, isMember } from './app/access';
 import { applyTheme, readStoredTheme } from './theme/theme';
 import { readVisitSignals, safeLocalStorage, shouldAutoLoadModel, shouldShowWelcome } from './app/first-visit';
 import { MODEL_BASE_URL } from './model/model-source';
@@ -29,7 +29,12 @@ async function boot(): Promise<void> {
   controller.setAutoLoadModel(shouldAutoLoadModel(signals));
   // Species clips are collected only while an approved member is signed in (decided from the cached session, so it works offline).
   controller.setClipsEnabled(isMember(api.user));
+  // BirdNET+ V3.0 runs only for the admin while it is tested (DECISIONS.md #133); everyone else gets V2.4.
+  const pickModel = () => void controller.setModel(effectiveModel(controller.settings.get().birdnetModel, api.user));
+  pickModel();
+  controller.settings.on('change', pickModel);
   api.on('change', (user) => {
+    pickModel();
     controller.setClipsEnabled(isMember(user));
     // Signing in makes this a returning visitor: Listen shows its normal layout, not the welcome
     // with "Sign in / Create account" (DECISIONS.md #81). The model still waits for Start.

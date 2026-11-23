@@ -12,6 +12,8 @@ import { rankScores, type GeoMask } from './postprocess';
 import { maxOverWeeks, WEEKS_PER_YEAR } from '../species/local';
 import type { BackendName, BackendPreference, WorkerRequest, WorkerResponse } from './protocol';
 import { extractWindow, planWindows } from '../audio/windowing';
+import { V3Runner } from './v3-runner';
+import { V3_AUDIO_BYTES, V3_AUDIO_FILE, V3_CACHE_NAME, V3_GEO_FILE, V3_ORT_WASM_BYTES, V3_ORT_WASM_FILE, V3_TOTAL_BYTES, type ModelId } from './v3';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -20,6 +22,11 @@ let geoModel: tf.GraphModel | null = null;
 let geoMask: GeoMask | null = null;
 let floor = 0.01;
 let backendName: BackendName = 'cpu';
+/** BirdNET+ V3.0 (admin test, DECISIONS.md #133); null while V2.4 is the model. One worker runs one model: switching starts a new worker. */
+let v3: V3Runner | null = null;
+let modelId: ModelId = 'v2.4';
+/** Each model has its own cache bucket, so switching never deletes the other model's files. */
+let cacheName = MODEL_CACHE_NAME;
 const cancelled = new Set<number>();
 let queue: Promise<void> = Promise.resolve();
 
@@ -44,7 +51,7 @@ async function cachedFetch(input: RequestInfo | URL, init?: RequestInit): Promis
   let cache: Cache | null = null;
   try {
     if (typeof caches !== 'undefined') {
-      cache = await caches.open(MODEL_CACHE_NAME);
+      cache = await caches.open(cacheName);
       const hit = await cache.match(url);
       if (hit) return hit;
     }
@@ -69,7 +76,7 @@ async function cachedFetch(input: RequestInfo | URL, init?: RequestInit): Promis
 async function dropStaleModelCache(baseUrl: string): Promise<void> {
   try {
     if (typeof caches === 'undefined') return;
-    const cache = await caches.open(MODEL_CACHE_NAME);
+    const cache = await caches.open(cacheName);
     const stale = staleModelEntries(
       (await cache.keys()).map((r) => r.url),
       baseUrl,
@@ -151,6 +158,7 @@ async function initBackend(pref: BackendPreference): Promise<BackendName> {
 }
 
 async function runAcoustic(audio: Float32Array): Promise<Float32Array> {
+  if (v3) return v3.acoustic(audio);
   if (!acoustic) throw new Error('Model not loaded');
   const input = tf.tensor2d(audio, [1, WINDOW_SAMPLES]);
   try {
@@ -165,9 +173,44 @@ async function runAcoustic(audio: Float32Array): Promise<Float32Array> {
   }
 }
 
+/** Download one file through the model cache, counting its bytes into the running total. */
+async function downloadBytes(url: string, onBytes: (loaded: number) => void): Promise<ArrayBuffer> {
+  const res = await progressFetch(onBytes)(url);
+  if (!res.ok) throw new Error(`${url} ${res.status}`);
+  return res.arrayBuffer();
+}
+
+/** BirdNET+ V3.0: the engine file, the audio model and the location model, then one warm-up window. */
+async function initV3(msg: Extract<WorkerRequest, { type: 'init' }>, t0: number): Promise<void> {
+  if (!msg.v3Maps) throw new Error('V3.0 needs its label maps');
+  backendName = 'wasm';
+  await dropStaleModelCache(msg.baseUrl);
+  const total = V3_TOTAL_BYTES;
+  const progress = (base: number, phase: 'acoustic' | 'geo') => (loaded: number) => {
+    const shown = Math.min(base + loaded, total);
+    post({ type: 'progress', id: msg.id, phase, loadedBytes: shown, totalBytes: total, message: `Downloading BirdNET+ V3.0 (${(shown / 1048576).toFixed(0)} MB of ${(total / 1048576).toFixed(0)} MB)` });
+  };
+  const wasm = await downloadBytes(msg.baseUrl + V3_ORT_WASM_FILE, progress(0, 'acoustic'));
+  const audioModel = await downloadBytes(msg.baseUrl + V3_AUDIO_FILE, progress(V3_ORT_WASM_BYTES, 'acoustic'));
+  const geoModel = await downloadBytes(msg.baseUrl + V3_GEO_FILE, progress(V3_ORT_WASM_BYTES + V3_AUDIO_BYTES, 'geo'));
+  post({ type: 'progress', id: msg.id, phase: 'warmup', loadedBytes: total, totalBytes: total, message: 'Preparing BirdNET+ V3.0…' });
+  v3 = await V3Runner.create({ wasm, audioModel, geoModel }, msg.v3Maps);
+  const loadMs = performance.now() - t0;
+  const t1 = performance.now();
+  await runAcoustic(new Float32Array(WINDOW_SAMPLES));
+  const warmupMs = performance.now() - t1;
+  log(`V3.0 loaded in ${loadMs.toFixed(0)} ms, warmup ${warmupMs.toFixed(0)} ms, ${v3.classCount} classes`);
+  post({ type: 'ready', id: msg.id, backend: backendName, loadMs, warmupMs, model: 'v3.0' });
+}
+
 async function handleInit(msg: Extract<WorkerRequest, { type: 'init' }>): Promise<void> {
   const t0 = performance.now();
   floor = msg.floor;
+  modelId = msg.model;
+  if (msg.model === 'v3.0') {
+    cacheName = V3_CACHE_NAME;
+    return initV3(msg, t0);
+  }
   post({ type: 'progress', id: msg.id, phase: 'backend', loadedBytes: 0, totalBytes: MODEL_TOTAL_BYTES, message: 'Choosing compute backend…' });
   backendName = await initBackend(msg.backend);
   log(`backend: ${backendName}`);
@@ -196,10 +239,19 @@ async function handleInit(msg: Extract<WorkerRequest, { type: 'init' }>): Promis
   await runAcoustic(new Float32Array(WINDOW_SAMPLES));
   const warmupMs = performance.now() - t1;
   log(`loaded in ${loadMs.toFixed(0)} ms, warmup ${warmupMs.toFixed(0)} ms, tensors ${tf.memory().numTensors}`);
-  post({ type: 'ready', id: msg.id, backend: backendName, loadMs, warmupMs });
+  post({ type: 'ready', id: msg.id, backend: backendName, loadMs, warmupMs, model: modelId });
 }
 
 async function handleSetGeo(msg: Extract<WorkerRequest, { type: 'set-geo' }>): Promise<void> {
+  if (msg.location && v3) {
+    const { lat, lon, week } = msg.location;
+    const [probs] = await v3.geoRows([[lat, lon, week]]);
+    geoMask = { probs, threshold: msg.threshold };
+    let count = 0;
+    for (let i = 0; i < probs.length; i++) if (probs[i] >= msg.threshold) count++;
+    post({ type: 'geo-ready', id: msg.id, count });
+    return;
+  }
   if (!msg.location || !geoModel) {
     geoMask = null;
     post({ type: 'geo-ready', id: msg.id, count: 0 });
@@ -219,9 +271,17 @@ async function handleSetGeo(msg: Extract<WorkerRequest, { type: 'set-geo' }>): P
 
 /** All 48 weeks at one position in one batch (falls back to one week per call if the graph refuses a batch). */
 async function handleLocalSpecies(msg: Extract<WorkerRequest, { type: 'local-species' }>): Promise<void> {
-  if (!geoModel) throw new Error('geo model not loaded');
-  const rows: number[][] = [];
+  const rows: Array<[number, number, number]> = [];
   for (let w = 1; w <= WEEKS_PER_YEAR; w++) rows.push([msg.lat, msg.lon, w]);
+  if (v3) {
+    const perWeek = await v3.geoRows(rows);
+    const flat = new Float32Array(perWeek.length * v3.classCount);
+    perWeek.forEach((p, i) => flat.set(p, i * v3!.classCount));
+    const maxProbs = maxOverWeeks(flat, WEEKS_PER_YEAR, v3.classCount);
+    post({ type: 'local-species', id: msg.id, maxProbs }, [maxProbs.buffer]);
+    return;
+  }
+  if (!geoModel) throw new Error('geo model not loaded');
   let all: Float32Array;
   try {
     const input = tf.tensor2d(rows);

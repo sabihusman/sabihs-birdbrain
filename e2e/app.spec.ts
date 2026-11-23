@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import { devices, expect, test, type Page } from '@playwright/test';
 
 /**
@@ -3560,3 +3561,75 @@ test('UX-audit tidy-up: page headings, the status said once, Settings jump butto
   expect(label.y + label.height / 2).toBeLessThan(chip.y + chip.height);
   await wider.close();
 });
+
+test('BirdNET+ V3.0: only the admin sees the choice; switching loads V3.0, the test clip is a Redpoll, and back to V2.4 works (DECISIONS.md #133)', async ({ browser }) => {
+  test.skip(!fs.existsSync('models/birdnet-v3.0/audio.onnx'), 'V3.0 weights not fetched (scripts/fetch-model-v3.sh)');
+  const as = (role: 'admin' | 'member') =>
+    browser.newContext({ serviceWorkers: 'block' }).then(async (context) => {
+      await context.route(/\/v1\//, (route) => route.abort());
+      await context.addInitScript((r) => {
+        localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'x@example.com', name: 'Sabih', status: 'approved', role: r } }));
+        if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+        localStorage.setItem('birdbrain.model.v1', 'wanted');
+        localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+      }, role);
+      return context;
+    });
+
+  // A member never sees the choice, and a stored V3.0 runs V2.4 for them.
+  const member = await as('member');
+  const mp = await member.newPage();
+  await mp.addInitScript(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off', birdnetModel: 'v3.0' })));
+  await mp.goto('./#/settings');
+  await expect(mp.getByTestId('page-title')).toHaveText('Settings');
+  await expect(mp.getByTestId('model-choice')).toBeHidden();
+  await mp.goto('./#/listen');
+  await expect(mp.getByTestId('card-model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(mp.getByTestId('card-model-status')).not.toContainText('V3.0');
+  await expect(mp.getByTestId('birdnet-credit')).toContainText('CC BY-NC-SA 4.0');
+  await member.close();
+
+  // The admin: the choice is there, V2.4 picked.
+  const admin = await as('admin');
+  const page = await admin.newPage();
+  const v3Requests: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('birdnet-v3.0/')) v3Requests.push(r.url());
+  });
+  await page.goto('./#/settings');
+  const choice = page.getByTestId('model-choice');
+  await expect(choice).toBeVisible();
+  await expect(page.getByTestId('model-v2.4')).toBeChecked();
+  expect(v3Requests, 'nothing of V3.0 is fetched before it is picked').toEqual([]);
+  // Pick V3.0: the note explains the new names, and the model loads (this phone asked for a model before).
+  await page.getByTestId('model-v3.0').check();
+  await expect(page.getByTestId('model-note')).toContainText('Astur cooperii');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').birdnetModel)).toBe('v3.0');
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('card-model-status')).toHaveText('Model ready · V3.0 test', { timeout: 200_000 });
+  await expect(page.getByTestId('birdnet-credit')).toContainText('BirdNET+ V3.0');
+  await expect(page.getByTestId('birdnet-credit')).toContainText('Apache 2.0');
+  expect(v3Requests.some((u) => u.endsWith('labels.json'))).toBe(true);
+  expect(v3Requests.some((u) => u.endsWith('audio.onnx'))).toBe(true);
+  expect(v3Requests.some((u) => /ort-wasm-simd-threaded-[\d.]+\.wasm$/.test(u))).toBe(true);
+  // The fake microphone plays BirdNET's sample: V3.0 calls it "Redpoll" (V2.4 says "Lesser Redpoll").
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('results').getByTestId('result-card').first()).toContainText('Redpoll', { timeout: 120_000 });
+  await expect(page.getByTestId('results').getByTestId('result-card').first()).toContainText('Acanthis flammea');
+  // Switching while listening waits for Stop.
+  await page.goto('./#/settings');
+  await page.getByTestId('model-v2.4').check();
+  await expect(page.getByTestId('model-note')).toContainText('Switches when you stop listening.');
+  await page.goto('./#/listen');
+  await page.getByTestId('stop').click();
+  // Back on V2.4: its model loads again, from the phone's cache, and its credit returns.
+  await expect(page.getByTestId('card-model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.getByTestId('card-model-status')).not.toContainText('V3.0');
+  await expect(page.getByTestId('birdnet-credit')).toContainText('CC BY-NC-SA 4.0');
+  expect(await overflowOf(page)).toBeLessThanOrEqual(0);
+  await admin.close();
+});
+
+async function overflowOf(page: Page): Promise<number> {
+  return page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth);
+}

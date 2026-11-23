@@ -310,7 +310,8 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
       const byOffset = new Map<number, Score[]>();
       for (const d of stored) {
         const sp = controller.speciesByScientific(d.scientific);
-        if (!sp || d.offsetSec == null) continue;
+        // index -1: a name only the other model has (DECISIONS.md #133), so the running model has no output for it.
+        if (!sp || sp.index < 0 || d.offsetSec == null) continue;
         const arr = byOffset.get(d.offsetSec) ?? [];
         arr.push({ index: sp.index, prob: d.confidence, inRange: true });
         byOffset.set(d.offsetSec, arr);
@@ -383,7 +384,7 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
         for (const d of selectDetections(w.scores, controller.species, { threshold, applyGeo: false, includeNonBird })) {
           const sp = controller.species[d.index];
           summaryEntries.push({ index: d.index, prob: d.prob });
-          records.push({ id: newId(), time: rec.createdAt + w.offsetSec * 1000, label: sp.label, scientific: sp.scientific, common: sp.common, confidence: d.prob, lat: rec.lat, lon: rec.lon, accuracy: rec.accuracy, recordingId: id, offsetSec: w.offsetSec, source: rec.source === 'import' ? 'import' : 'recording', sessionId: `rec-${id}` });
+          records.push({ id: newId(), time: rec.createdAt + w.offsetSec * 1000, label: sp.label, scientific: sp.scientific, common: sp.common, confidence: d.prob, lat: rec.lat, lon: rec.lon, accuracy: rec.accuracy, recordingId: id, offsetSec: w.offsetSec, source: rec.source === 'import' ? 'import' : 'recording', sessionId: `rec-${id}`, ...controller.modelTag() });
         }
       }
       await recordDetections(records);

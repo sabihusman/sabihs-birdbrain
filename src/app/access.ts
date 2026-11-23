@@ -1,5 +1,6 @@
 import type { AuthUser } from '../api/client';
 import type { ListenLayout } from './settings';
+import type { ModelId } from '../model/v3';
 
 /**
  * Member gating for on-device features (species ID card, sighting history,
@@ -49,6 +50,18 @@ export const ADMIN_ONLY_MESSAGE = 'Only the admin can open this page.';
  * The Listen layout actually shown (DECISIONS.md #110): BirdAmp is for approved members, so for anyone else a
  * saved BirdAmp choice shows Focus. The choice itself is kept, so signing back in brings BirdAmp back.
  */
+/**
+ * The model that actually runs (DECISIONS.md #133): BirdNET+ V3.0 is the admin's test, so it runs only for the
+ * approved admin; everyone else gets V2.4 whatever is stored. Like the admin pages, this only decides what this phone
+ * does: the V3.0 files on the server are public (Apache 2.0) and nothing secret is behind the check.
+ */
+export function effectiveModel(choice: ModelId, user: AuthUser | null | undefined): ModelId {
+  return choice === 'v3.0' && canManageUsers(user) ? 'v3.0' : 'v2.4';
+}
+
+/** Whether Settings shows the model choice at all. */
+export const canChooseModel = canManageUsers;
+
 export function effectiveLayout(layout: ListenLayout, user: AuthUser | null | undefined): ListenLayout {
   return layout === 'birdamp' && !isMember(user) ? 'focus' : layout;
 }

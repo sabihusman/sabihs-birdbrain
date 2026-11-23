@@ -1,6 +1,7 @@
 import { Emitter } from '../shared/emitter';
 import type { BackendName, BackendPreference, LoadPhase, WorkerRequest, WorkerResponse } from './protocol';
 import type { Score } from './postprocess';
+import type { ModelId } from './v3';
 
 export interface ModelStatus {
   state: 'idle' | 'loading' | 'ready' | 'error';
@@ -12,6 +13,8 @@ export interface ModelStatus {
   totalBytes: number;
   message: string;
   backend: BackendName | null;
+  /** The model that is loaded (or loading), DECISIONS.md #133. */
+  model: ModelId | null;
   loadMs: number;
   warmupMs: number;
 }
@@ -46,21 +49,47 @@ interface Pending {
   onProgress?: (done: number, total: number) => void;
 }
 
+const IDLE_STATUS: ModelStatus = { state: 'idle', phase: null, progress: 0, loadedBytes: 0, totalBytes: 0, message: 'Model not loaded', backend: null, model: null, loadMs: 0, warmupMs: 0 };
+
 /** Main-thread handle to the inference Web Worker. */
 export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spectrogram' | 'network' | 'filter'; log: string }> {
   private worker: Worker;
+  private readonly makeWorker: () => Worker;
   private nextId = 1;
   private pending = new Map<number, Pending>();
-  private status: ModelStatus = { state: 'idle', phase: null, progress: 0, loadedBytes: 0, totalBytes: 0, message: 'Model not loaded', backend: null, loadMs: 0, warmupMs: 0 };
+  private status: ModelStatus = { ...IDLE_STATUS };
   private analyzing = false;
+  /** Counts restarts, so a load that the switch cut short does not mark the new worker as failed. */
+  private generation = 0;
 
-  constructor(worker?: Worker) {
+  constructor(makeWorker?: () => Worker) {
     super();
-    this.worker = worker ?? new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => this.handle(e.data);
-    this.worker.onerror = (e) => {
+    this.makeWorker = makeWorker ?? (() => new Worker(new URL('./inference.worker.ts', import.meta.url), { type: 'module' }));
+    this.worker = this.attach(this.makeWorker());
+  }
+
+  private attach(worker: Worker): Worker {
+    worker.onmessage = (e: MessageEvent<WorkerResponse>) => this.handle(e.data);
+    worker.onerror = (e) => {
       this.setStatus({ ...this.status, state: 'error', message: `Worker error: ${e.message}` });
     };
+    return worker;
+  }
+
+  /**
+   * Throw the loaded model away with its worker, which frees all of its memory, and start an empty worker
+   * (switching between V2.4 and V3.0, DECISIONS.md #133). Requests still waiting are refused; the status goes
+   * back to "not loaded" until the next init().
+   */
+  restart(): void {
+    this.generation++;
+    this.worker.terminate();
+    for (const p of this.pending.values()) p.reject(new Error('The model was switched'));
+    this.pending.clear();
+    this.analyzing = false;
+    this.lastPassMs = null;
+    this.worker = this.attach(this.makeWorker());
+    this.setStatus({ ...IDLE_STATUS });
   }
 
   getStatus(): ModelStatus {
@@ -104,7 +133,7 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
         return;
       }
       case 'ready': {
-        this.setStatus({ state: 'ready', phase: null, progress: 1, loadedBytes: this.status.totalBytes, totalBytes: this.status.totalBytes, message: `Ready (${msg.backend})`, backend: msg.backend, loadMs: msg.loadMs, warmupMs: msg.warmupMs });
+        this.setStatus({ state: 'ready', phase: null, progress: 1, loadedBytes: this.status.totalBytes, totalBytes: this.status.totalBytes, message: `Ready (${msg.backend})`, backend: msg.backend, model: msg.model, loadMs: msg.loadMs, warmupMs: msg.warmupMs });
         this.pending.get(msg.id)?.resolve(undefined);
         this.pending.delete(msg.id);
         return;
@@ -165,12 +194,13 @@ export class InferenceClient extends Emitter<{ status: ModelStatus; stage: 'spec
   }
 
   /** Load the models. Resolves when inference is ready. */
-  async init(baseUrl: string, backend: BackendPreference, floor = 0.01): Promise<void> {
-    this.setStatus({ ...this.status, state: 'loading', phase: 'backend', progress: 0, message: 'Starting…' });
+  async init(baseUrl: string, backend: BackendPreference, floor = 0.01, model: ModelId = 'v2.4', v3Maps?: { geoIndex: Int32Array; soundClass: Uint8Array }): Promise<void> {
+    this.setStatus({ ...this.status, state: 'loading', phase: 'backend', progress: 0, message: 'Starting…', model });
+    const generation = this.generation;
     try {
-      await this.request<void>((id) => ({ type: 'init', id, baseUrl, backend, floor }));
+      await this.request<void>((id) => ({ type: 'init', id, baseUrl, backend, floor, model, v3Maps }));
     } catch (e) {
-      this.setStatus({ ...this.status, state: 'error', message: (e as Error).message });
+      if (generation === this.generation) this.setStatus({ ...this.status, state: 'error', message: (e as Error).message });
       throw e;
     }
   }

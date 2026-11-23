@@ -1,10 +1,15 @@
 import type { Score } from './postprocess';
+import type { ModelId } from './v3';
 
 export type BackendName = 'webgl' | 'wasm' | 'cpu';
 export type BackendPreference = 'auto' | BackendName;
 
 export type WorkerRequest =
-  | { type: 'init'; id: number; baseUrl: string; backend: BackendPreference; floor: number }
+  /**
+   * `model` picks V2.4 (TF.js) or V3.0 (ONNX Runtime, admin test, DECISIONS.md #133). V3.0 also needs `v3Maps`, built
+   * from its labels.json on the main thread: the location-model index and the sound-class flag per audio class.
+   */
+  | { type: 'init'; id: number; baseUrl: string; backend: BackendPreference; floor: number; model: ModelId; v3Maps?: { geoIndex: Int32Array; soundClass: Uint8Array } }
   | { type: 'set-geo'; id: number; location: { lat: number; lon: number; week: number } | null; threshold: number }
   /** Geo-model scores for every week of the year at one position, reduced to the per-species maximum. */
   | { type: 'local-species'; id: number; lat: number; lon: number }
@@ -17,7 +22,7 @@ export type LoadPhase = 'backend' | 'acoustic' | 'geo' | 'warmup';
 
 export type WorkerResponse =
   | { type: 'progress'; id: number; phase: LoadPhase; loadedBytes: number; totalBytes: number; message: string }
-  | { type: 'ready'; id: number; backend: BackendName; loadMs: number; warmupMs: number }
+  | { type: 'ready'; id: number; backend: BackendName; loadMs: number; warmupMs: number; model: ModelId }
   | { type: 'stage'; id: number; stage: 'spectrogram' | 'network' | 'filter' }
   | { type: 'result'; id: number; scores: Score[]; inferMs: number; geoApplied: boolean; tag?: unknown }
   | { type: 'geo-ready'; id: number; count: number }

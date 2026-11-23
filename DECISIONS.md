@@ -3449,3 +3449,51 @@ Each finding was checked against the code first.
   line and BirdAmp's playlist use them). Nothing a person sees changes.
 - **Tests:** the three unit tests of the removed helpers went with them; the e2e layout, Focus and flicker tests
   cover what remains.
+
+## 133. BirdNET+ V3.0 as an admin-only test model, next to V2.4
+
+- **Why (Sabih, Nov 23):** BirdNET+ V3.0 is final (Zenodo record 24362980, version 3.0.1, Nov 19, 2026). BirdNET's own
+  benchmark (WABAD, 66 sites) gives it about twice V2.4's average precision (0.552 against 0.272) for the full model.
+  Sabih chose the full model, offered next to V2.4 and only to the admin until it is proven on a phone.
+- **What runs:** `BirdNET+_V3.0_Global_12K_FP16.onnx` (173.9 MB, 11,725 classes: 9,788 birds, insects, frogs,
+  mammals, fish, reptiles and 16 sound classes) and `BirdNET+_Geomodel_V3.0.5_Global_14K_FP16.onnx` (7.7 MB), through
+  ONNX Runtime Web 1.31.1 on WebAssembly, one thread, no GPU (the site is not cross-origin isolated; WebGPU was left
+  out until the CPU route is proven). First download about 187 MB with the 14.8 MB engine file. Measured on the cloud
+  VM before building: 0.6–0.8 s per 3 s window and about 1.4 GB peak memory for the whole test process (the 68 MB
+  BirdNET Live model: 0.5–0.6 s, 0.8 GB). Whether an iPhone keeps a tab that large is unknown: that is what the test is
+  for. Licence: Apache 2.0 for the weights; the acceptable use policy is guidance and adds no licence conditions.
+- **Who gets it:** `effectiveModel` (`src/app/access.ts`) runs V3.0 only for the approved admin; anyone else gets V2.4
+  whatever is stored. Settings › Detection › "Bird model" (`src/ui/components/model-choice.ts`) shows only to the
+  admin. The files on the server are public anyway (Apache 2.0); the check only decides what the phone does.
+- **How:**
+  - `src/model/v3.ts` (constants, file names, sizes, `v3BaseUrl`, `geoToAudioOrder`), `src/model/v3-runner.ts`
+    (the ONNX Runtime sessions, only imported by the worker), `src/audio/resample-32k.ts` (48 → 32 kHz in the worker:
+    two windowed-sinc phases, low-pass at 15.2 kHz). The app still makes 48 kHz windows; recordings are unchanged.
+  - The worker loads one model; switching ends the worker (`InferenceClient.restart()`, which frees all of its
+    memory) and starts a new one. A switch while listening waits until Stop. Each model has its own Cache API bucket
+    (`birdnet-models-v3.0`), so switching never deletes the other one's files.
+  - Species list: `public/models/birdnet-v3.0/labels.json` (674 KiB, not precached), made by
+    `scripts/prepare-labels-v3.mts`: scientific name, English name, taxon group, location-model index. Birds are taxon
+    group Aves, so frogs and insects follow "Show non-bird classes". The location model has its own class order; the
+    worker rearranges it into the audio model's. Sound classes are never held back; the 783 species the location model
+    does not know (228 of them birds) count as "not usual here", as BirdNET Live does by leaving them out.
+  - Saved birds: 311 V2.4 bird names are not in V3.0 (renames such as *Accipiter cooperii* → *Astur cooperii*, and
+    merges such as Lesser Redpoll into Redpoll). With V3.0 running, V2.4's names stay as look-up-only entries
+    (`lookupOnly`, index -1), so old sightings keep their pages; "Why this ID" and stored detections skip them. New
+    detections carry `model: 'v3.0'` for a later mapping. With V2.4 running, a V3.0-only name shows "Unknown species".
+  - Listen says "Model ready · V3.0 test" and credits "BirdNET+ V3.0 … Apache 2.0" while V3.0 runs.
+- **Files on the server:** `models/birdnet-v3.0/` (`audio.onnx`, `geo.onnx`, the engine file
+  `ort-wasm-simd-threaded-1.31.1.wasm`, licence, policy, README, `SHA256SUMS`), served by the existing Nginx
+  `/models/` location. The weights are over GitHub's 100 MB limit and the engine file would push the Vercel build over
+  its 12 MiB check, so none of the three is in git: `scripts/fetch-model-v3.sh` downloads them from Zenodo (and copies
+  the engine from `node_modules`) and checks `SHA256SUMS`; then
+  `scripts/server/publish-model.sh --version birdnet-v3.0` publishes the folder, run by Sabih from the PC.
+  A Vite worker plugin drops the copy of the engine file ONNX Runtime's bundle would otherwise put in `dist/`.
+- **Not done yet (before everyone gets it):** a V2.4 → V3.0 name mapping for saved data and friends' lists; "Ask about
+  this bird" on the server still looks birds up in V2.4's list, so it does not know V3.0-only names; help text still
+  describes V2.4 (48 kHz, 6,522 classes); speed and memory on a real iPhone.
+- **Tests:** `tests/v3-model.test.ts` (admin gate, setting, URLs, engine version and sizes, labels, name look-up,
+  location re-ordering, cache check, credit, the 48 → 32 kHz converter, worker restart); e2e "BirdNET+ V3.0: …" (a
+  member never sees the choice and runs V2.4; the admin picks V3.0, nothing of V3.0 is fetched before that, the fake
+  microphone's sample is "Redpoll, *Acanthis flammea*", a switch while listening waits for Stop, back to V2.4 works).
+  CI fetches the weights once and caches them.

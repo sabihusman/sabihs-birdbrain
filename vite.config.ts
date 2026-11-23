@@ -3,6 +3,7 @@ import process from 'node:process';
 import { VitePWA } from 'vite-plugin-pwa';
 import { serveModels } from './scripts/serve-models.mts';
 import { DEFAULT_MODEL_BASE_URL, MODEL_VERSION } from './src/model/model-source';
+import { v3BaseUrl } from './src/model/v3';
 
 /** '/' on Vercel; set VITE_BASE_PATH to serve the app under a sub-path elsewhere. */
 const BASE = (process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/');
@@ -15,6 +16,8 @@ const BASE = (process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/');
  */
 const MODEL_BASE_URL = (process.env.VITE_MODEL_BASE_URL?.trim() || DEFAULT_MODEL_BASE_URL).replace(/\/*$/, '/');
 // Only "." needs escaping in a URL made of letters, digits, ":", "/" and "." .
+const V3_MODELS_URL = v3BaseUrl(MODEL_BASE_URL);
+const CROSS_ORIGIN_V3 = /^https?:\/\//.test(V3_MODELS_URL) ? [new RegExp('^' + V3_MODELS_URL.split('.').join('\\.') + '.*\\.(onnx|wasm)$')] : [];
 const CROSS_ORIGIN_MODELS = /^https?:\/\//.test(MODEL_BASE_URL) ? [new RegExp('^' + MODEL_BASE_URL.split('.').join('\\.') + '.*\\.(bin|json)$')] : [];
 
 export default defineConfig({
@@ -26,6 +29,17 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+    // ONNX Runtime's bundle points at its 15 MB .wasm with new URL(…, import.meta.url), so Vite would copy it into
+    // dist/. The worker hands the engine its bytes instead (wasmBinary, fetched from the model host with the V3.0
+    // model, DECISIONS.md #133), so that copy is never requested: drop it to keep the Vercel build small.
+    plugins: () => [
+      {
+        name: 'birdbrain-drop-ort-wasm',
+        generateBundle(_options, bundle) {
+          for (const name of Object.keys(bundle)) if (/ort-wasm-simd-threaded[^/]*\.wasm$/.test(name)) delete bundle[name];
+        },
+      },
+    ],
   },
   plugins: [
     // Dev and preview only: serves the repository's models/ folder, which production
@@ -76,6 +90,13 @@ export default defineConfig({
               expiration: { maxEntries: 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
+          })),
+          // BirdNET+ V3.0 (admin test, DECISIONS.md #133): the model, location model and engine file, in their own
+          // bucket so switching models never evicts the other one. The worker also writes there itself.
+          ...[...CROSS_ORIGIN_V3, /\/models\/birdnet-v3\.0\/.*\.(onnx|wasm)$/].map((urlPattern) => ({
+            urlPattern,
+            handler: 'CacheFirst' as const,
+            options: { cacheName: 'birdnet-models-v3.0', expiration: { maxEntries: 8 }, cacheableResponse: { statuses: [0, 200] } },
           })),
           {
             urlPattern: /\/samples\/.*\.wav$/,

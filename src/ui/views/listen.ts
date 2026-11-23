@@ -12,7 +12,7 @@ import type { View, ViewContext } from '../app';
 import { resultCard, type ResultCardHandle } from '../components/result-card';
 import { keyedPool, syncChildren } from '../keyed';
 import { layoutBubble } from '../components/layout-bubble';
-import { birdnetCredit } from '../components/source-credit';
+import { birdnetCredit, setBirdnetCredit } from '../components/source-credit';
 import { speciesChip } from '../components/species-chip';
 import { MODEL_SIZE_MB, welcomeCard } from '../components/welcome';
 import { focusIntroDone, markFocusIntroDone } from '../focus-intro';
@@ -245,7 +245,7 @@ export function listenView(ctx: ViewContext): View {
   // In Focus mode the result list lives under the button; elsewhere it stays in the results block (a node has one parent).
   const focusBlock = el('div', { class: 'focus-block' }, focusLatest, moreBtn, moreList);
   /** BirdNET is credited where it identifies (DECISIONS.md #66): the last line in flow in every layout. */
-  const credit = birdnetCredit();
+  const credit = birdnetCredit(controller.modelId);
   // The result cards' column on a wide screen (DECISIONS.md #122); on a phone it is an ordinary block in the flow.
   const side = el('div', { class: 'listen-side', 'data-testid': 'listen-side' });
   const root = el('div', { class: 'listen' });
@@ -376,13 +376,19 @@ export function listenView(ctx: ViewContext): View {
     const st = listenStatus(controller);
     const text = STATE_TEXT[st.status];
     const backend = controller.inference.getStatus().backend;
-    cardPillText.textContent = st.status === 'ready' && backend ? `${st.pill} · ${backend}` : st.pill;
+    // BirdNET+ V3.0 (admin test, DECISIONS.md #133) says so on the card, so the admin always knows which model is listening.
+    const v3 = controller.modelId === 'v3.0';
+    cardPillText.textContent = st.status === 'ready' && backend ? `${st.pill} · ${v3 ? 'V3.0 test' : backend}` : st.pill;
+    if (credit.dataset.model !== controller.modelId) {
+      credit.dataset.model = controller.modelId;
+      setBirdnetCredit(credit, controller.modelId);
+    }
     cardPill.className = `model-pill card-model-pill ${st.status} tone-${st.tone}`;
     // Said once: no "Not loaded" pill under a heading that already says "Model not loaded" (DECISIONS.md #131).
     setHidden(cardPill, pillRepeatsTitle(cardPillText.textContent ?? '', text.title));
     stateIcon.textContent = st.icon;
     stateTitle.textContent = text.title;
-    stateHint.textContent = st.hint ?? text.hint;
+    stateHint.textContent = st.hint ?? (st.status === 'idle' || st.status === 'loading' ? text.hint.replace(`${MODEL_SIZE_MB} MB`, `${controller.modelDownloadMb} MB`) : text.hint);
     readyBlock.dataset.status = st.status;
     root.dataset.status = st.status;
     const listening = st.status === 'listening' || st.status === 'paused';
