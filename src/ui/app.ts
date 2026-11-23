@@ -25,6 +25,9 @@ import { SpeciesSharer } from '../species/sharing';
 import { applyTheme, currentTheme, otherTheme, storeTheme } from '../theme/theme';
 import { listenStatus } from './status';
 import { onShellSkin, shellSkin } from './skin';
+import { buzz, NewBirdTracker } from '../app/bird-alert';
+import { flashForBird } from './components/bird-flash';
+import { speciesColor } from '../species/colors';
 
 export interface View {
   el: HTMLElement;
@@ -149,6 +152,23 @@ export function mountApp(root: HTMLElement, controller: AppController, api: ApiC
   // ⇅ Flip lasts while listening (a BirdAmp pause included) and turns back when listening stops.
   controller.on('stats', (st) => {
     if (!st.listening && !st.paused) setFlipped(false);
+  });
+  // A bird is found (DECISIONS.md #134): a flash in its colour on every phone, a short buzz on Android. Once per bird
+  // per listening session, and again after 30 s without it. A new session (not a carry-on after BirdAmp's pause) starts
+  // over.
+  const birds = new NewBirdTracker();
+  let wasActive = false;
+  controller.on('stats', (st) => {
+    const active = st.listening || st.paused;
+    if (active && !wasActive) birds.reset();
+    wasActive = active;
+  });
+  controller.on('window-result', (r) => {
+    const keys = r.detections.map((d) => controller.speciesByIndex(d.index)?.scientific).filter((k): k is string => !!k);
+    const found = birds.check(keys, r.time);
+    if (found.length === 0 || !controller.settings.get().birdAlert) return;
+    flashForBird(speciesColor(found[0]).css);
+    buzz();
   });
 
   const notify = (n: Notice) => {

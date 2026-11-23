@@ -3634,3 +3634,50 @@ test('BirdNET+ V3.0: only the admin sees the choice; switching loads V3.0, the t
 async function overflowOf(page: Page): Promise<number> {
   return page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('.app-scroll')?.scrollWidth ?? 0) - document.documentElement.clientWidth);
 }
+
+test('a bird is found: one flash in its colour and one buzz, not every window; off in Settings means neither (DECISIONS.md #134)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 740 }, permissions: ['microphone'], serviceWorkers: 'block' });
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+    // Count buzzes and flashes (Chromium offers navigator.vibrate, like Android browsers).
+    const w = window as unknown as { buzzes: number[]; flashes: string[] };
+    w.buzzes = [];
+    w.flashes = [];
+    Object.defineProperty(navigator, 'vibrate', { configurable: true, value: (p: number) => (w.buzzes.push(p), true) });
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) if (n instanceof HTMLElement && n.classList.contains('bird-flash')) w.flashes.push(n.style.getPropertyValue('--flash-color'));
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const page = await context.newPage();
+  const counts = () => page.evaluate(() => ({ buzzes: (window as unknown as { buzzes: number[] }).buzzes.length, flashes: (window as unknown as { flashes: string[] }).flashes }));
+  await page.goto('./#/settings');
+  await expect(page.getByText('Flash when a bird is found')).toBeVisible();
+  await expect(page.getByText('And a short buzz on this phone')).toBeVisible();
+  await page.goto('./#/listen');
+  await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('result-card').first()).toBeAttached({ timeout: 120_000 });
+  await expect.poll(async () => (await counts()).buzzes).toBe(1);
+  // The flash is the bird's colour, covers the screen and never takes a tap.
+  const first = await counts();
+  expect(first.flashes).toHaveLength(1);
+  expect(first.flashes[0]).toMatch(/^rgb\(/);
+  // The fake microphone keeps playing the same bird: several more windows, no more alerts.
+  await page.waitForTimeout(6000);
+  expect(await counts()).toEqual(first);
+  await expect(page.getByTestId('bird-flash')).toHaveCount(0);
+  await page.getByTestId('stop').click();
+  // Switched off: a new session finds the bird again but neither flashes nor buzzes.
+  await page.goto('./#/settings');
+  await page.getByText('Flash when a bird is found').click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').birdAlert)).toBe(false);
+  await page.goto('./#/listen');
+  await page.getByTestId('start-stop').click();
+  await expect(page.getByTestId('result-card').first()).toBeAttached({ timeout: 120_000 });
+  await page.waitForTimeout(4000);
+  expect(await counts()).toEqual(first);
+  await page.getByTestId('stop').click();
+  await context.close();
+});
