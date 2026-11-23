@@ -50,6 +50,8 @@ export interface Settings {
    * `effectiveModel` (src/app/access.ts) runs V2.4 for anyone else whatever is stored here.
    */
   birdnetModel: ModelId;
+  /** Flash (and, on Android, buzz) when a bird is found while listening (DECISIONS.md #134). */
+  birdAlert: boolean;
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. 5: back to 60 % from 70 %. 6: auto-save too. */
@@ -94,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mapCardsView: 'birds',
   usageCounts: true,
   birdnetModel: 'v2.4',
+  birdAlert: true,
 };
 
 /** localStorage key of the stored settings; its presence is one of the "returning visitor" signals (src/app/first-visit.ts). */
@@ -183,6 +186,7 @@ export function sanitize(s: Settings): Settings {
     mapCardsView: s.mapCardsView === 'places' ? 'places' : 'birds',
     usageCounts: s.usageCounts !== false,
     birdnetModel: MODEL_IDS.includes(s.birdnetModel) ? s.birdnetModel : 'v2.4',
+    birdAlert: s.birdAlert !== false,
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),

@@ -3497,3 +3497,29 @@ Each finding was checked against the code first.
   member never sees the choice and runs V2.4; the admin picks V3.0, nothing of V3.0 is fetched before that, the fake
   microphone's sample is "Redpoll, *Acanthis flammea*", a switch while listening waits for Stop, back to V2.4 works).
   CI fetches the weights once and caches them.
+
+## 134. "A bird is found": a flash on every phone, a buzz on Android
+
+- **Why (Sabih, Nov 23):** a signal when a bird is identified, while the phone is pointed away. Of the options (Android
+  only, Android plus the iPhone switch-tick workaround, a visual flash, wait for the native app), Sabih chose Android
+  vibration plus a visual flash.
+- **iPhone:** websites cannot vibrate an iPhone. Safari has never shipped the Vibration API (W3C implementation report,
+  caniuse, as of iOS 26.5). The workaround of toggling a hidden `<input type="checkbox" switch>` from code gave a
+  haptic tick from iOS 17.4/18, but the `ios-haptics` library dropped its code-triggered `haptic()` in version 3.0
+  (June 24, 2026) and its README says Apple closed it in iOS 26.5 (WebKit bug 285120 asked for a real tap). A detection
+  is not a tap, so there is no iPhone buzz. Developers also report iOS muting haptics while the microphone records.
+  Only the author's README dates the 26.5 change; Apple's release notes we could read do not mention it.
+- **When:** a bird counts as found the first time it is heard in a listening session, and again after 30 s without it
+  (`LUMP_GAP_SECONDS`, the same gap as "Heard 3 times"); a bird singing steadily alerts once. One alert per window
+  even when several birds are new. A new session starts over; carrying on after BirdAmp's pause does not.
+- **What:** `src/app/bird-alert.ts` (`NewBirdTracker`, `buzz()`: one 120 ms vibration where `navigator.vibrate`
+  exists, never throwing; Android needs a tap on the page first, which Start listening is) and
+  `src/ui/components/bird-flash.ts` (a 700 ms glow around the screen edge in the bird's colour, on `<body>`, no
+  pointer events; one pulse, so far under the three-flashes-a-second limit; with reduced motion it shows without the
+  pulse). Wired in `src/ui/app.ts`, so it works in every layout and on every tab while listening.
+- **Setting:** Settings › Detection › "Flash when a bird is found" (`birdAlert`, on by default). The line under it says
+  "And a short buzz on this phone" where vibration exists, else "The phone buzzes too on Android"; the fold says
+  iPhones do not let websites vibrate.
+- **Tests:** `tests/bird-alert.test.ts` (once while singing, again after the gap, several birds, reset, buzz only where
+  offered, setting); e2e "a bird is found: …" (one flash in the bird's colour and one buzz with the fake microphone,
+  none for the next windows, neither when switched off).

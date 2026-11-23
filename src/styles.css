@@ -1013,3 +1013,8 @@ html.wn-open, html.wn-open body { overflow: hidden; }
 .model-option-name { font-weight: var(--weight-semibold); }
 .model-note { margin: 0; }
 .model-choice[hidden], .model-note[hidden] { display: none; }
+
+/* "A bird is found" (DECISIONS.md #134): one glow around the screen edge in the bird's colour. Never takes a tap. */
+.bird-flash { position: fixed; inset: 0; z-index: 70; pointer-events: none; box-shadow: inset 0 0 0 6px var(--flash-color), inset 0 0 48px 12px color-mix(in srgb, var(--flash-color) 60%, transparent); animation: bird-flash var(--flash-ms, 700ms) ease-out forwards; }
+@keyframes bird-flash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bird-flash { animation: none; opacity: 0.9; } }

@@ -12,6 +12,7 @@ import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
 import { privacyCard } from '../components/privacy-card';
 import { pageTitle } from '../components/page-title';
+import { canVibrate } from '../../app/bird-alert';
 import { modelChoice } from '../components/model-choice';
 import { jumpRow, type Jump } from '../components/jump-row';
 import { layoutPicker } from '../components/layout-picker';
@@ -33,6 +34,9 @@ export const SETTINGS_JUMPS: readonly Jump[] = [
   ['Privacy', 'Privacy'],
   ['About', 'About'],
 ];
+
+/** The fold under "Flash when a bird is found" (DECISIONS.md #134). */
+export const BIRD_ALERT_MORE = 'Once per bird while listening, and again if it comes back after 30 seconds. The edge of the screen glows in the bird’s colour. Android phones also buzz; iPhones do not let websites vibrate.';
 
 export function settingsView(ctx: ViewContext): View {
   const { controller } = ctx;
@@ -73,7 +77,7 @@ export function settingsView(ctx: ViewContext): View {
   });
 
   // A tick box keeps one short line; the rest opens under it, outside the label, so tapping it never flips the box (DECISIONS.md #100).
-  const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut', line: string, more: string) => {
+  const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut' | 'birdAlert', line: string, more: string) => {
     const input = el('input', { type: 'checkbox', checked: s[key] });
     input.addEventListener('change', () => settings.update({ [key]: input.checked }));
     return el('div', { class: 'switch-folded' }, el('label', { class: 'switch' }, el('span', null, label), input), foldHint(line, [el('p', null, more)]));
@@ -196,6 +200,7 @@ export function settingsView(ctx: ViewContext): View {
       foldHint('Lower: more birds, more mistakes', [el('p', null, 'Lower catches faint or distant birds but adds false IDs.')], { testId: 'threshold-help' }),
       slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
       toggle('Show non-bird classes', 'includeNonBird', 'Dogs, engines, voices…', 'Dog, engine, siren, human voice and similar.'),
+      toggle('Flash when a bird is found', 'birdAlert', canVibrate() ? 'And a short buzz on this phone' : 'The phone buzzes too on Android', BIRD_ALERT_MORE),
     ),
     el(
       'section',
