@@ -7,10 +7,11 @@ import { SampleRing } from '../audio/ring-buffer';
 import { CLIP_MAX_SECONDS, clipRange, saveClipIfBetter, shouldReplaceClip, windowsInClip, type ClipCandidate, type TimedWindow } from '../species/clips';
 import { decodeWav, encodeWav, toMono } from '../audio/wav';
 import { resampleLinear } from '../audio/resample';
-import { LABELS_JSON, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
+import { ACOUSTIC_MODEL_FILE, LABELS_JSON, MODEL_CACHE_NAME, MODEL_TOTAL_BYTES, SAMPLE_RATE, WINDOW_SAMPLES, WINDOW_SECONDS } from '../model/constants';
 import { MODEL_BASE_URL, MODEL_DOWNLOAD_ERROR } from '../model/model-source';
 import { BrowserUnsupportedError, checkBrowserSupport, describeModelFailure } from './browser-support';
-import { parseLabels, type Species } from '../model/labels';
+import { lookupOnly, parseLabels, parseV3Labels, type Species } from '../model/labels';
+import { V3_AUDIO_FILE, V3_BASE_URL, V3_CACHE_NAME, V3_LABELS_JSON, V3_TOTAL_BYTES, type ModelId } from '../model/v3';
 import { selectDetections, type Score } from '../model/postprocess';
 import { InferenceClient, type ModelStatus } from '../model/worker-client';
 import { Emitter } from '../shared/emitter';
@@ -22,7 +23,7 @@ import { shouldAutoSaveClip, type LastAutoClip } from './autoclip';
 import { SettingsStore, type Settings } from './settings';
 import { localIndices, LocalSpeciesCache } from '../species/local';
 import type { KeyedHit } from '../species/recent';
-import { isModelCached, markModelWanted, safeLocalStorage } from './first-visit';
+import { isModelCached, markModelWanted, readStoredSignals, safeLocalStorage } from './first-visit';
 import { askToKeepStorageOnce, PERSIST_REASON, persistOutcomeText } from '../storage/quota';
 
 export interface WindowResult {
@@ -141,6 +142,15 @@ export class AppController extends Emitter<ControllerEvents> {
   readonly engine: AudioEngine;
   species: Species[] = [];
   private speciesByName = new Map<string, Species>();
+  /** The model that runs (DECISIONS.md #133): V2.4, or V3.0 for the admin. Set by main.ts from the setting and the account. */
+  private model: ModelId = 'v2.4';
+  /** A switch asked for while listening waits until listening stops. */
+  private pendingModel: ModelId | null = null;
+  /** V3.0's maps for the worker, from its labels.json. */
+  private v3Maps: { geoIndex: Int32Array; soundClass: Uint8Array } | null = null;
+  private labelsLoaded = false;
+  /** Counts switches, so a load the switch cut short is not reported as a failed download. */
+  private modelSwitches = 0;
   private sessionId = newId();
   private sessionStartedAt: number | null = null;
   private windowCounter = 0;
@@ -262,17 +272,89 @@ export class AppController extends Emitter<ControllerEvents> {
     return this.modelReady ? true : this.loadModel();
   }
 
-  /** Load the species list, and the model when this phone asked for it before. Safe to call once at startup. */
-  async init(): Promise<void> {
+  /** The model that runs now (or will at the next load). */
+  get modelId(): ModelId {
+    return this.model;
+  }
+
+  /** Size of this model's one-time download, in whole MB (the Listen panel's "One-time 78 MB download"). */
+  get modelDownloadMb(): number {
+    return Math.round((this.model === 'v3.0' ? V3_TOTAL_BYTES : MODEL_TOTAL_BYTES) / 1048576);
+  }
+
+  /** `{ model: 'v3.0' }` on a detection V3.0 made (DECISIONS.md #133), nothing for V2.4. */
+  modelTag(): { model?: 'v3.0' } {
+    return this.model === 'v3.0' ? { model: 'v3.0' } : {};
+  }
+
+  /** A switch is waiting for listening to stop. */
+  get modelSwitchPending(): ModelId | null {
+    return this.pendingModel;
+  }
+
+  /**
+   * Choose the model (DECISIONS.md #133). Before init() this only records it. Later it throws the loaded model away
+   * with its worker, loads the other species list and, when this phone has asked for a model before, loads the new
+   * one. While listening, the switch waits until listening stops.
+   */
+  async setModel(id: ModelId): Promise<void> {
+    if (id === this.model && this.pendingModel === null) return;
+    if (!this.labelsLoaded) {
+      this.model = id;
+      return;
+    }
+    if (this.listening || this.held) {
+      this.pendingModel = id === this.model ? null : id;
+      return;
+    }
+    this.pendingModel = null;
+    if (id === this.model) return;
+    this.model = id;
+    this.modelSwitches++;
+    this.modelLoading = null;
+    this.inference.restart();
+    this.modelReady = false;
+    this.modelFailure = null;
+    this.localCache.clear();
+    this.geoCount = 0;
+    await this.loadLabels();
+    this.emit('model', this.inference.getStatus());
+    this.emit('local-species', this.getLocalSpecies());
+    if (readStoredSignals(safeLocalStorage()).modelWanted) void this.loadModel();
+  }
+
+  private async fetchJson<T>(path: string): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${path}`);
+    if (!res.ok) throw new Error(`${path} ${res.status}`);
+    return (await res.json()) as T;
+  }
+
+  /** The current model's species list; with V3.0, V2.4's names it lacks are kept for looking up saved birds. */
+  private async loadLabels(): Promise<void> {
     try {
-      const res = await fetch(`${this.baseUrl}${LABELS_JSON}`);
-      if (!res.ok) throw new Error(`labels ${res.status}`);
-      this.species = parseLabels((await res.json()) as string[]);
-      for (const s of this.species) this.speciesByName.set(s.scientific, s);
+      const v24 = parseLabels(await this.fetchJson<string[]>(LABELS_JSON));
+      let species = v24;
+      let extra: Species[] = [];
+      this.v3Maps = null;
+      if (this.model === 'v3.0') {
+        const v3 = parseV3Labels(await this.fetchJson<{ classes: Array<[string, string, string, number]> }>(V3_LABELS_JSON));
+        species = v3.species;
+        this.v3Maps = { geoIndex: v3.geoIndex, soundClass: v3.soundClass };
+        extra = lookupOnly(v24, new Map(species.map((s) => [s.scientific, s])));
+      }
+      this.species = species;
+      this.speciesByName = new Map([...extra, ...species].map((s) => [s.scientific, s]));
       this.emit('species-loaded', this.species);
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Could not load the species list: ${(e as Error).message}` });
+    } finally {
+      this.labelsLoaded = true;
     }
+  }
+
+  /** Load the species list, and the model when this phone asked for it before. Safe to call once at startup. */
+  async init(): Promise<void> {
+    await this.loadLabels();
     // A browser that cannot run the model is told so at once, before any tap (DECISIONS.md #65): the
     // check costs nothing and downloads nothing, and "Start identifying" would only fail later.
     const support = checkBrowserSupport();
@@ -294,15 +376,21 @@ export class AppController extends Emitter<ControllerEvents> {
   async loadModel(): Promise<boolean> {
     if (this.modelReady) return true;
     if (this.modelLoading) return this.modelLoading;
-    this.modelLoading = (async () => {
+    const switches = this.modelSwitches;
+    let loading: Promise<boolean> | null = null;
+    loading = (async () => {
       try {
         // Before any byte is requested: a browser without WebAssembly cannot run the model,
         // so there is nothing to download (DECISIONS.md #65).
         const support = checkBrowserSupport();
         if (!support.ok) throw new BrowserUnsupportedError(support.reason);
         this.modelFailure = null;
-        this.modelFromCache = await isModelCached(typeof caches === 'undefined' ? undefined : caches, MODEL_BASE_URL);
-        await this.inference.init(MODEL_BASE_URL, this.settings.get().backend);
+        const v3 = this.model === 'v3.0';
+        if (v3 && !this.v3Maps) throw new Error('The BirdNET+ V3.0 species list did not load');
+        const base = v3 ? V3_BASE_URL : MODEL_BASE_URL;
+        const cacheStore = typeof caches === 'undefined' ? undefined : caches;
+        this.modelFromCache = v3 ? await isModelCached(cacheStore, base, V3_CACHE_NAME, V3_AUDIO_FILE) : await isModelCached(cacheStore, base, MODEL_CACHE_NAME, ACOUSTIC_MODEL_FILE);
+        await this.inference.init(base, this.settings.get().backend, undefined, this.model, this.v3Maps ?? undefined);
         await this.pushGeo();
         void this.refreshLocalSpecies();
         // Right after the first download: ask the browser to keep the model and the sightings (DECISIONS.md #84).
@@ -314,6 +402,8 @@ export class AppController extends Emitter<ControllerEvents> {
           });
         return true;
       } catch (e) {
+        // The model was switched while this one loaded: not a failure, the new model's load takes over.
+        if (switches !== this.modelSwitches) return false;
         // The technical reason stays in the console; the member reads what to do about it.
         console.warn('[model] load failed', e);
         this.modelFailure = { unsupported: e instanceof BrowserUnsupportedError, text: describeModelFailure(e) };
@@ -321,10 +411,11 @@ export class AppController extends Emitter<ControllerEvents> {
         else this.emit('notice', { kind: 'error', text: this.modelFailure.text });
         return false;
       } finally {
-        this.modelLoading = null;
+        if (this.modelLoading === loading) this.modelLoading = null;
       }
     })();
-    return this.modelLoading;
+    this.modelLoading = loading;
+    return loading;
   }
 
   /** Why the last model load failed, in plain words; null when it has not failed. */
@@ -345,7 +436,8 @@ export class AppController extends Emitter<ControllerEvents> {
   getLocalSpecies(): LocalSpeciesState {
     const loc = this.location.get();
     if (!loc.location) return { indices: null, note: loc.mode === 'off' ? 'All species: location filter off (Settings › Location).' : `All species: no location (${loc.message || loc.status}).` };
-    const entry = this.localCache.current;
+    // An entry saved under the other model has the other model's class count (DECISIONS.md #133): recompute it.
+    const entry = this.localCache.current?.maxProbs.length === this.species.length ? this.localCache.current : null;
     if (!entry || this.localCache.needsRecompute(loc.location.lat, loc.location.lon)) {
       const model = this.inference.getStatus().state;
       const note = model === 'ready' ? 'All species until your local list is ready…' : model === 'idle' ? 'All species until your first identification loads the model.' : 'All species until the model loads.';
@@ -361,7 +453,7 @@ export class AppController extends Emitter<ControllerEvents> {
       this.emit('local-species', this.getLocalSpecies());
       return;
     }
-    if (!this.localCache.needsRecompute(loc.lat, loc.lon)) {
+    if (!this.localCache.needsRecompute(loc.lat, loc.lon) && this.localCache.current?.maxProbs.length === this.species.length) {
       this.emit('local-species', this.getLocalSpecies());
       return;
     }
@@ -497,6 +589,8 @@ export class AppController extends Emitter<ControllerEvents> {
     this.segmentStartedAt = null;
     this.stats = { ...this.stats, listening: false, paused: false, elapsedSec: elapsed };
     this.emit('stats', this.stats);
+    // A model switch asked for while listening happens now (DECISIONS.md #133).
+    if (this.pendingModel) await this.setModel(this.pendingModel);
   }
 
   /** Release the mic, the GPS and the wake lock, and save what the stretch left pending. */
@@ -678,6 +772,7 @@ export class AppController extends Emitter<ControllerEvents> {
       source: 'live',
       sessionId: this.sessionId,
       soundOnly: true,
+      ...this.modelTag(),
     };
     try {
       await recordDetections([record]);
@@ -739,6 +834,7 @@ export class AppController extends Emitter<ControllerEvents> {
         source: 'live',
         sessionId: this.sessionId,
         ...(result.soundOnly?.includes(d.index) ? { soundOnly: true } : {}),
+        ...this.modelTag(),
       };
     });
     await recordDetections(records);

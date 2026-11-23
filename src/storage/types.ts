@@ -56,6 +56,8 @@ export interface DetectionRecord {
   sightingId?: string;
   /** Kept by the user although the location model does not expect the bird here (DECISIONS.md #93). */
   soundOnly?: boolean;
+  /** Identified by BirdNET+ V3.0 (admin test, DECISIONS.md #133); absent means V2.4. Kept for mapping names later. */
+  model?: 'v3.0';
 }
 
 /**

@@ -48,6 +48,11 @@ Key modules:
 - Listen layouts: Consolidated, Focus (first-run default) and, for members, BirdAmp. Bottom dock was switched off on
   Nov 21 (DECISIONS.md #130): `migrate()` in `src/app/settings.ts` turns a saved `dock` into Consolidated; the
   `listen-dock` bar that remains is Focus's Start bar.
+- BirdNET+ V3.0, admin-only test (DECISIONS.md #133): Settings › Detection › "Bird model" (`model-choice.ts`, admin
+  only via `effectiveModel` in `src/app/access.ts`); `src/model/v3.ts`, `v3-runner.ts` (ONNX Runtime Web, worker only),
+  `src/audio/resample-32k.ts`; `AppController.setModel()` restarts the worker (`InferenceClient.restart()`). Weights are
+  not in git: `scripts/fetch-model-v3.sh`, then `scripts/server/publish-model.sh --version birdnet-v3.0`. Keep
+  `ORT_VERSION` in `v3.ts` equal to the pinned `onnxruntime-web` (a test checks).
 - UX-audit tidy-up (DECISIONS.md #131): main pages open with `pageTitle()` (`src/ui/components/page-title.ts`; not
   Listen); the lit tab comes from `tabFor()` in `src/ui/router.ts`; the layout button
   (`src/ui/components/layout-bubble.ts`) reads "Layout: Focus" and opens a sheet appended to `<body>`; Settings has

@@ -28,6 +28,16 @@ export const BIRDNET_CREDIT = {
   licenceUrl: 'https://creativecommons.org/licenses/by-nc-sa/4.0/',
 } as const;
 
+/** The same line while BirdNET+ V3.0 runs (admin test, DECISIONS.md #133): its weights are Apache 2.0 (models/birdnet-v3.0/MODEL_LICENSE.txt). */
+export const BIRDNET_V3_CREDIT = {
+  label: 'Bird ID: ',
+  linkText: 'BirdNET+ V3.0',
+  url: 'https://doi.org/10.5281/zenodo.24362980',
+  rest: ', Cornell Lab of Ornithology and Chemnitz University of Technology · ',
+  licenceText: 'Apache 2.0',
+  licenceUrl: 'https://www.apache.org/licenses/LICENSE-2.0',
+} as const;
+
 /** Match on the name the server uses (server/src/ask.ts SOURCE_NAMES) or on the link's host, so a renamed label still credits. */
 const isEbird = (s: { name: string; url: string }) => /\bebird\b/i.test(s.name) || /(^|\.)ebird\.org$/i.test(hostOf(s.url));
 const isNatureServe = (s: { name: string; url: string }) => /natureserve/i.test(s.name) || /(^|\.)natureserve\.org$/i.test(hostOf(s.url));

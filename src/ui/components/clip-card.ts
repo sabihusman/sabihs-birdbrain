@@ -91,6 +91,11 @@ export function clipCard(ctx: ViewContext, species: Species, clip: ClipRecord): 
       ctx.notify({ kind: 'warn', text: 'The model is still loading.' });
       return;
     }
+    // A bird saved with V2.4 under a name BirdNET+ V3.0 does not have (DECISIONS.md #133): nothing to ask it about.
+    if (species.index < 0) {
+      ctx.notify({ kind: 'warn', text: 'The model in use doesn’t know this bird by this name. Switch the bird model back in Settings to see why.' });
+      return;
+    }
     const grid = OCCLUSION_GRIDS[resolution];
     const start = Math.round(why.offsetSec * SAMPLE_RATE);
     const window = new Float32Array(WINDOW_SAMPLES);

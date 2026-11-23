@@ -73,12 +73,12 @@ export type ModelCacheStorage = Pick<CacheStorage, 'has'> & { open(name: string)
  * service worker share `MODEL_CACHE_NAME`). `modelBaseUrl` may be relative; the Cache
  * API resolves it against the page like fetch does.
  */
-export async function isModelCached(cacheStorage: ModelCacheStorage | undefined, modelBaseUrl: string): Promise<boolean> {
+export async function isModelCached(cacheStorage: ModelCacheStorage | undefined, modelBaseUrl: string, cacheName = MODEL_CACHE_NAME, entryFile = ACOUSTIC_MODEL_FILE): Promise<boolean> {
   if (!cacheStorage) return false;
   try {
-    if (!(await cacheStorage.has(MODEL_CACHE_NAME))) return false;
-    const cache = await cacheStorage.open(MODEL_CACHE_NAME);
-    return (await cache.match(`${modelBaseUrl}${ACOUSTIC_MODEL_FILE}`)) !== undefined;
+    if (!(await cacheStorage.has(cacheName))) return false;
+    const cache = await cacheStorage.open(cacheName);
+    return (await cache.match(`${modelBaseUrl}${entryFile}`)) !== undefined;
   } catch {
     return false;
   }

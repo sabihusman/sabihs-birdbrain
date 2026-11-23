@@ -12,6 +12,7 @@ import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
 import { privacyCard } from '../components/privacy-card';
 import { pageTitle } from '../components/page-title';
+import { modelChoice } from '../components/model-choice';
 import { jumpRow, type Jump } from '../components/jump-row';
 import { layoutPicker } from '../components/layout-picker';
 import { effectiveLayout, isMember } from '../../app/access';
@@ -63,9 +64,12 @@ export function settingsView(ctx: ViewContext): View {
   const shownLayout = () => effectiveLayout(settings.get().listenLayout, ctx.api.user);
   const picker = layoutPicker(shownLayout(), (listenLayout) => settings.update({ listenLayout }), isMember(ctx.api.user));
   syncs.push(() => picker.sync(shownLayout()));
+  // Bird model (admin only while BirdNET+ V3.0 is tested, DECISIONS.md #133).
+  const models = modelChoice(controller, () => ctx.api.user);
   const unsubMember = ctx.api.on('change', (u) => {
     picker.setMember(isMember(u));
     picker.sync(shownLayout());
+    models.render();
   });
 
   // A tick box keeps one short line; the rest opens under it, outside the label, so tapping it never flips the box (DECISIONS.md #100).
@@ -187,6 +191,7 @@ export function settingsView(ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Detection'),
+      models.el,
       slider('Confidence threshold', 'threshold', 0.05, 0.95, 0.05, pct),
       foldHint('Lower: more birds, more mistakes', [el('p', null, 'Lower catches faint or distant birds but adds false IDs.')], { testId: 'threshold-help' }),
       slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
@@ -259,6 +264,7 @@ export function settingsView(ctx: ViewContext): View {
     el: root,
     dispose() {
       unsubMember();
+      models.dispose();
       unsubSettings();
       unsubLoc();
       unsubMic();

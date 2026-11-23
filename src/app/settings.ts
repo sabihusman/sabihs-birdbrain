@@ -3,6 +3,7 @@ import { DEFAULT_OVERLAP_SECONDS, GEO_FILTER_THRESHOLD } from '../model/constant
 
 export type { BackendPreference } from '../model/protocol';
 import type { BackendPreference } from '../model/protocol';
+import { MODEL_IDS, type ModelId } from '../model/v3';
 export type LocationMode = 'auto' | 'manual' | 'off';
 export type OcclusionResolution = 'coarse' | 'medium' | 'fine';
 /**
@@ -44,6 +45,11 @@ export interface Settings {
   mapCardsView: MapCardsView;
   /** Anonymous usage counts to PostHog, nothing kept on the phone for them (Settings › Privacy, DECISIONS.md #120). */
   usageCounts: boolean;
+  /**
+   * Which BirdNET model identifies birds (DECISIONS.md #133). Only the admin can pick V3.0 while it is tested;
+   * `effectiveModel` (src/app/access.ts) runs V2.4 for anyone else whatever is stored here.
+   */
+  birdnetModel: ModelId;
 }
 
 /** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. 5: back to 60 % from 70 %. 6: auto-save too. */
@@ -87,6 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
   listenLayout: 'focus',
   mapCardsView: 'birds',
   usageCounts: true,
+  birdnetModel: 'v2.4',
 };
 
 /** localStorage key of the stored settings; its presence is one of the "returning visitor" signals (src/app/first-visit.ts). */
@@ -175,6 +182,7 @@ export function sanitize(s: Settings): Settings {
     listenLayout: LAYOUTS.includes(s.listenLayout) ? s.listenLayout : DEFAULT_SETTINGS.listenLayout,
     mapCardsView: s.mapCardsView === 'places' ? 'places' : 'birds',
     usageCounts: s.usageCounts !== false,
+    birdnetModel: MODEL_IDS.includes(s.birdnetModel) ? s.birdnetModel : 'v2.4',
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),

@@ -218,7 +218,7 @@ describe('usage counts: from the controller', () => {
     const stats = (s: Partial<SessionStats>) => em.emit('stats', { listening: false, paused: false, startedAt: null, elapsedSec: 0, windows: 0, dropped: 0, lastInferMs: 0, contextSampleRate: 48000, ...s });
     return { em, controller, state, sent, stats, names: () => sent.map((s) => s.body.event) };
   }
-  const model = (s: Partial<ModelStatus>): ModelStatus => ({ state: 'idle', phase: null, progress: 0, loadedBytes: 0, totalBytes: 0, message: '', backend: null, loadMs: 0, warmupMs: 0, ...s });
+  const model = (s: Partial<ModelStatus>): ModelStatus => ({ state: 'idle', phase: null, progress: 0, loadedBytes: 0, totalBytes: 0, message: '', backend: null, model: null, loadMs: 0, warmupMs: 0, ...s });
 
   it('counts a listen once, through a BirdAmp pause, with its length and number of birds', () => {
     const f = fake();
