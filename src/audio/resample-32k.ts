@@ -27,25 +27,22 @@ function kernel(phase: number): Float32Array {
 
 const KERNELS = [kernel(0), kernel(0.5)];
 
-/** 48 kHz in, 32 kHz out (two thirds of the length, rounded down). Samples outside the input count as silence. */
+/** One output sample: the kernel laid over the input from `start`; samples outside the input count as silence. */
+function convolve(input: Float32Array, taps: Float32Array, start: number): number {
+  const from = Math.max(0, -start);
+  const to = Math.min(taps.length, input.length - start);
+  let acc = 0;
+  for (let j = from; j < to; j++) acc += taps[j] * input[start + j];
+  return acc;
+}
+
+/** 48 kHz in, 32 kHz out (two thirds of the length, rounded down). */
 export function resample48to32(input: Float32Array): Float32Array {
-  const outLen = Math.floor((input.length * 2) / 3);
-  const out = new Float32Array(outLen);
-  for (let n = 0; n < outLen; n++) {
-    const pos = (n * 3) / 2;
-    const base = Math.floor(pos);
-    const taps = KERNELS[pos === base ? 0 : 1];
-    const start = base - HALF_TAPS + 1;
-    let acc = 0;
-    if (start >= 0 && start + taps.length <= input.length) {
-      for (let j = 0; j < taps.length; j++) acc += taps[j] * input[start + j];
-    } else {
-      for (let j = 0; j < taps.length; j++) {
-        const i = start + j;
-        if (i >= 0 && i < input.length) acc += taps[j] * input[i];
-      }
-    }
-    out[n] = acc;
+  const out = new Float32Array(Math.floor((input.length * 2) / 3));
+  for (let n = 0; n < out.length; n++) {
+    // Even outputs sit on input sample 3n/2, odd ones halfway between two.
+    const base = Math.floor((n * 3) / 2);
+    out[n] = convolve(input, KERNELS[n % 2], base - HALF_TAPS + 1);
   }
   return out;
 }

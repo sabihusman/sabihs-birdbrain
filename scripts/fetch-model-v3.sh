@@ -17,8 +17,16 @@ GEO_ZIP="BirdNET+_Geomodel_V3.0.5_Global_14K.zip"
 GEO_IN_ZIP="BirdNET+_Geomodel_V3.0.5_Global_14K/BirdNET+_Geomodel_V3.0.5_Global_14K_FP16.onnx"
 
 cd "$DIR"
-expected() { awk -v f="$1" '$2 == f || $2 == "*" f { print $1 }' SHA256SUMS; }
-ok() { [ -f "$1" ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$(expected "$1")" ]; }
+expected() {
+  local file="$1"
+  awk -v f="$file" '$2 == f || $2 == "*" f { print $1 }' SHA256SUMS
+}
+ok() {
+  local file="$1"
+  [[ -f "$file" ]] && [[ "$(sha256sum "$file" | cut -d' ' -f1)" == "$(expected "$file")" ]]
+}
+# HTTPS only, also after Zenodo's redirects to its file store.
+fetch() { curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --retry 4 --retry-delay 5 "$@"; }
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -27,7 +35,7 @@ if ok audio.onnx; then
   echo "audio.onnx: already there"
 else
   echo "audio.onnx: downloading $AUDIO_SRC (174 MB)"
-  curl -fsSL --retry 4 --retry-delay 5 -o "$tmp/audio.onnx" "$RECORD/$AUDIO_SRC?download=1"
+  fetch -o "$tmp/audio.onnx" "$RECORD/$AUDIO_SRC?download=1"
   mv "$tmp/audio.onnx" audio.onnx
 fi
 
@@ -35,7 +43,7 @@ if ok geo.onnx; then
   echo "geo.onnx: already there"
 else
   echo "geo.onnx: downloading $GEO_ZIP (111 MB) for the 8 MB location model inside it"
-  curl -fsSL --retry 4 --retry-delay 5 -o "$tmp/geo.zip" "$RECORD/$GEO_ZIP?download=1"
+  fetch -o "$tmp/geo.zip" "$RECORD/$GEO_ZIP?download=1"
   unzip -p "$tmp/geo.zip" "$GEO_IN_ZIP" > geo.onnx
 fi
 

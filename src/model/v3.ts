@@ -70,7 +70,8 @@ export function geoToAudioOrder(geoRow: ArrayLike<number>, geoIndex: ArrayLike<n
   const out = new Float32Array(geoIndex.length);
   for (let i = 0; i < geoIndex.length; i++) {
     const g = geoIndex[i];
-    out[i] = g >= 0 ? geoRow[g] : soundClass[i] ? 1 : 0;
+    if (g >= 0) out[i] = geoRow[g];
+    else out[i] = soundClass[i] ? 1 : 0;
   }
   return out;
 }

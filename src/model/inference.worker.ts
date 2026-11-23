@@ -248,7 +248,7 @@ async function handleSetGeo(msg: Extract<WorkerRequest, { type: 'set-geo' }>): P
     const [probs] = await v3.geoRows([[lat, lon, week]]);
     geoMask = { probs, threshold: msg.threshold };
     let count = 0;
-    for (let i = 0; i < probs.length; i++) if (probs[i] >= msg.threshold) count++;
+    for (const p of probs) if (p >= msg.threshold) count++;
     post({ type: 'geo-ready', id: msg.id, count });
     return;
   }

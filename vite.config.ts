@@ -17,7 +17,7 @@ const BASE = (process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/');
 const MODEL_BASE_URL = (process.env.VITE_MODEL_BASE_URL?.trim() || DEFAULT_MODEL_BASE_URL).replace(/\/*$/, '/');
 // Only "." needs escaping in a URL made of letters, digits, ":", "/" and "." .
 const V3_MODELS_URL = v3BaseUrl(MODEL_BASE_URL);
-const CROSS_ORIGIN_V3 = /^https?:\/\//.test(V3_MODELS_URL) ? [new RegExp('^' + V3_MODELS_URL.split('.').join('\\.') + '.*\\.(onnx|wasm)$')] : [];
+const CROSS_ORIGIN_V3 = /^https?:\/\//.test(V3_MODELS_URL) ? [new RegExp(String.raw`^${V3_MODELS_URL.replaceAll('.', String.raw`\.`)}.*\.(onnx|wasm)$`)] : [];
 const CROSS_ORIGIN_MODELS = /^https?:\/\//.test(MODEL_BASE_URL) ? [new RegExp('^' + MODEL_BASE_URL.split('.').join('\\.') + '.*\\.(bin|json)$')] : [];
 
 export default defineConfig({

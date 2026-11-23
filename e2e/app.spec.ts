@@ -3563,7 +3563,8 @@ test('UX-audit tidy-up: page headings, the status said once, Settings jump butto
 });
 
 test('BirdNET+ V3.0: only the admin sees the choice; switching loads V3.0, the test clip is a Redpoll, and back to V2.4 works (DECISIONS.md #133)', async ({ browser }) => {
-  test.skip(!fs.existsSync('models/birdnet-v3.0/audio.onnx'), 'V3.0 weights not fetched (scripts/fetch-model-v3.sh)');
+  // Needs the weights in models/birdnet-v3.0/ (not in git): run scripts/fetch-model-v3.sh first; CI does.
+  expect(fs.existsSync('models/birdnet-v3.0/audio.onnx'), 'run scripts/fetch-model-v3.sh').toBe(true);
   const as = (role: 'admin' | 'member') =>
     browser.newContext({ serviceWorkers: 'block' }).then(async (context) => {
       await context.route(/\/v1\//, (route) => route.abort());

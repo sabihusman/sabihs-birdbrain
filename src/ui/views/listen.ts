@@ -378,7 +378,8 @@ export function listenView(ctx: ViewContext): View {
     const backend = controller.inference.getStatus().backend;
     // BirdNET+ V3.0 (admin test, DECISIONS.md #133) says so on the card, so the admin always knows which model is listening.
     const v3 = controller.modelId === 'v3.0';
-    cardPillText.textContent = st.status === 'ready' && backend ? `${st.pill} · ${v3 ? 'V3.0 test' : backend}` : st.pill;
+    const engine = v3 ? 'V3.0 test' : backend;
+    cardPillText.textContent = st.status === 'ready' && backend ? `${st.pill} · ${engine}` : st.pill;
     if (credit.dataset.model !== controller.modelId) {
       credit.dataset.model = controller.modelId;
       setBirdnetCredit(credit, controller.modelId);

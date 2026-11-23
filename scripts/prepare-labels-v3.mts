@@ -16,31 +16,15 @@ import * as path from 'node:path';
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
-  let field = '';
-  let quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (quoted) {
-      if (c === '"' && text[i + 1] === '"') {
-        field += '"';
-        i++;
-      } else if (c === '"') quoted = false;
-      else field += c;
-    } else if (c === '"') quoted = true;
-    else if (c === ',') {
-      row.push(field);
-      field = '';
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field);
+  // One field and what ends it: a comma, a line break, or the end of the text.
+  const field = /("(?:[^"]|"")*"|[^,\r\n]*)(,|\r?\n|$)/g;
+  for (let m = field.exec(text); m !== null && m.index < text.length; m = field.exec(text)) {
+    const raw = m[1];
+    row.push(raw.startsWith('"') ? raw.slice(1, -1).replaceAll('""', '"') : raw);
+    if (m[2] !== ',') {
       rows.push(row);
       row = [];
-      field = '';
-    } else field += c;
-  }
-  if (field !== '' || row.length > 0) {
-    row.push(field);
-    rows.push(row);
+    }
   }
   return rows.filter((r) => r.length > 1 || r[0] !== '');
 }
