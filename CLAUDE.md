@@ -56,9 +56,11 @@ Key modules:
   `src/audio/resample-32k.ts`; `AppController.setModel()` restarts the worker (`InferenceClient.restart()`). Weights are
   not in git: `scripts/fetch-model-v3.sh`, then `scripts/server/publish-model.sh --version birdnet-v3.0`. Keep
   `ORT_VERSION` in `v3.ts` equal to the pinned `onnxruntime-web` (a test checks).
-- "A bird is found" (DECISIONS.md #134): `src/app/bird-alert.ts` (`NewBirdTracker`, `buzz()`) and
+- "A bird is found" (DECISIONS.md #134, #137): `src/app/bird-alert.ts` (`NewBirdTracker`, `buzz()`) and
   `src/ui/components/bird-flash.ts`, wired in `src/ui/app.ts` on `window-result`; setting `birdAlert`. Android buzzes;
-  iPhones cannot (no Vibration API, switch-tick workaround closed in iOS 26.5): do not re-add it.
+  iPhones cannot (no Vibration API, switch-tick workaround closed in iOS 26.5): do not re-add it. The flash sets plain
+  styles and a Web Animations fade (no CSS variables or `color-mix()`, #137); Settings › Detection › "Show me" plays it.
+  Auto-save uses the confidence threshold itself (`sanitize()` sets `autoSaveMinConfidence` to `threshold`, #137).
 - UX-audit tidy-up (DECISIONS.md #131): main pages open with `pageTitle()` (`src/ui/components/page-title.ts`; not
   Listen); the lit tab comes from `tabFor()` in `src/ui/router.ts`; the layout button
   (`src/ui/components/layout-bubble.ts`) reads "Layout: Focus" and opens a sheet appended to `<body>`; Settings has

@@ -12,7 +12,8 @@ import { accountSection } from './account';
 import { whatWeStoreFold } from '../components/what-we-store';
 import { privacyCard } from '../components/privacy-card';
 import { pageTitle } from '../components/page-title';
-import { canVibrate } from '../../app/bird-alert';
+import { buzz, canVibrate } from '../../app/bird-alert';
+import { flashForBird } from '../components/bird-flash';
 import { modelChoice } from '../components/model-choice';
 import { jumpRow, type Jump } from '../components/jump-row';
 import { layoutPicker } from '../components/layout-picker';
@@ -75,6 +76,14 @@ export function settingsView(ctx: ViewContext): View {
     picker.sync(shownLayout());
     models.render();
   });
+
+  // "Show me": the flash (and buzz) right now, to see it without waiting for a bird (DECISIONS.md #137).
+  const showMe = el('button', { class: 'btn small', type: 'button', 'data-testid': 'flash-preview' }, 'Show me');
+  showMe.addEventListener('click', () => {
+    flashForBird(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || 'rgb(47, 122, 85)');
+    buzz();
+  });
+  const flashPreview = el('div', { class: 'row' }, showMe);
 
   // A tick box keeps one short line; the rest opens under it, outside the label, so tapping it never flips the box (DECISIONS.md #100).
   const toggle = (label: string, key: 'autoSaveClips' | 'includeNonBird' | 'useWeek' | 'lowCut' | 'birdAlert', line: string, more: string) => {
@@ -201,6 +210,7 @@ export function settingsView(ctx: ViewContext): View {
       slider('Window overlap', 'overlapSeconds', 0, 2.5, 0.5, (v) => `${v.toFixed(1)} s`),
       toggle('Show non-bird classes', 'includeNonBird', 'Dogs, engines, voices…', 'Dog, engine, siren, human voice and similar.'),
       toggle('Flash when a bird is found', 'birdAlert', canVibrate() ? 'And a short buzz on this phone' : 'The phone buzzes too on Android', BIRD_ALERT_MORE),
+      flashPreview,
     ),
     el(
       'section',
@@ -227,8 +237,7 @@ export function settingsView(ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Recording'),
-      toggle('Auto-save detections (3 s each)', 'autoSaveClips', 'Keeps 3 s of each detection', 'Saves a detection\u2019s 3 s to Recordings; a bird gets a new clip only when more confident than its last one this session. Separate from members\u2019 10 s ID clips.'),
-      slider('Auto-save from', 'autoSaveMinConfidence', 0.05, 0.95, 0.05, pct, 'Never below your confidence threshold.'),
+      toggle('Auto-save detections (3 s each)', 'autoSaveClips', 'From your confidence threshold, 3 s each', 'Saves a detection\u2019s 3 s to Recordings when it is at or above your confidence threshold (Detection); a bird gets a new clip only when more confident than its last one this session. Separate from members\u2019 10 s ID clips.'),
     ),
     el(
       'section',

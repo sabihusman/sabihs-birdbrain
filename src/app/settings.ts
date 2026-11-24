@@ -192,7 +192,8 @@ export function sanitize(s: Settings): Settings {
     birdnetModel: MODEL_IDS.includes(s.birdnetModel) ? s.birdnetModel : DEFAULT_SETTINGS.birdnetModel,
     birdAlert: s.birdAlert !== false,
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
-    autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),
+    // Auto-save uses the detection minimum itself (Sabih, Nov 24, DECISIONS.md #137): one number for both.
+    autoSaveMinConfidence: threshold,
     manualLat: s.manualLat == null || !Number.isFinite(s.manualLat) ? null : clamp(s.manualLat, -90, 90, 0),
     manualLon: s.manualLon == null || !Number.isFinite(s.manualLon) ? null : clamp(s.manualLon, -180, 180, 0),
     manualPlace: typeof s.manualPlace === 'string' && s.manualPlace.trim() ? s.manualPlace.trim().slice(0, 80) : null,
