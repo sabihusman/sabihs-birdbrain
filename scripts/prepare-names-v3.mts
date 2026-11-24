@@ -3,7 +3,7 @@
  * the V3.0 name it became (DECISIONS.md #136). The app uses it to show a bird saved under V2.4 together with the
  * same bird found by V3.0, without changing what is stored.
  *
- *   npx tsx scripts/prepare-names-v3.mts <BirdNET+_Taxonomy_v0.5-Nov2026.csv>
+ *   npx tsx scripts/prepare-names-v3.mts <BirdNET+_Taxonomy_v0.5-Nov2026.csv>   (the file inside the repository folder)
  *
  * In this order: the taxonomy's own `scientific_name_aliases` (old names it lists for a species); then the same
  * English name (genus moves such as "Accipiter superciliosus" → "Microspizias superciliosus"); then MANUAL below, each
@@ -11,7 +11,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { parseCsv } from './csv.mts';
+import { parseCsv, readInputFile } from './csv.mts';
 
 /**
  * Checked by hand (Nov 24, 2026) for birds the first two steps missed: spelling ("Gray" → "Grey") or genus moves the
@@ -46,7 +46,7 @@ const inV3 = new Set(v3.map((c) => c[0]));
 const v3ByCommon = new Map<string, string>();
 for (const [sci, common] of v3) if (!v3ByCommon.has(common.toLowerCase())) v3ByCommon.set(common.toLowerCase(), sci);
 
-const [header, ...rows] = parseCsv(fs.readFileSync(taxPath, 'utf8').replace(/^\uFEFF/, ''));
+const [header, ...rows] = parseCsv(readInputFile(taxPath, '.csv'));
 const sciCol = header.indexOf('scientific_name');
 const aliasCol = header.indexOf('scientific_name_aliases');
 const aliasOf = new Map<string, string>();
@@ -67,8 +67,12 @@ for (const [sci, common] of v24) {
   const target = viaAlias ?? viaCommon ?? viaManual;
   if (target && !inV3.has(target)) throw new Error(`${sci} → ${target}, which is not in V3.0`);
   if (target) map[sci] = target;
-  counts[viaAlias ? 'alias' : viaCommon ? 'common' : viaManual ? 'manual' : 'none']++;
+  let how: keyof typeof counts = 'none';
+  if (viaAlias) how = 'alias';
+  else if (viaCommon) how = 'common';
+  else if (viaManual) how = 'manual';
+  counts[how]++;
 }
 const out = path.join(root, 'public/models/birdnet-v3.0/v24-names.json');
-fs.writeFileSync(out, JSON.stringify(map, Object.keys(map).sort(), 0));
+fs.writeFileSync(out, JSON.stringify(map, Object.keys(map).sort((a, b) => a.localeCompare(b, 'en')), 0));
 console.log(counts, `wrote ${out}`);

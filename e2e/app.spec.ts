@@ -3652,7 +3652,8 @@ test('the new bird model is announced once to registered accounts, with "Use the
     await page.goto('./#/listen');
     const strip = page.getByTestId('whats-new-strip');
     if (status === null) {
-      await page.waitForTimeout(2000);
+      // Signed out: the strip that runs for them is BirdAmp's, never the bird model's.
+      await expect(strip).toContainText('BirdAmp', { timeout: 30_000 });
       await expect(strip).not.toContainText('bird model');
       await context.close();
       continue;
@@ -3669,9 +3670,9 @@ test('the new bird model is announced once to registered accounts, with "Use the
     await page.getByTestId('whats-new-smaller').click();
     await expect(cards).toHaveCount(0);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').birdnetModel)).toBe('v2.4');
-    // Once: not again on the next visit.
+    // Once: the next visit shows the next announcement instead (BirdAmp's), not this one again.
     await page.reload();
-    await page.waitForTimeout(2000);
+    await expect(strip).toContainText('BirdAmp', { timeout: 30_000 });
     await expect(strip).not.toContainText('bird model');
     await context.close();
   }
