@@ -849,6 +849,8 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
     // Re-runs on every navigation; the flag lets the test simulate a sign-out.
     if (sessionStorage.getItem('e2e-signed-out')) return;
     localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'member', status: 'approved', role: 'member' } }));
+    // This test is about member features with V2.4's names; V3.0 has its own test (DECISIONS.md #136).
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ ...JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}'), version: 7, birdnetModel: 'v2.4' }));
   });
   await page.goto('./#/recordings');
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
@@ -2778,7 +2780,8 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('model-status')).toHaveText('Live');
   const rows = page.getByTestId('ba-row');
   await expect(rows.first()).toBeVisible({ timeout: 90_000 });
-  await expect(rows.first()).toContainText(/^1\. .+Redpoll/);
+  // "Lesser Redpoll" with V2.4, "Redpoll" with V3.0 (a member's default, DECISIONS.md #136).
+  await expect(rows.first()).toContainText(/^1\. (.+ )?Redpoll/);
   await expect(rows.first()).toContainText(/best \d+% · Heard (once|\d+ times) · \d/);
   // Winamp's playlist: the bird in the marquee is the current row (white on navy); the total box sits in the foot.
   await expect(rows.first()).toHaveClass(/current/);
@@ -3739,7 +3742,8 @@ test('a model file the server did not have: the admin sees why, a member does no
     });
     await context.addInitScript((r) => {
       localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e', expiresAt: null, user: { id: 'u', email: 'u@example.com', name: 'U', status: 'approved', role: r } }));
-      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+      // V2.4's model.json is the file this test removes, so both accounts run V2.4 (DECISIONS.md #136).
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ version: 7, birdnetModel: 'v2.4', listenLayout: 'consolidated', locationMode: 'off' }));
       localStorage.setItem('birdbrain.model.v1', 'wanted');
       localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
     }, role);
