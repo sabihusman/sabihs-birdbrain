@@ -64,6 +64,10 @@ Key modules:
 - Removing birds (DECISIONS.md #138): `removeSpecies` / `removeListenBirds` / `removeDetections` in `src/storage/db.ts`
   (a sighting with windows left is rebuilt, never orphaned), the species page's "Remove from my birds", and the
   recording Delete sheet (`src/ui/components/choice-sheet.ts`, words in `src/ui/remove-birds-text.ts`).
+- Account bird list (DECISIONS.md #139): every member's devices each send their own set (bird + last day); the account's
+  list is the union (`server/src/bird-list.ts`, `/v1/me/birds*`, `/v1/me/sharing`). App: `SpeciesSharer` in
+  `src/species/sharing.ts`, `src/species/device.ts`, My account › Your devices (`devices-list.ts`). Sharing is the
+  account's switch on the server; the old `/v1/me/species*` routes still serve older apps ("Earlier uploads").
 - UX-audit tidy-up (DECISIONS.md #131): main pages open with `pageTitle()` (`src/ui/components/page-title.ts`; not
   Listen); the lit tab comes from `tabFor()` in `src/ui/router.ts`; the layout button
   (`src/ui/components/layout-bubble.ts`) reads "Layout: Focus" and opens a sheet appended to `<body>`; Settings has

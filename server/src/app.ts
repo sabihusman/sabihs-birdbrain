@@ -21,6 +21,7 @@ import type { AnswerBody } from './ask.js';
 import { COST_SUMMARY_DAYS, createAskCostStore, type AskCostStore } from './ask-cost.js';
 import { createUsageStore } from './db.js';
 import { EmailInvites, friendJoinedMail, joinInviteMail, type JoinedFriend } from './email-invites.js';
+import { BirdListStore, EARLIER_DEVICE_ID, TooManyDevicesError } from './bird-list.js';
 import { FriendsStore, INVITES_PER_DAY, INVITE_TTL_DAYS, MAX_SHARED_SPECIES, isCalendarDay } from './friends.js';
 import { clientIp, emailSchema, passwordSchema, readJson } from './http.js';
 import type { SpeciesLabels } from './labels.js';
@@ -68,6 +69,7 @@ export const BODY_LIMIT_BYTES = 16 * 1024;
 export const SPECIES_BODY_LIMIT_BYTES = 256 * 1024;
 const SPECIES_UPLOAD_PATH = '/v1/me/species';
 const SPECIES_REMOVE_PATH = '/v1/me/species/remove';
+const BIRDS_SYNC_PATH = '/v1/me/birds/sync';
 
 
 const loginSchema = z.object({ email: emailSchema, password: passwordSchema }).strict();
@@ -94,6 +96,10 @@ const sharedSpeciesSchema = z
   })
   .strict();
 const removeSpeciesSchema = z.object({ species: z.array(z.string().min(1).max(80)).max(MAX_SHARED_SPECIES) }).strict();
+/** A device's id is made on the device (a UUID); "earlier-uploads" is the server's own name for the older list. */
+const deviceIdSchema = z.string().regex(/^[A-Za-z0-9-]{8,64}$/).refine((v) => v !== EARLIER_DEVICE_ID, 'reserved');
+/** One device's whole set of birds (DECISIONS.md #139): its id, a name such as "iPhone · Safari", and the birds. */
+const birdSyncSchema = z.object({ deviceId: deviceIdSchema, label: displayNameSchema, species: sharedSpeciesSchema.shape.species }).strict();
 /** Account deletion: the password again and the word DELETE, nothing else. */
 const deleteSchema = z.object({ password: z.string().min(1).max(128), confirm: z.string().max(16) }).strict();
 /** Change my password: the current one (any length, older rules) and a new one within today's bounds. */
@@ -106,7 +112,7 @@ export function needsSignInCode(user: Pick<AppUser, 'role' | 'emailVerified'>): 
   return user.role === 'admin' || !user.emailVerified;
 }
 
-const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 413 | 429 | 500 | 502 | 503, body: unknown) => c.json(body, status);
+const json = (c: Context, status: 200 | 400 | 401 | 403 | 404 | 409 | 413 | 429 | 500 | 502 | 503, body: unknown) => c.json(body, status);
 
 export function createApp(deps: AppDeps) {
   const { config, db, auth, mailer, labels } = deps;
@@ -118,6 +124,7 @@ export function createApp(deps: AppDeps) {
   const answers = deps.answers ?? createAnswerCache<AnswerBody>(db);
   const usageStats = deps.usage ?? createUsageStats(usageConfigFrom(config));
   const friends = new FriendsStore(db);
+  const birdList = new BirdListStore(db);
   const whatsNew = new WhatsNewStore(db);
   const emailInvites = new EmailInvites(db, config.BETTER_AUTH_SECRET);
   const invitesPerDay = deps.limits?.invitesPerDay ?? INVITES_PER_DAY;
@@ -152,7 +159,7 @@ export function createApp(deps: AppDeps) {
   const tooLarge = (c: Context) => c.json({ error: 'payload_too_large' }, 413);
   const smallBody = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: tooLarge });
   const speciesBody = bodyLimit({ maxSize: SPECIES_BODY_LIMIT_BYTES, onError: tooLarge });
-  app.use('/v1/*', (c, next) => (c.req.path === SPECIES_UPLOAD_PATH || c.req.path === SPECIES_REMOVE_PATH ? speciesBody(c, next) : smallBody(c, next)));
+  app.use('/v1/*', (c, next) => (c.req.path === SPECIES_UPLOAD_PATH || c.req.path === SPECIES_REMOVE_PATH || c.req.path === BIRDS_SYNC_PATH ? speciesBody(c, next) : smallBody(c, next)));
 
   app.onError((err, c) => {
     console.error(`[error] ${c.req.method} ${c.req.path}: ${err.name}: ${err.message}`);
@@ -599,25 +606,76 @@ export function createApp(deps: AppDeps) {
   app.get('/v1/friends/species', async (c) => {
     const m = await requireMember(c);
     if ('error' in m) return m.error;
-    return json(c, 200, { friends: friends.friendsSpecies(m.user.id) });
+    // Each friend's account list across their devices, while their "Share my species list" is on (DECISIONS.md #139).
+    return json(c, 200, { friends: friends.friendsSpecies(m.user.id, (id) => birdList.sharedWithFriends(id)) });
+  });
+
+  /** A list's problem, if any: an unknown scientific name, or the same bird twice. */
+  const listProblem = (species: Array<{ sci: string }>): 'unknown_species' | 'invalid_request' | null => {
+    if (species.some((s) => !labels.has(s.sci))) return 'unknown_species';
+    return new Set(species.map((s) => s.sci)).size === species.length ? null : 'invalid_request';
+  };
+
+  /**
+   * The account's bird list across devices (DECISIONS.md #139): the union of every device's set, the devices, and
+   * whether it is shared with friends. Members only, like sharing.
+   */
+  app.get('/v1/me/birds', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    return json(c, 200, birdList.view(m.user.id));
+  });
+
+  /** One device's whole set replaces what it sent before; the answer is the account's list as above. */
+  app.post(BIRDS_SYNC_PATH, async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const body = await readJson(c, birdSyncSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    const problem = listProblem(body.species);
+    if (problem) return json(c, 400, { error: problem });
+    try {
+      birdList.sync(m.user.id, body.deviceId, body.label, body.species);
+    } catch (e) {
+      if (e instanceof TooManyDevicesError) return json(c, 409, { error: 'too_many_devices' });
+      throw e;
+    }
+    return json(c, 200, birdList.view(m.user.id));
+  });
+
+  /** "Forget this device" on My account: its birds leave the account's list (another device's copy of a bird stays). */
+  app.post('/v1/me/birds/devices/:id/forget', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const id = z.string().regex(/^[A-Za-z0-9-]{8,64}$/).safeParse(c.req.param('id'));
+    if (!id.success) return json(c, 400, { error: 'invalid_request' });
+    if (!birdList.forget(m.user.id, id.data)) return json(c, 404, { error: 'not_found' });
+    return json(c, 200, birdList.view(m.user.id));
+  });
+
+  /** "Share my species list" for the whole account: friends see the list, or nothing; the list itself stays. */
+  app.post('/v1/me/sharing', async (c) => {
+    const m = await requireMember(c);
+    if ('error' in m) return m.error;
+    const body = await readJson(c, shareSchema);
+    if (!body) return json(c, 400, { error: 'invalid_request' });
+    birdList.setSharing(m.user.id, body.on);
+    return json(c, 200, birdList.view(m.user.id));
   });
 
   /**
-   * The phone's current list is merged in: new birds are added and last-seen days only move later; nothing is removed
-   * (DECISIONS.md #127, Kristopher's list was emptied by an upload on Nov 15). Unknown scientific names are refused.
+   * From apps before DECISIONS.md #139, which upload only while sharing is on: merged into "Earlier uploads" (new
+   * birds are added, last-seen days only move later, nothing is removed; #127) and the account counts as sharing.
    */
   app.post(SPECIES_UPLOAD_PATH, async (c) => {
     const m = await requireMember(c);
     if ('error' in m) return m.error;
     const body = await readJson(c, sharedSpeciesSchema);
     if (!body) return json(c, 400, { error: 'invalid_request' });
-    if (body.species.some((s) => !labels.has(s.sci))) return json(c, 400, { error: 'unknown_species' });
-    const seen = new Set<string>();
-    for (const s of body.species) {
-      if (seen.has(s.sci)) return json(c, 400, { error: 'invalid_request' });
-      seen.add(s.sci);
-    }
+    const problem = listProblem(body.species);
+    if (problem) return json(c, 400, { error: problem });
     friends.mergeSharedSpecies(m.user.id, body.species);
+    birdList.setSharing(m.user.id, true);
     return json(c, 200, { ok: true, count: friends.sharedSpeciesCount(m.user.id) });
   });
 
@@ -631,10 +689,12 @@ export function createApp(deps: AppDeps) {
     return json(c, 200, { ok: true, removed, count: friends.sharedSpeciesCount(m.user.id) });
   });
 
+  /** From apps before DECISIONS.md #139: sharing off, and "Earlier uploads" goes as it used to. */
   app.post('/v1/me/species/clear', async (c) => {
     const m = await requireMember(c);
     if ('error' in m) return m.error;
     friends.clearSharedSpecies(m.user.id);
+    birdList.setSharing(m.user.id, false);
     return json(c, 200, { ok: true });
   });
 

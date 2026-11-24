@@ -8,9 +8,9 @@ import type { DatabaseSync } from 'node:sqlite';
  * source caches): the Better Auth `user`, `account` (password hash) and
  * `session` rows and anything in `verification` for the address; the app's
  * `login_challenge` (emailed codes), `ask_usage` counter under `user:<id>`,
- * `shared_species`, `friendship` in both directions, `friend_invite` in both
+ * `shared_species`, `bird_device`, `device_bird` and `species_sharing` (DECISIONS.md #139), `friendship` in both directions, `friend_invite` in both
  * directions, `email_invite` sent or claimed (DECISIONS.md #80), `invite_usage` and `whats_new_state` (#112). Sightings, clips, detections and ticks live
- * only on the device (IndexedDB) and never reach the server; the
+ * only on the device (IndexedDB); of them only each bird's name and last day per device reach the server (#139); the
  * `wiki_article_cache`, `natureserve_cache` and `ebird_cache` tables hold
  * public species text keyed by scientific name, not by person; `answer_cache`
  * is keyed by species + region + rounded position + normalised question and
@@ -21,6 +21,9 @@ export function deleteUserCompletely(db: DatabaseSync, userId: string, email: st
   db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare('DELETE FROM shared_species WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM device_bird WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM bird_device WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM species_sharing WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM friendship WHERE user_a = ? OR user_b = ?').run(userId, userId);
     db.prepare('DELETE FROM friend_invite WHERE from_user_id = ? OR to_user_id = ?').run(userId, userId);
     db.prepare('DELETE FROM email_invite WHERE from_user_id = ? OR claimed_by = ?').run(userId, userId);

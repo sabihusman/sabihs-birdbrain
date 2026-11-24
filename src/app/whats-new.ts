@@ -46,6 +46,15 @@ export interface WhatsNewEntry {
 /** Newest first. Wording from the What's new mockups Sabih approved (Nov 1–2). */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    // The account bird list (Sabih, Nov 24: every member, automatically; DECISIONS.md #139). A list entry, not a strip,
+    // so it does not stand in front of the new-model strip; the Settings row's dot points to it.
+    id: '2026-11-bird-list',
+    from: '2026-11-24',
+    kind: 'new',
+    title: 'Your bird list on all your devices',
+    text: 'Signed-in members now see the same birds ticked on every device. For that, the server keeps each bird’s name and the last day you spotted it, per device, and nothing else. A bird you remove leaves the list once no device has it; My account › Your devices can forget a device.',
+  },
+  {
     // BirdNET+ V3.0 for every registered account (Sabih, Nov 24, DECISIONS.md #136); wording from the approved mockup.
     id: '2026-11-birdnet-v3',
     from: '2026-11-24',

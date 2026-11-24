@@ -3630,3 +3630,45 @@ recording took only its own 3 s. Of the options he chose C: this (A) now, and a 
   sync, unless it was the phone's last bird; another device that still has it puts it back until the account-wide list (next) lands.
 - **Tests:** `tests/remove-birds.test.ts` (what goes and what stays, the rebuilt sighting, the wording), e2e "deleting
   a recording can take its birds out of that listen; …".
+
+## 139. One bird list per account, built from each device's own set
+
+Nov 24, 2026. Sabih (option B of "1c"): a member may use several devices, and a device may not hold the recordings
+behind a bird. The account keeps a list across devices; each device's birds count only while that device has them,
+and a bird stays while any device has it. Asked who it applies to, he chose **every member, automatically**, over an
+opt-in switch or members who share.
+
+- **What the server keeps** (`server/src/bird-list.ts`, tables `bird_device`, `device_bird`, `species_sharing` in
+  `db.ts`): per device, a random id made on the device (`birdbrain.device.v1`, `src/species/device.ts`), a name from
+  the browser's user-agent ("iPhone · Chrome", `deviceLabel`), the last sync time, and per bird the scientific name and
+  the last local day spotted there. No times of day, places, counts, recordings or sightings. Up to 20 devices
+  (`MAX_DEVICES`; a 21st gets 409 until one is forgotten), 2,000 birds each, names checked against the labels.
+- **Routes (members only):** `GET /v1/me/birds` (the union, newest day per bird; the devices; `sharing`), `POST
+  /v1/me/birds/sync` (`{ deviceId, label, species }` replaces that device's set; same answer), `POST
+  /v1/me/birds/devices/:id/forget`, `POST /v1/me/sharing` (`{ on }`). `/v1/friends/species` now gives each friend's
+  union while their sharing is on, else nothing.
+- **Sharing is the account's choice now**, not a flag on each phone. Turning it off hides the list from friends and
+  keeps it. Accounts that had a shared list keep sharing (`INSERT OR IGNORE … FROM shared_species` at start; an account
+  that has chosen since keeps its choice). A phone whose old switch was on, or a sign-up "share with the person who
+  invited me" tick, turns sharing on at the first sync of an account that never chose (`sharing: null`), then drops
+  its flag.
+- **Older apps keep working:** their `POST /v1/me/species` merges into `shared_species` and turns sharing on, `/remove`
+  takes birds off it, `/clear` turns sharing off and empties it. Those rows are one more "device", **Earlier uploads**,
+  in the union and on My account, where it can be forgotten.
+- **App:** `SpeciesSharer` (`src/species/sharing.ts`) sends this device's whole set (`buildSharedSpeciesList` of its
+  sightings) 5 s after each change, at start, on sign-in and when back online; it keeps the last answer per account in
+  localStorage (`birdbrain.birds.v1:<id>`) so ticks from other devices show offline. The #127 rules (remember what was
+  sent, remove by name, never empty from an empty phone) are gone: a device that loses its birds (deleted here,
+  "Delete all", storage the browser cleared) takes only its own set off, which is what Sabih asked for; another device
+  that still has a bird keeps it.
+- **Species:** ticks and "Spotted by me" include the account's birds (`accountBirds()`); a bird only on another device
+  says "You spotted it on another of your devices, last on <day>. Its sightings and recordings stay on that device."
+  BirdAmp's library still lists this device's sightings only.
+- **My account › Your devices** (`src/ui/components/devices-list.ts`): this device (not forgettable from itself: its
+  next sync would put its birds back) and "Forget <name>" for the others, after a question.
+- **Words:** the sharing consent, its status lines, What we store (On the server, Only on this phone, If sharing is
+  on), Help, and a What's new list entry `2026-11-bird-list` (no strip, so the new-model strip stays first).
+- **Known:** a phone whose browser clears site data gets a new id; its old entry stays until forgotten. Two accounts
+  on one phone each get their own list (the device id is shared, the sets are per account).
+- **Tests:** `server/test/bird-list.test.ts`, `tests/sharing.test.ts`, `tests/what-we-store.test.ts`, e2e "one bird
+  list across a member's devices: …" and the sharing switch tests.

@@ -17,7 +17,7 @@ export function helpView(_ctx: ViewContext): View {
       el('p', null, 'Your phone cuts sound into overlapping 3 s windows and BirdNET (Cornell Lab of Ornithology, Chemnitz University of Technology) identifies each one in your browser: BirdNET+ V3.0 with an account, or the smaller BirdNET V2.4 (signed out, or picked in Settings › Detection › Bird model). A second small model uses your location and the week to drop unlikely species.'),
       el('p', null, 'Nothing is uploaded: audio and sightings stay in this browser. Recordings are saved as 16-bit WAV at 48 kHz.'),
       el('p', null, 'Map › Places groups sightings into areas about 1 km across (a sighting joins an area within 1 km of its centre, or starts one). To name each, it sends the centre, rounded to ~100 m, to OpenStreetMap’s Nominatim, one at a time. Names are saved for 180 days.'),
-      el('p', null, 'On Species, ✓ marks birds you’ve spotted and “Spotted by me” lists them. Members tap ✓ for the ID card. Ticks never leave this phone.'),
+      el('p', null, 'On Species, ✓ marks birds you’ve spotted and “Spotted by me” lists them. Members tap ✓ for the ID card. Signed-in members see the same ticks on all their devices: only each bird’s name and last day go to the server for that.'),
     ),
     // The 1–7 steps, moved here from the Listen screen (DECISIONS.md #109); the chips on Listen light up in this order.
     el(

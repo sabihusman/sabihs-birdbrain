@@ -13,9 +13,10 @@ import { switchRow } from './rows';
  */
 /** One line under the sharing switch. */
 export function shareStatusText(enabled: boolean, lastError: string | null): string {
-  if (!enabled) return 'Sharing is off. Nothing is on the server.';
-  if (lastError) return `Sharing is on, but the last upload failed (${lastError}). Retrying soon.`;
-  return 'Sharing is on. Updated after each sighting.';
+  // The list itself is kept for the account either way (DECISIONS.md #139); the switch is who sees it.
+  if (lastError) return `${enabled ? 'Sharing is on' : 'Sharing is off'}, but the last update of your bird list failed (${lastError}). Retrying soon.`;
+  if (!enabled) return 'Sharing is off. Friends don’t see your list.';
+  return 'Sharing is on. Updated after each sighting, from all your devices.';
 }
 
 /**
@@ -200,7 +201,7 @@ export function sharingRow(ctx: ViewContext, onChange?: () => void, moreText: No
     void (async () => {
       try {
         await sharing.setEnabled(on);
-        notify({ kind: 'info', text: on ? 'Sharing is on. Your species list was uploaded.' : 'Sharing is off. Your list was removed from the server.' });
+        notify({ kind: 'info', text: on ? 'Sharing is on. Friends see your bird list.' : 'Sharing is off. Friends no longer see your list.' });
       } catch (e) {
         input.checked = sharing.enabled;
         notify({ kind: 'error', text: describeApiError(e) });
@@ -212,8 +213,15 @@ export function sharingRow(ctx: ViewContext, onChange?: () => void, moreText: No
       }
     })();
   });
+  // The account's choice arrives with the first sync (DECISIONS.md #139) and can change on another device.
+  const off = sharing.on('change', () => {
+    if (busy) return;
+    input.checked = sharing.enabled;
+    showStatus();
+    onChange?.();
+  });
   return {
     el: el('div', { class: 'contents-row' }, row, problem),
-    dispose: () => undefined,
+    dispose: off,
   };
 }
