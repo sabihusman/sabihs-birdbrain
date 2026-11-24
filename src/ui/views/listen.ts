@@ -25,7 +25,7 @@ import { PipelineView } from '../viz/pipeline';
 import { SpectrogramView } from '../viz/spectrogram';
 import { TimelineView, type TimelinePoint } from '../viz/timeline';
 import { WaveformView } from '../viz/waveform';
-import { effectiveLayout, isMember } from '../../app/access';
+import { canManageUsers, effectiveLayout, isMember } from '../../app/access';
 import { birdAmpView, type BirdAmpView } from '../birdamp/view';
 import { setShellSkin } from '../skin';
 import { flipButton, showFlipHint } from '../flip';
@@ -390,6 +390,9 @@ export function listenView(ctx: ViewContext): View {
     stateIcon.textContent = st.icon;
     stateTitle.textContent = text.title;
     stateHint.textContent = st.hint ?? (st.status === 'idle' || st.status === 'loading' ? text.hint.replace(`${MODEL_SIZE_MB} MB`, `${controller.modelDownloadMb} MB`) : text.hint);
+    // The admin also sees why a load failed, to test models on a phone with no developer tools (DECISIONS.md #135).
+    const detail = st.status === 'error' && canManageUsers(ctx.api.user) ? controller.getModelFailure()?.detail : undefined;
+    if (detail) stateHint.textContent += ` (Details: ${detail})`;
     readyBlock.dataset.status = st.status;
     root.dataset.status = st.status;
     const listening = st.status === 'listening' || st.status === 'paused';

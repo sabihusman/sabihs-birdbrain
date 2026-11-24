@@ -3681,3 +3681,39 @@ test('a bird is found: one flash in its colour and one buzz, not every window; o
   await page.getByTestId('stop').click();
   await context.close();
 });
+
+test('a model file the server did not have: the admin sees why, a member does not, and the next try asks the server again (DECISIONS.md #135)', async ({ browser }) => {
+  for (const role of ['admin', 'member'] as const) {
+    const context = await browser.newContext({ serviceWorkers: 'block' });
+    await context.route(/\/v1\//, (route) => route.abort());
+    let missing = true;
+    const asked: Array<Record<string, string>> = [];
+    await context.route(/\/models\/birdnet-v2\.4\/model\.json$/, async (route) => {
+      asked.push(route.request().headers());
+      // What the live server answered before the fix: a 404 marked as good for a year.
+      if (missing) return route.fulfill({ status: 404, contentType: 'text/html', headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }, body: 'not found' });
+      return route.continue();
+    });
+    await context.addInitScript((r) => {
+      localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e', expiresAt: null, user: { id: 'u', email: 'u@example.com', name: 'U', status: 'approved', role: r } }));
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+      localStorage.setItem('birdbrain.model.v1', 'wanted');
+      localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+    }, role);
+    const page = await context.newPage();
+    await page.goto('./#/listen');
+    const hint = page.locator('.state-hint');
+    await expect(page.locator('.state-title')).toHaveText('Something went wrong', { timeout: 60_000 });
+    if (role === 'admin') await expect(hint).toContainText(/Details: .*404/);
+    else await expect(hint).not.toContainText('Details');
+    // "Try again" asks the server again and loads once the file is there. (Whether the browser's own cache is
+    // bypassed cannot be seen from here: routed requests skip that cache; the worker fetches with cache: 'no-cache'.)
+    const before = asked.length;
+    missing = false;
+    await page.getByRole('button', { name: 'Try again' }).click();
+    // "Try again" loads the model and carries on to listening.
+    await expect(page.getByTestId('model-status')).toContainText(/Model ready|Listening/, { timeout: 200_000 });
+    expect(asked.length).toBeGreaterThan(before);
+    await context.close();
+  }
+});

@@ -58,7 +58,9 @@ async function cachedFetch(input: RequestInfo | URL, init?: RequestInit): Promis
   } catch {
     cache = null;
   }
-  const res = await fetch(input, init);
+  // Ask the server again rather than trust the browser's own cache: a "not found" kept from before a model was
+  // published must not block it (DECISIONS.md #135). Files that are already here come from the Cache API above.
+  const res = await fetch(input, { ...init, cache: 'no-cache' });
   if (res.ok && cache) {
     try {
       await cache.put(url, res.clone());
