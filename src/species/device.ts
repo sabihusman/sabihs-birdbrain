@@ -6,9 +6,10 @@
 
 const DEVICE_KEY = 'birdbrain.device.v1';
 
+/** A random id: `randomUUID` where the page is a secure context, else 16 random bytes in hex. */
 function makeId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
-  return `d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** This device's id, made once. Without storage it is new every visit (the server then sees a new device each time). */

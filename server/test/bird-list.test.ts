@@ -79,7 +79,7 @@ describe('one list across devices', () => {
     expect((await sync(t, alex.token, PHONE, [blackbird('2026-11-20'), blackbird('2026-11-21')])).status).toBe(400);
     expect((await sync(t, alex.token, PHONE, [blackbird('2026-02-30')])).status).toBe(400);
     for (const id of ['short', 'earlier-uploads', '../../etc', 'x'.repeat(65)]) expect((await sync(t, alex.token, id, [])).status, id).toBe(400);
-    expect((await sync(t, alex.token, PHONE, [], 'bad‮name')).status).toBe(400);
+    expect((await sync(t, alex.token, PHONE, [], 'bad\u202Ename')).status).toBe(400);
     for (let i = 0; i < MAX_DEVICES; i++) expect((await sync(t, alex.token, `device-${String(i).padStart(4, '0')}`, [])).status).toBe(200);
     expect((await sync(t, alex.token, PHONE, [])).status).toBe(409);
     // A device already known keeps syncing.
