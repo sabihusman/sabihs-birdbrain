@@ -3544,3 +3544,37 @@ Each finding was checked against the code first.
 - **Tests:** `tests/v3-model.test.ts` (`failureDetail`); e2e "a model file the server did not have: …" (a 404 shows
   "Details: … 404" to the admin only, and "Try again" loads once the file is there). Whether the browser's own cache is
   bypassed cannot be seen in Playwright (routed requests skip it).
+
+## 136. BirdNET+ V3.0 for every registered account, with V2.4 one tap away
+
+- **Why (Sabih, Nov 24):** the admin test of #133 worked on Sabih's iPhone. V3.0 becomes the default for registered
+  accounts, approved and waiting for approval alike; the smaller V2.4 stays in Settings › Detection › Bird model.
+  Signed-out visitors keep V2.4 (78 MB rather than 187 MB on a first visit; no account, no V3.0 files fetched).
+- **Who and when:** `isRegistered` / `effectiveModel` (`src/app/access.ts`): approved or pending → the stored choice,
+  anyone else → V2.4. Settings version 7 makes V3.0 the default and moves a stored V2.4 to V3.0 once (until now only
+  the admin could choose, and chose V3.0, so a stored V2.4 is the old default); choosing V2.4 afterwards is kept. A phone
+  that asked for a model before loads V3.0 at start-up (#69); a first-time phone still waits for Start.
+- **Saved birds under new names (Sabih's option 2):** nothing stored changes; the app shows each saved row under the
+  running model's name.
+  - `public/models/birdnet-v3.0/v24-names.json` (297 V2.4 names → V3.0 names, CC BY-SA 4.0 as it derives from the
+    BirdNET+ Taxonomy v0.5) is made by `scripts/prepare-names-v3.mts`: the taxonomy's own old names
+    (`scientific_name_aliases`, 271), the same English name (22), then 4 checked by hand. 14 V2.4 birds stay unmapped
+    (not clearly the same bird, or not among V3.0's classes) and keep their old names and pages.
+  - `src/species/names.ts` (`buildNameView`, `canonicalName`, `storedNames`, `renamed`); with V2.4 running a rename
+    goes back, a merge stays merged under V3.0's name (V2.4 keeps those species apart).
+  - Applied where stored names are read: `src/storage/db.ts` (sightings, detections, clips: the most confident clip
+    under any of a bird's names), `src/species/recording-groups.ts`, `src/species/friends.ts` (a friend on the other
+    model), `AppController.speciesByScientific`. Signed-in phones load both models' names (`setKnowsBothModels`).
+- **Ask about this bird:** the server adds V3.0's species to V2.4's (`addV3Labels` in `server/src/labels.ts`,
+  `LABELS_V3_PATH`, the image copies `public/models/birdnet-v3.0/labels.json`), so it knows a bird whichever model
+  found it. Sound classes are left out.
+- **Announcement:** What's new `2026-11-birdnet-v3` (Nov 24 – Dec 24) for pending and member audiences: strip "New: a
+  more accurate bird model", two cards (the test-score bars, then "Prefer the smaller one?" with "Got it" and "Use the
+  smaller model"), the bird-model icon instead of BirdAmp's bolt. Once per person, as every What's new entry.
+- **Settings and Listen:** the choice reads "BirdNET+ V3.0" (187 MB) and "BirdNET V2.4 (smaller)" (78 MB), no admin
+  badge; Listen says "Model ready · V3.0"; Help names both models and their licences.
+- **Known:** 187 MB on mobile data for every returning member (an iPhone browser cannot tell Wi-Fi from mobile data);
+  older phones may run out of memory (reload), and Settings is the way back.
+- **Tests:** `tests/names.test.ts` (the table, both directions, renamed rows, recording groups, IndexedDB reads under
+  both names with nothing stored changed), `tests/v3-model.test.ts` (who gets V3.0, version 7), `server/test/labels-v3.test.ts`;
+  e2e "BirdNET+ V3.0 for registered accounts: …" and "the new bird model is announced once …".

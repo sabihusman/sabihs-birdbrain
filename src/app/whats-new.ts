@@ -20,7 +20,7 @@ export interface WhatsNewCard {
   title: string;
   text: string;
   /** What the card shows above the dots. */
-  art: 'birdamp' | 'ask' | 'map';
+  art: 'birdamp' | 'ask' | 'map' | 'model';
 }
 
 export interface WhatsNewEntry {
@@ -37,10 +37,38 @@ export interface WhatsNewEntry {
   cards?: Partial<Record<Audience, WhatsNewCard[]>>;
   /** Not shown to someone already using what it announces. */
   skipFor?: (layout: ListenLayout) => boolean;
+  /** The picture on the strip and cards: BirdAmp's bolt (the default) or the bird-model mark. */
+  icon?: 'bolt' | 'model';
+  /** The last card's buttons for a signed-in audience: BirdAmp's (the default) or the bird model's. */
+  actions?: 'birdamp' | 'model';
 }
 
 /** Newest first. Wording from the What's new mockups Sabih approved (Nov 1–2). */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
+  {
+    // BirdNET+ V3.0 for every registered account (Sabih, Nov 24, DECISIONS.md #136); wording from the approved mockup.
+    id: '2026-11-birdnet-v3',
+    from: '2026-11-24',
+    until: '2026-12-24',
+    kind: 'new',
+    title: 'A new, more accurate bird model',
+    text: 'Birdbrain now identifies with BirdNET+ V3.0. The smaller BirdNET V2.4 is still in Settings › Detection › Bird model.',
+    strip: {
+      pending: 'New: a more accurate bird model',
+      member: 'New: a more accurate bird model',
+    },
+    cards: Object.fromEntries(
+      (['pending', 'member'] as const).map((a) => [
+        a,
+        [
+          { title: 'A new, more accurate bird model', text: 'Birdbrain now uses BirdNET+ V3.0. It knows about 9,800 birds, up from 6,500, and scored about twice as high as the old model in BirdNET’s own tests. Some birds have new names; your saved birds follow them.', art: 'model' },
+          { title: 'Prefer the smaller one?', text: 'The new model is a one-time 187 MB download, so Wi-Fi is best. The old model (78 MB) is still there: Settings › Detection › Bird model › BirdNET V2.4.', art: 'model' },
+        ],
+      ]),
+    ),
+    icon: 'model',
+    actions: 'model',
+  },
   {
     id: '2026-11-birdamp',
     from: '2026-11-01',

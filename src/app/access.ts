@@ -51,16 +51,21 @@ export const ADMIN_ONLY_MESSAGE = 'Only the admin can open this page.';
  * saved BirdAmp choice shows Focus. The choice itself is kept, so signing back in brings BirdAmp back.
  */
 /**
- * The model that actually runs (DECISIONS.md #133): BirdNET+ V3.0 is the admin's test, so it runs only for the
- * approved admin; everyone else gets V2.4 whatever is stored. Like the admin pages, this only decides what this phone
- * does: the V3.0 files on the server are public (Apache 2.0) and nothing secret is behind the check.
+ * Accounts that get BirdNET+ V3.0 by default (DECISIONS.md #136): approved members and accounts waiting for approval.
+ * Signed-out visitors keep V2.4 (78 MB instead of 187 MB on a first visit). Decided from the cached session, so it
+ * works offline; nothing secret is behind it (the files are public, Apache 2.0).
  */
+export function isRegistered(user: AuthUser | null | undefined): boolean {
+  return !!user && (user.status === 'approved' || user.status === 'pending');
+}
+
+/** The model that actually runs: the stored choice for a registered account, V2.4 for anyone else. */
 export function effectiveModel(choice: ModelId, user: AuthUser | null | undefined): ModelId {
-  return choice === 'v3.0' && canManageUsers(user) ? 'v3.0' : 'v2.4';
+  return isRegistered(user) ? choice : 'v2.4';
 }
 
 /** Whether Settings shows the model choice at all. */
-export const canChooseModel = canManageUsers;
+export const canChooseModel = isRegistered;
 
 export function effectiveLayout(layout: ListenLayout, user: AuthUser | null | undefined): ListenLayout {
   return layout === 'birdamp' && !isMember(user) ? 'focus' : layout;

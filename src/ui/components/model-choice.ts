@@ -7,15 +7,14 @@ import { mb } from '../model-progress';
 import { el } from '../dom';
 
 /**
- * Settings › Detection › "Bird model" (DECISIONS.md #133): V2.4, which everyone uses, or BirdNET+ V3.0 on test.
- * Only the approved admin sees it; for anyone else it is hidden and V2.4 runs whatever is stored.
+ * Settings › Detection › "Bird model" (DECISIONS.md #133, #136): BirdNET+ V3.0 (the default) or the smaller V2.4.
+ * Registered accounts (approved or waiting) see it; signed out it is hidden and V2.4 runs whatever is stored.
  */
 export const MODEL_CHOICE_TEXT = {
   title: 'Bird model',
-  badge: 'Admin test',
-  v24: `What everyone uses. ${mb(MODEL_TOTAL_BYTES)} MB download.`,
-  v30: `Newer and more accurate in BirdNET’s own tests, with frogs, insects and other sounds too. ${mb(V3_TOTAL_BYTES)} MB download; may be too big for some phones.`,
-  names: 'Some birds have new names in V3.0 (Cooper’s Hawk is now Astur cooperii), so a bird saved with V2.4 can show up as a different bird.',
+  v30: `Newer and more accurate in BirdNET’s own tests; knows about 9,800 birds, plus frogs, insects and other sounds. ${mb(V3_TOTAL_BYTES)} MB download.`,
+  v24: `Smaller and lighter on older phones; knows about 6,500 birds. ${mb(MODEL_TOTAL_BYTES)} MB download.`,
+  names: 'Birds saved with either model show under one name, so you can switch back and forth.',
   pending: 'Switches when you stop listening.',
 } as const;
 
@@ -28,14 +27,14 @@ export function modelChoice(controller: AppController, user: () => AuthUser | nu
       if (input.checked) settings.update({ birdnetModel: id });
     });
     radios.set(id, input);
-    return el('label', { class: 'model-option' }, input, el('span', { class: 'model-option-text' }, el('span', { class: 'model-option-name' }, id === 'v3.0' ? `${MODEL_NAMES[id]} (test)` : MODEL_NAMES[id]), el('span', { class: 'small muted' }, line)));
+    return el('label', { class: 'model-option' }, input, el('span', { class: 'model-option-text' }, el('span', { class: 'model-option-name' }, id === 'v2.4' ? `${MODEL_NAMES[id]} (smaller)` : MODEL_NAMES[id]), el('span', { class: 'small muted' }, line)));
   };
   const note = el('p', { class: 'small muted model-note', 'data-testid': 'model-note', role: 'status' }, '');
   const root = el(
     'div',
     { class: 'model-choice', 'data-testid': 'model-choice' },
-    el('div', { class: 'model-choice-head' }, el('span', { class: 'model-choice-title', id: 'model-choice-title' }, MODEL_CHOICE_TEXT.title), el('span', { class: 'pill pill-admin' }, MODEL_CHOICE_TEXT.badge)),
-    el('div', { role: 'radiogroup', 'aria-labelledby': 'model-choice-title', class: 'model-options' }, option('v2.4', MODEL_CHOICE_TEXT.v24), option('v3.0', MODEL_CHOICE_TEXT.v30)),
+    el('div', { class: 'model-choice-head' }, el('span', { class: 'model-choice-title', id: 'model-choice-title' }, MODEL_CHOICE_TEXT.title)),
+    el('div', { role: 'radiogroup', 'aria-labelledby': 'model-choice-title', class: 'model-options' }, option('v3.0', MODEL_CHOICE_TEXT.v30), option('v2.4', MODEL_CHOICE_TEXT.v24)),
     note,
   );
 
@@ -46,7 +45,7 @@ export function modelChoice(controller: AppController, user: () => AuthUser | nu
     for (const [id, input] of radios) input.checked = id === chosen;
     const lines: string[] = [];
     if (controller.modelSwitchPending) lines.push(MODEL_CHOICE_TEXT.pending);
-    if (chosen === 'v3.0') lines.push(MODEL_CHOICE_TEXT.names);
+    lines.push(MODEL_CHOICE_TEXT.names);
     note.textContent = lines.join(' ');
     note.hidden = lines.length === 0;
   };

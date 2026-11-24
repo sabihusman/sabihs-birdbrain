@@ -7,7 +7,7 @@ import { mountApp, showUpdateBanner } from './ui/app';
 import { registerPwa } from './pwa';
 import { ApiClient } from './api/client';
 import { API_BASE_URL } from './api/config';
-import { effectiveModel, isMember } from './app/access';
+import { effectiveModel, isMember, isRegistered } from './app/access';
 import { applyTheme, readStoredTheme } from './theme/theme';
 import { readVisitSignals, safeLocalStorage, shouldAutoLoadModel, shouldShowWelcome } from './app/first-visit';
 import { MODEL_BASE_URL } from './model/model-source';
@@ -29,8 +29,12 @@ async function boot(): Promise<void> {
   controller.setAutoLoadModel(shouldAutoLoadModel(signals));
   // Species clips are collected only while an approved member is signed in (decided from the cached session, so it works offline).
   controller.setClipsEnabled(isMember(api.user));
-  // BirdNET+ V3.0 runs only for the admin while it is tested (DECISIONS.md #133); everyone else gets V2.4.
-  const pickModel = () => void controller.setModel(effectiveModel(controller.settings.get().birdnetModel, api.user));
+  // BirdNET+ V3.0 for registered accounts (approved or waiting), unless they chose V2.4; V2.4 when signed out
+  // (DECISIONS.md #136). Registered phones also know the other model's names, for birds saved with it.
+  const pickModel = () => {
+    controller.setKnowsBothModels(isRegistered(api.user));
+    void controller.setModel(effectiveModel(controller.settings.get().birdnetModel, api.user));
+  };
   pickModel();
   controller.settings.on('change', pickModel);
   api.on('change', (user) => {

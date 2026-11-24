@@ -6,6 +6,7 @@ on:
     paths:
       - 'server/**'
       - 'public/models/birdnet-v2.4/labels.json'
+      - 'public/models/birdnet-v3.0/labels.json'
       - '.github/workflows/server-image.yml'
   workflow_dispatch:
 

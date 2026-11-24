@@ -38,6 +38,8 @@ export const V3_TOTAL_BYTES = V3_AUDIO_BYTES + V3_GEO_BYTES + V3_ORT_WASM_BYTES;
 export const V3_CACHE_NAME = 'birdnet-models-v3.0';
 /** The species list (674 KiB), from the app itself; made by scripts/prepare-labels-v3.mts. Not precached. */
 export const V3_LABELS_JSON = `models/${V3_FOLDER}/labels.json`;
+/** V2.4 name → V3.0 name for the 297 birds V3.0 renamed or merged (DECISIONS.md #136); scripts/prepare-names-v3.mts. */
+export const V3_NAMES_JSON = `models/${V3_FOLDER}/v24-names.json`;
 
 /**
  * The V3.0 folder sits next to the V2.4 one on the same host (`…/models/birdnet-v2.4/` → `…/models/birdnet-v3.0/`).

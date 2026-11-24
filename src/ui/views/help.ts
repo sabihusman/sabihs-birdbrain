@@ -14,7 +14,7 @@ export function helpView(_ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'How it works'),
-      el('p', null, 'Your phone cuts sound into overlapping 3 s windows and BirdNET V2.4 (Cornell Lab of Ornithology, Chemnitz University of Technology) identifies each one in your browser. A second small model uses your location and the week to drop unlikely species.'),
+      el('p', null, 'Your phone cuts sound into overlapping 3 s windows and BirdNET (Cornell Lab of Ornithology, Chemnitz University of Technology) identifies each one in your browser: BirdNET+ V3.0 with an account, or the smaller BirdNET V2.4 (signed out, or picked in Settings › Detection › Bird model). A second small model uses your location and the week to drop unlikely species.'),
       el('p', null, 'Nothing is uploaded: audio and sightings stay in this browser. Recordings are saved as 16-bit WAV at 48 kHz.'),
       el('p', null, 'Map › Places groups sightings into areas about 1 km across (a sighting joins an area within 1 km of its centre, or starts one). To name each, it sends the centre, rounded to ~100 m, to OpenStreetMap’s Nominatim, one at a time. Names are saved for 180 days.'),
       el('p', null, 'On Species, ✓ marks birds you’ve spotted and “Spotted by me” lists them. Members tap ✓ for the ID card. Ticks never leave this phone.'),
@@ -58,7 +58,8 @@ export function helpView(_ctx: ViewContext): View {
       'section',
       { class: 'card' },
       el('h2', null, 'Credits and licences'),
-      el('p', null, 'BirdNET models © Stefan Kahl, Cornell Lab of Ornithology and Chemnitz University of Technology, licensed ', el('a', { href: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-NC-SA 4.0'), ' (non-commercial). App code is MIT licensed. Map tiles and place names © OpenStreetMap contributors, ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener' }, 'ODbL'), '. Species text and images from Wikipedia and Wikimedia Commons, each under its own licence.'),
+      el('p', null, 'BirdNET+ V3.0 model files by Lasseck, Eibl, Klinck and Kahl (Cornell Lab of Ornithology and Chemnitz University of Technology), ', el('a', { href: 'https://www.apache.org/licenses/LICENSE-2.0', target: '_blank', rel: 'noopener' }, 'Apache 2.0'), '; bird names follow the BirdNET+ Taxonomy v0.5, ', el('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-SA 4.0'), '.'),
+      el('p', null, 'BirdNET V2.4 models © Stefan Kahl, Cornell Lab of Ornithology and Chemnitz University of Technology, licensed ', el('a', { href: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-NC-SA 4.0'), ' (non-commercial). App code is MIT licensed. Map tiles and place names © OpenStreetMap contributors, ', el('a', { href: 'https://www.openstreetmap.org/copyright', target: '_blank', rel: 'noopener' }, 'ODbL'), '. Species text and images from Wikipedia and Wikimedia Commons, each under its own licence.'),
       el('p', null, el('a', { href: 'https://github.com/sabihusman/sabihs-birdbrain', target: '_blank', rel: 'noopener' }, 'Source code on GitHub')),
     ),
   );

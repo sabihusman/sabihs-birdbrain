@@ -5,7 +5,7 @@ from and under which licence. Verified during the build on 2026-10-18 from
 the VM; the GitHub repository was read through a blobless `git clone` because
 the GitHub web UI and REST API were blocked by the session's network policy.
 
-## BirdNET+ V3.0 (admin test, in `models/birdnet-v3.0/`, served from the API host; see DECISIONS.md #133)
+## BirdNET+ V3.0 (default for registered accounts, in `models/birdnet-v3.0/`, served from the API host; see DECISIONS.md #133, #136)
 
 | Item | Source | Version | Licence |
 | --- | --- | --- | --- |
@@ -13,6 +13,7 @@ the GitHub web UI and REST API were blocked by the session's network policy.
 | Location model `geo.onnx` (7,729,898 bytes, 14,057 classes) | same record, `BirdNET+_Geomodel_V3.0.5_Global_14K.zip` → `…_FP16.onnx` | Geomodel V3.0.5 | Apache 2.0 |
 | Label list `public/models/birdnet-v3.0/labels.json` | same record, `BirdNET+_V3.0_Global_12K_Labels.csv` and the geomodel's `_Labels.txt`, via `scripts/prepare-labels-v3.mts` | 3.0.1 | Apache 2.0 (labels, per the BNL README) |
 | Engine `ort-wasm-simd-threaded-1.31.1.wasm` (14,848,852 bytes) | npm `onnxruntime-web` 1.31.1, `dist/ort-wasm-simd-threaded.wasm` | 1.31.1 | MIT |
+| V2.4 → V3.0 name table `public/models/birdnet-v3.0/v24-names.json` (297 entries) | same record, `BirdNET+_Taxonomy_v0.5-Nov2026.zip` → `.csv` (`scientific_name_aliases`), via `scripts/prepare-names-v3.mts` | Taxonomy v0.5-Nov2026 | CC BY-SA 4.0 (credit: BirdNET+ Taxonomy v0.5-Nov2026, https://birdnet.cornell.edu/taxonomy) |
 
 DOI 10.5281/zenodo.24362980. Checksums: `models/birdnet-v3.0/SHA256SUMS`. The acceptable use policy shipped with the
 model is in `models/birdnet-v3.0/ACCEPTABLE_USE.txt`; its licence file says it is guidance and adds no conditions.
