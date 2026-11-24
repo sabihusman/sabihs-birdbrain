@@ -40,6 +40,39 @@ function returningVisitor(): void {
   if (!localStorage.getItem('birdbrain.whatsnew.v1')) localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
 }
 
+/**
+ * A stand-in for the account bird list (DECISIONS.md #139): `/v1/me/birds`, `/birds/sync`, device forget and
+ * `/v1/me/sharing`, kept in memory. `sets` holds each device's birds; route it after any catch-all abort.
+ */
+async function birdServer(page: Page, start: { sharing?: boolean | null; sets?: Record<string, Array<{ sci: string; lastSeen: string }>>; labels?: Record<string, string> } = {}) {
+  const state = { sharing: start.sharing ?? null, sets: new Map(Object.entries(start.sets ?? {})), labels: new Map(Object.entries(start.labels ?? {})), syncs: [] as Array<Record<string, unknown>>, forgot: [] as string[] };
+  const view = () => {
+    const best = new Map<string, string>();
+    for (const set of state.sets.values()) for (const b of set) if (!best.has(b.sci) || b.lastSeen > best.get(b.sci)!) best.set(b.sci, b.lastSeen);
+    return { sharing: state.sharing, species: [...best].map(([sci, lastSeen]) => ({ sci, lastSeen })), devices: [...state.sets].map(([id, set]) => ({ id, label: state.labels.get(id) ?? 'Device', count: set.length, syncedAt: Date.UTC(2026, 10, 20) })) };
+  };
+  const reply = (route: import('@playwright/test').Route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(view()) });
+  await page.route(/\/v1\/me\/birds$/, reply);
+  await page.route(/\/v1\/me\/birds\/sync$/, (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    state.syncs.push(body);
+    state.sets.set(body.deviceId, body.species);
+    state.labels.set(body.deviceId, body.label);
+    return reply(route);
+  });
+  await page.route(/\/v1\/me\/birds\/devices\/[^/]+\/forget$/, (route) => {
+    const id = decodeURIComponent(/devices\/([^/]+)\/forget$/.exec(route.request().url())![1]);
+    state.forgot.push(id);
+    state.sets.delete(id);
+    return reply(route);
+  });
+  await page.route(/\/v1\/me\/sharing$/, (route) => {
+    state.sharing = JSON.parse(route.request().postData() ?? '{}').on;
+    return reply(route);
+  });
+  return state;
+}
+
 /** Requests for model files (any host): the welcome layer must not cause any. `labels.json` is the species list, bundled with the app and loaded at startup by design. */
 const MODEL_FILE = /\/models\/birdnet-v2\.4\/(?!labels\.json).*\.(bin|json)(\?|$)/;
 
@@ -914,7 +947,7 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
   await expect(mine.getByRole('heading', { name: 'My account' })).toBeVisible();
   await expect(page.getByTestId('share-species')).not.toBeChecked();
   await expect(page.getByTestId('share-status')).toContainText('Sharing is off');
-  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted and the date you last spotted each one');
+  await expect(page.getByTestId('share-consent')).toContainText('which birds you’ve spotted on any of your devices and the date you last spotted each one');
   await expect(page.getByTestId('invite-send')).toBeVisible();
   // Delete: the row opens its own screen, and the button stays disabled until the password and the
   // word are typed; a wrong word does nothing.
@@ -2275,12 +2308,8 @@ test('the Species tab has the "Share my species list" switch for members, the sa
   const context = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block' });
   const page = await context.newPage();
   await page.addInitScript(returningVisitor);
-  const uploads: string[] = [];
   await page.route(/\/v1\//, (route) => route.abort());
-  await page.route(/\/v1\/me\/species$/, (route) => {
-    uploads.push(route.request().postData() ?? '');
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, count: 0 }) });
-  });
+  const server = await birdServer(page);
   // Signed out: no switch.
   await page.goto('./#/species');
   await expect(page.getByRole('searchbox', { name: 'Search species' })).toBeVisible();
@@ -2295,8 +2324,11 @@ test('the Species tab has the "Share my species list" switch for members, the sa
   const sw = share.getByTestId('share-species');
   await expect(sw).not.toBeChecked();
   await sw.check();
-  await expect(page.getByText('Sharing is on. Your species list was uploaded.')).toBeVisible();
-  expect(uploads.length).toBeGreaterThan(0);
+  await expect(page.getByText('Sharing is on. Friends see your bird list.')).toBeVisible();
+  expect(server.sharing).toBe(true);
+  // This device's set went to the account list: an id, its name and the birds (none yet), nothing else (DECISIONS.md #139).
+  await expect.poll(() => server.syncs.length).toBeGreaterThan(0);
+  expect(Object.keys(server.syncs[0]).sort()).toEqual(['deviceId', 'label', 'species']);
   // Same setting on My account.
   await page.goto('./#/account');
   await expect(page.getByTestId('share-species')).toBeChecked();
@@ -2354,7 +2386,7 @@ test('extra text folds under one line: tapping the line opens it and never flips
   const page = await context.newPage();
   await page.addInitScript(returningVisitor);
   await page.route(/\/v1\//, (route) => route.abort());
-  await page.route(/\/v1\/me\/species$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, count: 0 }) }));
+  await birdServer(page);
   await page.addInitScript(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Sam', status: 'approved', role: 'member' } })));
   for (const theme of ['dark', 'light'] as const) {
     await page.addInitScript((t) => localStorage.setItem('birdbrain.theme.v1', t), theme);
@@ -2366,7 +2398,7 @@ test('extra text folds under one line: tapping the line opens it and never flips
     const sw = page.getByTestId('share-species');
     await expect(sw).not.toBeChecked();
     await shareFold.locator('summary').click();
-    await expect(page.getByTestId('share-status')).toHaveText('Sharing is off. Nothing is on the server.');
+    await expect(page.getByTestId('share-status')).toHaveText('Sharing is off. Friends don’t see your list.');
     await expect(sw, 'tapping the explanation does not flip the switch').not.toBeChecked();
     // "Show all species" only shows with a local list (DECISIONS.md #105); its fold is checked in the #105 test.
     const about = page.getByTestId('species-about');
@@ -3839,5 +3871,42 @@ test('deleting a recording can take its birds out of that listen; "Remove from m
   await expect(page.getByText('You haven’t spotted it yet.')).toBeVisible();
   await page.goto('./#/recordings');
   await expect(page.locator('[data-testid="recording-group"][data-species="Acanthis cabaret"]')).toHaveCount(0);
+  await context.close();
+});
+
+test('one bird list across a member’s devices: ticks from another device, and "Forget" on My account (DECISIONS.md #139)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.addInitScript(returningVisitor);
+  await page.addInitScript(() => localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'Sam', status: 'approved', role: 'member' } })));
+  await page.route(/\/v1\//, (route) => route.abort());
+  // The member's laptop spotted a Northern Cardinal (the same name in both bird models); this phone has spotted nothing.
+  const server = await birdServer(page, { sharing: false, sets: { 'laptop-0000-1111': [{ sci: 'Cardinalis cardinalis', lastSeen: '2026-11-20' }] }, labels: { 'laptop-0000-1111': 'Mac · Chrome' } });
+  await page.goto('./#/species');
+  await page.getByTestId('spotted-filter').click();
+  const row = page.getByTestId('spotted-row').filter({ hasText: 'Northern Cardinal' });
+  await expect(row).toBeVisible();
+  // Its page says where it was spotted; the sightings stay on that device.
+  await page.goto('./#/species/Cardinalis%20cardinalis');
+  await expect(page.getByTestId('spotted-elsewhere')).toContainText('You spotted it on another of your devices, last on Nov 20, 2026.');
+  // My account: this device, and the laptop with "Forget".
+  await page.goto('./#/account');
+  const deviceBox = page.getByTestId('devices');
+  await expect(deviceBox).toContainText('Your devices');
+  await expect.poll(() => server.syncs.length).toBeGreaterThan(0);
+  await expect(deviceBox.getByTestId('device-row')).toContainText('this device');
+  const forget = deviceBox.getByTestId('device-forget');
+  await expect(forget).toContainText('Forget Mac · Chrome');
+  await expect(forget).toContainText('1 bird');
+  await forget.click();
+  const sheet = page.getByTestId('forget-device-sheet');
+  await expect(sheet).toContainText('Forget “Mac · Chrome”?');
+  await expect(sheet).toContainText('Its 1 bird leaves your list, unless another device has it too.');
+  await sheet.getByTestId('choice-forget').click();
+  await expect(deviceBox.getByTestId('device-forget')).toHaveCount(0);
+  expect(server.forgot).toEqual(['laptop-0000-1111']);
+  // The tick goes with it.
+  await page.goto('./#/species/Cardinalis%20cardinalis');
+  await expect(page.getByTestId('spotted-elsewhere')).toHaveText('You haven’t spotted it yet.');
   await context.close();
 });

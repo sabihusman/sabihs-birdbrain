@@ -4,6 +4,14 @@ import { speciesColor } from '../../species/colors';
 import { listSightingsForSpecies, getRecordingMeta, removeSpecies } from '../../storage/db';
 import { askChoice } from '../components/choice-sheet';
 import { REMOVE_SPECIES_BUTTON, speciesRemovalText } from '../remove-birds-text';
+import { canonicalName } from '../../species/names';
+
+/** A bird on the account's list from another device only (DECISIONS.md #139). `day` is YYYY-MM-DD. */
+export function spottedElsewhereText(day: string): string {
+  const [y, m, d] = day.split('-').map(Number);
+  const when = new Date(y, m - 1, d).toLocaleDateString(undefined, { dateStyle: 'medium' });
+  return `You spotted it on another of your devices, last on ${when}. Its sightings and recordings stay on that device.`;
+}
 import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
@@ -43,7 +51,7 @@ export function speciesListView(ctx: ViewContext): View {
   const localLine = el('span', { class: 'stat-line', 'data-testid': 'local-count' }, '');
   const note = el('p', { class: 'small muted', 'data-testid': 'local-note' }, '');
   const totalLine = el('p', null, '');
-  const offlineLine = el('p', null, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (kept on this phone). Doesn’t change what Listen identifies.');
+  const offlineLine = el('p', null, 'Works offline; pages you’ve opened are saved. ✓ = you’ve spotted it (on this phone, or on any of your devices when you’re a signed-in member). Doesn’t change what Listen identifies.');
   // " · showing 60" beside the count, so the count is said once (DECISIONS.md #131).
   const showing = el('span', { 'data-testid': 'species-showing' }, '');
   const scopeFold = foldHint(el('span', null, localLine, showing), [totalLine, offlineLine], { testId: 'species-about' });
@@ -162,6 +170,8 @@ export function speciesListView(ctx: ViewContext): View {
   const refreshSpotted = () => {
     loadSpottedSet().then(
       (set) => {
+        // A member's ticks include the birds from their other devices (DECISIONS.md #139).
+        for (const sci of ctx.sharing.accountBirds().keys()) set.add(canonicalName(sci));
         spotted = set;
         search();
       },
@@ -187,7 +197,7 @@ export function speciesListView(ctx: ViewContext): View {
     shareBox.hidden = !member;
   };
   renderShare();
-  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search), controller.on('detections-changed', refreshSpotted), api.on('change', search), api.on('change', renderShare), ctx.friends.on('change', search)];
+  const unsubs = [controller.on('species-loaded', search), controller.on('local-species', search), controller.on('detections-changed', refreshSpotted), ctx.sharing.on('change', refreshSpotted), api.on('change', search), api.on('change', renderShare), ctx.friends.on('change', search)];
   search();
   refreshSpotted();
   void ctx.friends.refresh(); // when online and a member; the cached copy shows meanwhile
@@ -216,6 +226,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
   const { controller } = ctx;
   const root = el('div', null);
   const disposers: Array<() => void> = [];
+  let mine: { sp: Species; box: HTMLElement } | null = null;
 
   const build = () => {
     const sp = controller.speciesByScientific(scientific);
@@ -241,6 +252,7 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
       ask.el,
       el('section', { class: 'card' }, el('h2', null, 'Your sightings'), myBox),
     );
+    mine = { sp, box: myBox };
     void renderMine(sp, myBox);
     if (focusIdCardOnOpen) {
       focusIdCardOnOpen = false;
@@ -261,7 +273,9 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
       return;
     }
     if (dets.length === 0) {
-      box.replaceChildren(el('p', { class: 'muted' }, 'You haven’t spotted it yet.'));
+      // On the account's list from another device (DECISIONS.md #139): its details stay on that device.
+      const elsewhere = [...ctx.sharing.accountBirds()].find(([sci]) => canonicalName(sci) === sp.scientific)?.[1];
+      box.replaceChildren(el('p', { class: 'muted', 'data-testid': 'spotted-elsewhere' }, elsewhere ? spottedElsewhereText(elsewhere) : 'You haven’t spotted it yet.'));
       return;
     }
     const first = dets[0];
@@ -305,6 +319,8 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
 
   build();
   disposers.push(controller.on('species-loaded', build));
+  // Only "Your sightings" depends on the account's list; the rest of the page stays as it is.
+  disposers.push(ctx.sharing.on('change', () => mine && void renderMine(mine.sp, mine.box)));
   disposers.push(ctx.api.on('change', build));
   void ctx.friends.refresh();
   return {

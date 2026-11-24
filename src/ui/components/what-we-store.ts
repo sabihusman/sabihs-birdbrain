@@ -33,12 +33,14 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
       'With an account: your email, password (hashed, unreadable), display name and sign-in sessions.',
       'Sign-in codes (hashed, for minutes), reset links (hashed, 1 hour), friends, open invites and a daily question count.',
       'Inviting someone without an account: a hashed copy of their address, up to 30 days, so they aren’t emailed twice.',
+      // DECISIONS.md #139: server/src/bird-list.ts (bird_device, device_bird).
+      'As a member: your bird list, so it is the same on all your devices. Per device, each bird’s name, the last day you spotted it there, and the device’s name (such as “iPhone · Safari”).',
     ],
   },
   {
     title: 'Only on this phone',
     items: [
-      'Sightings, recordings, clips and ticks never leave this phone.',
+      'Sightings, recordings and clips never leave this phone: no times, places, counts or sounds.',
       // src/geo/geocode.ts (DECISIONS.md #73): rounded area centres only, and only from the Map tab's Places view.
       'Map › Places sends each 1 km area’s centre, rounded to ~100 m, to OpenStreetMap’s Nominatim for its name. Nothing else.',
       // src/app/status-line.ts (DECISIONS.md #108): the town for "Near …" on Listen, once per ~1 km square.
@@ -62,9 +64,9 @@ export function whatWeStoreGroups(services: string[] | null): WhatWeStoreGroup[]
   {
     title: 'If sharing is on',
     items: [
-      'The server keeps each bird’s name and the last day you spotted it. Friends see only that and your display name.',
-      // DECISIONS.md #127: uploads merge; only deleting a bird here or turning sharing off takes it away.
-      'Clearing this phone or using a new one keeps the list; deleting a bird’s recordings removes that bird, and turning sharing off removes the whole list.',
+      'Friends see your bird list: each bird’s name and the last day you spotted it, on any of your devices. Friends see only that and your display name.',
+      // DECISIONS.md #139: the list is the union of the devices' sets; sharing only decides who sees it.
+      'Turning sharing off hides the list from friends; it stays for your own devices. A bird leaves the list when no device has it, or when you forget a device on My account.',
     ],
   },
   {

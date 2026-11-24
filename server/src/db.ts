@@ -65,6 +65,27 @@ export function openDatabase(path: string): DatabaseSync {
       last_seen TEXT NOT NULL,
       PRIMARY KEY (user_id, scientific)
     );
+    -- The account's bird list (DECISIONS.md #139): each signed-in device's own set; the account's list is their union
+    -- plus the older shared_species rows ("Earlier uploads"). species_sharing is the account's "Share my species list".
+    CREATE TABLE IF NOT EXISTS bird_device (
+      user_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      synced_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, device_id)
+    );
+    CREATE TABLE IF NOT EXISTS device_bird (
+      user_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      scientific TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      PRIMARY KEY (user_id, device_id, scientific)
+    );
+    CREATE TABLE IF NOT EXISTS species_sharing (
+      user_id TEXT PRIMARY KEY,
+      sharing INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS invite_usage (
       day TEXT NOT NULL,
       user_id TEXT NOT NULL,
@@ -75,6 +96,9 @@ export function openDatabase(path: string): DatabaseSync {
   // Databases from before DECISIONS.md #79: both directions keep sharing, as they did.
   addColumnIfMissing(db, 'friendship', 'a_shares', 'INTEGER NOT NULL DEFAULT 1');
   addColumnIfMissing(db, 'friendship', 'b_shares', 'INTEGER NOT NULL DEFAULT 1');
+  // Before DECISIONS.md #139 sharing was a switch on each phone, and a list on the server meant it was on. Accounts with
+  // a list keep sharing; one that has chosen since (a row, on or off) is left alone.
+  db.exec('INSERT OR IGNORE INTO species_sharing (user_id, sharing) SELECT DISTINCT user_id, 1 FROM shared_species');
   return db;
 }
 

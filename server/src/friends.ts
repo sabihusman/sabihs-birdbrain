@@ -203,9 +203,12 @@ export class FriendsStore {
     return rows.map((r) => ({ sci: r.scientific, lastSeen: r.last_seen }));
   }
 
-  /** What a member may see: the display name and (sci, lastSeen) pairs of each friend who shares with them. */
-  friendsSpecies(userId: string): Array<{ id: string; displayName: string; species: SharedSpecies[] }> {
-    return this.sharersWith(userId).map((f) => ({ id: f.id, displayName: String(f.name ?? ''), species: this.sharedSpeciesOf(f.id) }));
+  /**
+   * What a member may see: the display name and (sci, lastSeen) pairs of each friend who shares with them. `listOf` is
+   * a friend's list (the app passes the account list across devices, DECISIONS.md #139).
+   */
+  friendsSpecies(userId: string, listOf: (friendId: string) => SharedSpecies[] = (id) => this.sharedSpeciesOf(id)): Array<{ id: string; displayName: string; species: SharedSpecies[] }> {
+    return this.sharersWith(userId).map((f) => ({ id: f.id, displayName: String(f.name ?? ''), species: listOf(f.id) }));
   }
 
   private transaction(fn: () => void): void {

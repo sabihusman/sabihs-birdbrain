@@ -106,6 +106,23 @@ export interface SharedSpecies {
   lastSeen: string;
 }
 
+/** One of the account's devices in its bird list (DECISIONS.md #139). */
+export interface BirdDevice {
+  id: string;
+  label: string;
+  count: number;
+  /** Epoch ms of its last sync; null for "Earlier uploads". */
+  syncedAt: number | null;
+}
+
+/** The account's bird list across devices, whether friends see it, and the devices it comes from. */
+export interface BirdListView {
+  /** null for an account that never chose. */
+  sharing: boolean | null;
+  species: SharedSpecies[];
+  devices: BirdDevice[];
+}
+
 export interface FriendSpecies {
   id: string;
   displayName: string;
@@ -425,6 +442,26 @@ export class ApiClient extends Emitter<{ change: AuthUser | null }> {
   /** Birds deleted on this phone, taken off the shared list by name (DECISIONS.md #127). */
   removeSharedSpecies(species: string[]): Promise<{ ok: boolean; removed: number; count: number }> {
     return this.call('/v1/me/species/remove', { species });
+  }
+
+  /** The account's bird list across devices (DECISIONS.md #139). */
+  birdList(): Promise<BirdListView> {
+    return this.call('/v1/me/birds');
+  }
+
+  /** This device's whole set of birds, replacing what it sent before; answers with the account's list. */
+  syncBirds(deviceId: string, label: string, species: SharedSpecies[]): Promise<BirdListView> {
+    return this.call('/v1/me/birds/sync', { deviceId, label, species });
+  }
+
+  /** "Forget this device": its birds leave the account's list. */
+  forgetDevice(id: string): Promise<BirdListView> {
+    return this.call(`/v1/me/birds/devices/${encodeURIComponent(id)}/forget`, {});
+  }
+
+  /** "Share my species list" for the whole account. */
+  setSpeciesSharing(on: boolean): Promise<BirdListView> {
+    return this.call('/v1/me/sharing', { on });
   }
 
   clearSharedSpecies(): Promise<{ ok: boolean }> {

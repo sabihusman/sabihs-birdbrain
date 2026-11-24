@@ -4,6 +4,7 @@ import { canManageUsers, isMember } from '../../app/access';
 import { setSharingOn } from '../../species/sharing';
 import { clearAllData } from '../../storage/db';
 import type { View, ViewContext } from '../app';
+import { devicesList } from '../components/devices-list';
 import { friendsPanel, sharingRow } from '../components/friends-panel';
 import { actionRow, linkRow, rowGroup } from '../components/rows';
 import { SIGN_UP_PRIVACY_LINE } from '../components/what-we-store';
@@ -189,8 +190,9 @@ export function accountSection(ctx: ViewContext, mode: AccountMode = 'card'): { 
       // Friends are the point of this page, so they are open rather than folded (DECISIONS.md #79).
       const panel = friendsPanel(ctx);
       const share = sharingRow(ctx, panel.sharingChanged, panel.consent);
-      panels.push(share, panel);
-      groups.push(rowGroup('Sharing', share.el), el('div', { class: 'row-group', 'data-testid': 'friends-section' }, el('h3', { class: 'row-group-title' }, 'Friends'), panel.el));
+      const devices = devicesList(ctx.sharing, ctx.notify);
+      panels.push(share, panel, devices);
+      groups.push(rowGroup('Sharing', share.el), el('div', { class: 'row-group', 'data-testid': 'friends-section' }, el('h3', { class: 'row-group-title' }, 'Friends'), panel.el), devices.el);
     }
 
     groups.push(signOutButton());
