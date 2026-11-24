@@ -3,7 +3,9 @@
  * the V3.0 name it became (DECISIONS.md #136). The app uses it to show a bird saved under V2.4 together with the
  * same bird found by V3.0, without changing what is stored.
  *
- *   npx tsx scripts/prepare-names-v3.mts <BirdNET+_Taxonomy_v0.5-Nov2026.csv>   (the file inside the repository folder)
+ *   npx tsx scripts/prepare-names-v3.mts
+ *
+ * It reads `BirdNET+_Taxonomy_v0.5-Nov2026.csv` (from the taxonomy zip) from .downloads/birdnet-v3.0/ (gitignored).
  *
  * In this order: the taxonomy's own `scientific_name_aliases` (old names it lists for a species); then the same
  * English name (genus moves such as "Accipiter superciliosus" → "Microspizias superciliosus"); then MANUAL below, each
@@ -11,7 +13,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { parseCsv, readInputFile } from './csv.mts';
+import { parseCsv, readSource } from './csv.mts';
 
 /**
  * Checked by hand (Nov 24, 2026) for birds the first two steps missed: spelling ("Gray" → "Grey") or genus moves the
@@ -33,11 +35,7 @@ const MANUAL: Record<string, string> = {
 };
 
 const root = path.resolve(import.meta.dirname, '..');
-const taxPath = process.argv[2];
-if (!taxPath) {
-  console.error('usage: npx tsx scripts/prepare-names-v3.mts <BirdNET+_Taxonomy_v0.5-Nov2026.csv>');
-  process.exit(2);
-}
+const taxPath = 'BirdNET+_Taxonomy_v0.5-Nov2026.csv';
 const v24 = (JSON.parse(fs.readFileSync(path.join(root, 'public/models/birdnet-v2.4/labels.json'), 'utf8')) as string[])
   .map((l) => l.split('_'))
   .filter(([sci, common]) => sci !== common);
@@ -46,7 +44,7 @@ const inV3 = new Set(v3.map((c) => c[0]));
 const v3ByCommon = new Map<string, string>();
 for (const [sci, common] of v3) if (!v3ByCommon.has(common.toLowerCase())) v3ByCommon.set(common.toLowerCase(), sci);
 
-const [header, ...rows] = parseCsv(readInputFile(taxPath, '.csv'));
+const [header, ...rows] = parseCsv(readSource(taxPath));
 const sciCol = header.indexOf('scientific_name');
 const aliasCol = header.indexOf('scientific_name_aliases');
 const aliasOf = new Map<string, string>();

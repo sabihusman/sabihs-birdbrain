@@ -2,17 +2,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-/**
- * A downloaded input file named on the command line, read only when it is a regular file with the expected extension
- * under the current folder (run the scripts from the repository root with the downloads inside it).
- */
-export function readInputFile(arg: string, extension: string): string {
-  const resolved = path.resolve(process.cwd(), arg);
-  const inside = resolved.startsWith(process.cwd() + path.sep);
-  if (!inside || path.extname(resolved) !== extension || !fs.statSync(resolved, { throwIfNoEntry: false })?.isFile()) {
-    throw new Error(`expected a ${extension} file inside ${process.cwd()}: ${arg}`);
-  }
-  return fs.readFileSync(resolved, 'utf8').replace(/^﻿/, '');
+/** Where the downloaded inputs go (gitignored): the files exactly as named in Zenodo record 24362980. */
+export const SOURCE_DIR = path.resolve(import.meta.dirname, '../.downloads/birdnet-v3.0');
+
+/** One downloaded input by its file name in SOURCE_DIR, without a byte-order mark. */
+export function readSource(fileName: string): string {
+  return fs.readFileSync(path.join(SOURCE_DIR, fileName), 'utf8').replace(/^\uFEFF/, '');
 }
 
 /** Where a quoted field ends: the index of its closing quote (a doubled quote "" is a quote inside the field). */

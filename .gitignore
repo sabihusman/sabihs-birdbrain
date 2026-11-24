@@ -11,3 +11,5 @@ playwright-report
 # BirdNET+ V3.0 weights (174 MB, over GitHub's file limit): scripts/fetch-model-v3.sh downloads them
 models/birdnet-v3.0/*.onnx
 models/birdnet-v3.0/*.wasm
+# Downloaded inputs for scripts/prepare-labels-v3.mts and prepare-names-v3.mts (outside models/, which publish-model.sh uploads)
+.downloads/
