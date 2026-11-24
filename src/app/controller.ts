@@ -125,6 +125,8 @@ export interface ModelFailure {
   unsupported: boolean;
   /** Plain words for the Listen panel and the toast (src/app/browser-support.ts). */
   text: string;
+  /** The technical reason, for the admin only (DECISIONS.md #135); never shown to members. */
+  detail?: string;
 }
 
 export interface LocalSpeciesState {
@@ -132,6 +134,12 @@ export interface LocalSpeciesState {
   indices: Set<number> | null;
   /** Why the list is unavailable, when it is. */
   note: string | null;
+}
+
+/** The technical reason a model load failed, short: "RangeError: Out of memory", "…/audio.onnx 404". */
+export function failureDetail(e: unknown): string {
+  const text = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  return text.length > 200 ? `${text.slice(0, 199)}…` : text;
 }
 
 /** Orchestrates microphone capture, inference, persistence and device APIs. */
@@ -406,9 +414,11 @@ export class AppController extends Emitter<ControllerEvents> {
         if (switches !== this.modelSwitches) return false;
         // The technical reason stays in the console; the member reads what to do about it.
         console.warn('[model] load failed', e);
-        this.modelFailure = { unsupported: e instanceof BrowserUnsupportedError, text: describeModelFailure(e) };
-        if (this.modelFailure.unsupported) this.emit('model', this.inference.getStatus()); // no toast: the Listen panel says it, and "Try again" cannot help
-        else this.emit('notice', { kind: 'error', text: this.modelFailure.text });
+        this.modelFailure = { unsupported: e instanceof BrowserUnsupportedError, text: describeModelFailure(e), detail: failureDetail(e) };
+        // Listen redraws with the reason (the worker's own "error" status came before it was known).
+        this.emit('model', this.inference.getStatus());
+        // No toast when the browser cannot run the model: the Listen panel says it, and "Try again" cannot help.
+        if (!this.modelFailure.unsupported) this.emit('notice', { kind: 'error', text: this.modelFailure.text });
         return false;
       } finally {
         if (this.modelLoading === loading) this.modelLoading = null;

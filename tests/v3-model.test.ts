@@ -135,3 +135,12 @@ describe('switching models starts a fresh worker', () => {
     expect(client.getStatus()).toMatchObject({ state: 'idle', model: null });
   });
 });
+
+describe('why a model load failed, for the admin (DECISIONS.md #135)', () => {
+  it('keeps the error type and message, short', async () => {
+    const { failureDetail } = await import('../src/app/controller');
+    expect(failureDetail(new RangeError('Out of memory'))).toBe('RangeError: Out of memory');
+    expect(failureDetail(new Error('https://x/models/birdnet-v3.0/audio.onnx 404'))).toBe('Error: https://x/models/birdnet-v3.0/audio.onnx 404');
+    expect(failureDetail(new Error('x'.repeat(500)))).toHaveLength(200);
+  });
+});

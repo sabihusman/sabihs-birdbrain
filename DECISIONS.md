@@ -3523,3 +3523,24 @@ Each finding was checked against the code first.
 - **Tests:** `tests/bird-alert.test.ts` (once while singing, again after the gap, several birds, reset, buzz only where
   offered, setting); e2e "a bird is found: …" (one flash in the bird's colour and one buzz with the fake microphone,
   none for the next windows, neither when switched off).
+
+## 135. A model file's "not found" must not be kept for a year
+
+- **What happened (Nov 23–24):** Sabih picked BirdNET+ V3.0 before its files were on the server; the server answered
+  404 with `Cache-Control: public, max-age=31536000, immutable`, because that header was added with `always` in the
+  Nginx `/models/` location, so error answers carried it too. After the files were published (and served correctly,
+  checked from outside), the phone still failed: most likely its browser kept the 404s. Not proven on the phone; the
+  alternative explanation is running out of memory, which the new admin detail line will show if so.
+- **Fixed in three places:**
+  - `server/deploy/nginx/birdbrain`: the year-long `Cache-Control` no longer has `always`, so Nginx adds it only to
+    successful answers. The live file is `/etc/nginx/sites-available/birdbrain`; Sabih applies the same change there
+    (one `sed`, `nginx -t`, reload).
+  - `src/model/inference.worker.ts` `cachedFetch`: the network request uses `cache: 'no-cache'`, so the browser asks
+    the server again instead of trusting its own cache; files already downloaded still come from the Cache API first,
+    so nothing is downloaded twice.
+  - The admin sees the technical reason under "Something went wrong" (`ModelFailure.detail`, `failureDetail` in
+    `src/app/controller.ts`), to test models on a phone without developer tools. Members never see it. Listen now
+    redraws when the reason is known (the worker's error status arrives first).
+- **Tests:** `tests/v3-model.test.ts` (`failureDetail`); e2e "a model file the server did not have: …" (a 404 shows
+  "Details: … 404" to the admin only, and "Try again" loads once the file is there). Whether the browser's own cache is
+  bypassed cannot be seen in Playwright (routed requests skip it).
