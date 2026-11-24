@@ -2379,7 +2379,7 @@ test('extra text folds under one line: tapping the line opens it and never flips
     await expect(page.getByText('Lower: more birds, more mistakes')).toBeVisible();
     await expect(page.getByText('Lower catches faint or distant birds but adds false IDs.')).toBeHidden();
     await expect(page.getByText(/Saves a detection’s 3 s to Recordings/)).toBeHidden();
-    const autoSave = page.getByText('Keeps 3 s of each detection');
+    const autoSave = page.getByText('From your confidence threshold, 3 s each');
     await autoSave.click();
     await expect(page.getByText(/Saves a detection’s 3 s to Recordings/)).toBeVisible();
     await expect(page.getByTestId('voice-processing')).toBeVisible();
@@ -3694,7 +3694,7 @@ test('a bird is found: one flash in its colour and one buzz, not every window; o
     w.flashes = [];
     Object.defineProperty(navigator, 'vibrate', { configurable: true, value: (p: number) => (w.buzzes.push(p), true) });
     new MutationObserver((records) => {
-      for (const r of records) for (const n of r.addedNodes) if (n instanceof HTMLElement && n.classList.contains('bird-flash')) w.flashes.push(n.style.getPropertyValue('--flash-color'));
+      for (const r of records) for (const n of r.addedNodes) if (n instanceof HTMLElement && n.classList.contains('bird-flash')) w.flashes.push(n.dataset.color ?? '');
     }).observe(document, { childList: true, subtree: true });
   });
   const page = await context.newPage();
@@ -3702,6 +3702,20 @@ test('a bird is found: one flash in its colour and one buzz, not every window; o
   await page.goto('./#/settings');
   await expect(page.getByText('Flash when a bird is found')).toBeVisible();
   await expect(page.getByText('And a short buzz on this phone')).toBeVisible();
+  // "Show me": the flash right now, a tint and a thick edge set as plain styles (DECISIONS.md #137), gone after 1 s.
+  await page.getByTestId('flash-preview').click();
+  const preview = page.getByTestId('bird-flash');
+  await expect(preview).toBeAttached();
+  const look = await preview.evaluate((e) => ({ bg: getComputedStyle(e).backgroundColor, shadow: getComputedStyle(e).boxShadow, events: getComputedStyle(e).pointerEvents, z: getComputedStyle(e).zIndex }));
+  expect(look.bg).toMatch(/^rgba\(\d+, \d+, \d+, 0\.16\)$/);
+  expect(look.shadow).toContain('10px');
+  expect(look.events).toBe('none');
+  await expect(preview).toHaveCount(0, { timeout: 3000 });
+  await page.evaluate(() => {
+    const w = window as unknown as { buzzes: number[]; flashes: string[] };
+    w.buzzes.length = 0;
+    w.flashes.length = 0;
+  });
   await page.goto('./#/listen');
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
   await page.getByTestId('start-stop').click();
@@ -3711,9 +3725,12 @@ test('a bird is found: one flash in its colour and one buzz, not every window; o
   const first = await counts();
   expect(first.flashes).toHaveLength(1);
   expect(first.flashes[0]).toMatch(/^rgb\(/);
-  // The fake microphone keeps playing the same bird: several more windows, no more alerts.
+  // The fake microphone keeps playing the same bird: several more windows, no more alerts for it. (A second species
+  // crossing the minimum in a later window would rightly alert once; every alert is one flash and one buzz.)
   await page.waitForTimeout(6000);
-  expect(await counts()).toEqual(first);
+  const later = await counts();
+  expect(later.flashes.filter((c) => c === first.flashes[0])).toHaveLength(1);
+  expect(later.buzzes).toBe(later.flashes.length);
   await expect(page.getByTestId('bird-flash')).toHaveCount(0);
   await page.getByTestId('stop').click();
   // Switched off: a new session finds the bird again but neither flashes nor buzzes.
@@ -3724,7 +3741,7 @@ test('a bird is found: one flash in its colour and one buzz, not every window; o
   await page.getByTestId('start-stop').click();
   await expect(page.getByTestId('result-card').first()).toBeAttached({ timeout: 120_000 });
   await page.waitForTimeout(4000);
-  expect(await counts()).toEqual(first);
+  expect(await counts()).toEqual(later);
   await page.getByTestId('stop').click();
   await context.close();
 });

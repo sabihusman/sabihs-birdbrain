@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ALERT_GAP_MS, buzz, canVibrate, NewBirdTracker, VIBRATE_MS } from '../src/app/bird-alert';
 import { DEFAULT_SETTINGS, sanitize } from '../src/app/settings';
 import { BIRD_ALERT_MORE } from '../src/ui/views/settings';
+import { withAlpha } from '../src/ui/components/bird-flash';
 
 describe('a bird is found (DECISIONS.md #134)', () => {
   it('counts a bird once while it keeps singing, and again after 30 s without it', () => {
@@ -39,5 +40,11 @@ describe('a bird is found (DECISIONS.md #134)', () => {
     expect(sanitize({ ...DEFAULT_SETTINGS, birdAlert: false }).birdAlert).toBe(false);
     expect(sanitize({ ...DEFAULT_SETTINGS, birdAlert: undefined as never }).birdAlert).toBe(true);
     expect(BIRD_ALERT_MORE).toContain('iPhones do not let websites vibrate');
+  });
+
+  it('tints in the bird’s colour, from rgb() or hex, never a solid fill (DECISIONS.md #137)', () => {
+    expect(withAlpha('rgb(12, 34, 56)', 0.16)).toBe('rgba(12, 34, 56, 0.16)');
+    expect(withAlpha('#5FCB97', 0.5)).toBe('rgba(95, 203, 151, 0.5)');
+    expect(withAlpha('oklch(0.7 0.1 200)', 0.16)).toBe('rgba(128, 128, 128, 0.16)');
   });
 });

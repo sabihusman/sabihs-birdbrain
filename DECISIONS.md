@@ -3578,3 +3578,27 @@ Each finding was checked against the code first.
 - **Tests:** `tests/names.test.ts` (the table, both directions, renamed rows, recording groups, IndexedDB reads under
   both names with nothing stored changed), `tests/v3-model.test.ts` (who gets V3.0, version 7), `server/test/labels-v3.test.ts`;
   e2e "BirdNET+ V3.0 for registered accounts: …" and "the new bird model is announced once …".
+
+## 137. One number for detecting and auto-saving; a stronger flash with a "Show me" button
+
+Nov 24, 2026. Sabih: a bird found on Listen did not reach Recordings, and "the flash setting is on but it doesn't work"
+(his iPhone, Chrome).
+
+- **Auto-save follows the confidence threshold (Sabih: "recording threshold and detection confidence threshold should
+  match").** `sanitize()` in `src/app/settings.ts` sets `autoSaveMinConfidence` to `threshold` on every read and
+  update, so a phone that stored a separate, higher auto-save bar follows the minimum from its next visit (the
+  likeliest reason his bird, above his minimum, was not saved; his saved auto-save value was not checked). Nothing else is stored differently; the field stays so older code paths keep working.
+  Settings › Recording loses the "Auto-save from" slider; the switch reads "From your confidence threshold, 3 s each".
+- **Still true, and a possible second cause:** auto-save keeps one clip per window, for the window's top bird
+  (`persistDetections`), and after the first clip of a species only a more confident one at least the gap later
+  (`shouldAutoSaveClip`). A bird found second in a window is a sighting without a clip.
+- **The flash.** Not reproduced here (Playwright runs Chromium only; Chrome on iPhone is WebKit). The first version drew
+  a thin edge from CSS custom properties, `color-mix()` and a stylesheet animation. `flashForBird`
+  (`src/ui/components/bird-flash.ts`) now computes every colour itself (`withAlpha`) and sets plain styles: a 16 %
+  tint of the bird's colour over the whole screen, a 10 px edge and a soft inner glow, faded in and out by one Web
+  Animations call over 1 s (shown without the fade with reduced motion). Still on `<body>`, `pointer-events: none`.
+- **"Show me"** under the switch in Settings › Detection plays the flash (in the accent colour) and the buzz at once,
+  so a phone shows whether it can draw the flash at all, apart from whether a bird triggered it.
+- **Tests:** `tests/settings.test.ts` (one number for both, old stores move), `tests/bird-alert.test.ts`
+  (`withAlpha`), e2e "a bird is found" (the preview's tint and edge, gone within 3 s; the same bird alerts once, every
+  alert is one flash and one buzz) and "extra text folds" (the new switch line).

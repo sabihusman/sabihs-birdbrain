@@ -68,39 +68,22 @@ describe('SettingsStore', () => {
     expect(migrate({ threshold: 0.8, version: 4 }).threshold).toBe(0.8);
   });
 
-  it('moves a saved 70 % auto-save bar to 60 % once, keeps other choices, and never goes below the minimum (DECISIONS.md #124)', () => {
-    // Version 5 phones (saved since Nov 13) still had the 70 % auto-save default.
-    expect(migrate({ ...DEFAULT_SETTINGS, threshold: 0.6, autoSaveMinConfidence: 0.7, version: 5 })).toMatchObject({ threshold: 0.6, autoSaveMinConfidence: 0.6, version: SETTINGS_VERSION });
-    expect(migrate({ ...DEFAULT_SETTINGS, threshold: 0.6, autoSaveMinConfidence: 0.7000000000000001, version: 5 }).autoSaveMinConfidence).toBe(0.6);
-    for (const chosen of [0.65, 0.75, 0.85]) expect(migrate({ ...DEFAULT_SETTINGS, threshold: 0.6, autoSaveMinConfidence: chosen, version: 5 }).autoSaveMinConfidence).toBe(chosen);
-    // A phone at an 80 % minimum keeps saving from 80 %: the bar is never below the minimum.
-    const storage = new MemoryStorage();
-    storage.setItem('birdbrain.settings.v1', JSON.stringify({ ...DEFAULT_SETTINGS, threshold: 0.8, autoSaveMinConfidence: 0.8, version: 5 }));
-    expect(new SettingsStore(storage).get()).toMatchObject({ threshold: 0.8, autoSaveMinConfidence: 0.8 });
-    // Once on version 6, 70 % is a choice again and stays.
-    const s2 = new MemoryStorage();
-    s2.setItem('birdbrain.settings.v1', JSON.stringify({ ...DEFAULT_SETTINGS, autoSaveMinConfidence: 0.7, version: 5 }));
-    const store = new SettingsStore(s2);
-    expect(store.get().autoSaveMinConfidence).toBe(0.6);
-    store.update({ autoSaveMinConfidence: 0.7 });
-    expect(new SettingsStore(s2).get().autoSaveMinConfidence).toBe(0.7);
-  });
-
-  it('never lets the auto-save threshold fall below the detection threshold', () => {
-    // Auto-saved clips start at 60 % too (DECISIONS.md #124).
-    expect(DEFAULT_SETTINGS.autoSaveMinConfidence).toBe(0.6);
-    expect(sanitize({ ...DEFAULT_SETTINGS, threshold: 0.7, autoSaveMinConfidence: 0.5 }).autoSaveMinConfidence).toBe(0.7);
-    expect(sanitize({ ...DEFAULT_SETTINGS, threshold: 0.3, autoSaveMinConfidence: 0.5 }).autoSaveMinConfidence).toBe(0.5);
+  it('auto-saves from the detection minimum itself: one number for both (DECISIONS.md #137)', () => {
+    expect(DEFAULT_SETTINGS.autoSaveMinConfidence).toBe(DEFAULT_SETTINGS.threshold);
+    // A separate, higher auto-save bar (Sabih's phone: a 65 % minimum, an 80 %+ bird not saved) follows the minimum.
+    for (const [threshold, autoSave] of [[0.65, 0.85], [0.7, 0.5], [0.3, 0.5]]) expect(sanitize({ ...DEFAULT_SETTINGS, threshold, autoSaveMinConfidence: autoSave }).autoSaveMinConfidence).toBe(threshold);
     const s = new SettingsStore(new MemoryStorage());
-    s.update({ autoSaveMinConfidence: 0.2 });
-    expect(s.get().autoSaveMinConfidence).toBe(0.6); // floored at the 60 % detection minimum
+    s.update({ autoSaveMinConfidence: 0.9 });
+    expect(s.get().autoSaveMinConfidence).toBe(s.get().threshold);
     s.update({ threshold: 0.8 });
     expect(s.get().autoSaveMinConfidence).toBe(0.8);
-    // an old store with 50 % auto-save and the migrated threshold ends at 60 %
+    // An old store moves to the migrated minimum.
     const storage = new MemoryStorage();
     storage.setItem('birdbrain.settings.v1', JSON.stringify({ threshold: 0.25, autoSaveMinConfidence: 0.5 }));
     expect(new SettingsStore(storage).get().autoSaveMinConfidence).toBe(0.6);
+    expect(migrate({ ...DEFAULT_SETTINGS, threshold: 0.6, autoSaveMinConfidence: 0.85, version: 6 }).threshold).toBe(0.6);
   });
+
 });
 
 
