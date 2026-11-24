@@ -334,6 +334,15 @@ export async function removeDetections(match: (d: DetectionRecord) => boolean, o
     await tx.objectStore('recordings').delete(id);
     await tx.objectStore('audio').delete(recAudioKey(id));
   }
+  // A recording that keeps other birds drops the removed ones from its stored summary, which Recordings groups by.
+  const removedRecs = new Set([...also, ...autoClips]);
+  for (const id of new Set(gone.map((d) => d.recordingId).filter((x): x is string => !!x && !removedRecs.has(x)))) {
+    const row = await tx.objectStore('recordings').get(id);
+    if (!row) continue;
+    const left = new Set(kept.filter((d) => d.recordingId === id).map((d) => canonicalName(d.scientific)));
+    const summary = row.summary.filter((e) => left.has(canonicalName(e.scientific)));
+    if (summary.length !== row.summary.length) await tx.objectStore('recordings').put({ ...row, summary });
+  }
   for (const name of plan.speciesClips) {
     await tx.objectStore('clips').delete(name);
     await tx.objectStore('audio').delete(clipAudioKey(name));

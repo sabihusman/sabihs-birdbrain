@@ -3624,7 +3624,8 @@ recording took only its own 3 s. Of the options he chose C: this (A) now, and a 
 - **One way to remove windows** (`removeDetections`): a sighting left with no window goes; one with windows left is
   rebuilt from them (it used to be deleted whole when its best window was in the deleted recording, leaving the other
   windows pointing at nothing). `deleteRecording` and `deleteDetectionsForRecording` use it too. A count (`dryRun`)
-  changes nothing and feeds the question.
+  changes nothing and feeds the question. A recording that keeps other birds drops the removed ones from its stored
+  summary, so Recordings no longer lists it under the removed bird.
 - **Shared list:** unchanged rules (#127): a bird no longer on this phone is taken off the shared list at the next
   sync, unless it was the phone's last bird; another device that still has it puts it back until the account-wide list (next) lands.
 - **Tests:** `tests/remove-birds.test.ts` (what goes and what stays, the rebuilt sighting, the wording), e2e "deleting

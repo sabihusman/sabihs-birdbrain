@@ -26,7 +26,8 @@ const bird = (scientific: string, common: string) => (over: Partial<DetectionRec
 const cardinal = bird('Cardinalis cardinalis', 'Northern Cardinal');
 const robin = bird('Turdus migratorius', 'American Robin');
 
-const rec = (id: string, source: RecordingRecord['source']): RecordingRecord => ({ id, createdAt: 0, name: id, durationSec: 3, sampleRate: 48000, bytes: 1, blob: new Blob(['x']), source, lat: null, lon: null, accuracy: null, summary: [], analyzedAt: 0 });
+const summaryOf = (...birds: Array<[string, string]>) => birds.map(([scientific, common], i) => ({ label: `${scientific}_${common}`, scientific, common, maxConfidence: 0.9 - i / 10, count: 1 }));
+const rec = (id: string, source: RecordingRecord['source'], summary: RecordingRecord['summary'] = []): RecordingRecord => ({ id, createdAt: 0, name: id, durationSec: 3, sampleRate: 48000, bytes: 1, blob: new Blob(['x']), source, lat: null, lon: null, accuracy: null, summary, analyzedAt: 0 });
 const clip = (scientific: string, time: number) => ({ scientific, common: scientific, blob: new Blob(['c']), sampleRate: 48000, durationSec: 3, confidence: 0.9, time, savedAt: time, lat: null, lon: null, accuracy: null, source: 'live' as const, recordingId: null });
 
 beforeEach(async () => {
@@ -36,7 +37,7 @@ beforeEach(async () => {
 describe('Remove from my birds', () => {
   it('takes every window, sighting, auto-saved clip and sound clip of the bird; other birds and hand-made recordings stay', async () => {
     await putRecording(rec('auto-c', 'autoclip'));
-    await putRecording(rec('auto-mixed', 'autoclip'));
+    await putRecording(rec('auto-mixed', 'autoclip', summaryOf(['Cardinalis cardinalis', 'Northern Cardinal'], ['Turdus migratorius', 'American Robin'])));
     await putRecording(rec('mine', 'mic'));
     await recordDetections([cardinal({ time: 0, recordingId: 'auto-c', offsetSec: 0 }), cardinal({ time: 3000 })], GAP);
     await recordDetections([cardinal({ time: 200_000, recordingId: 'auto-mixed', offsetSec: 0 }), robin({ time: 200_000, recordingId: 'auto-mixed', offsetSec: 0 })], GAP);
@@ -53,7 +54,8 @@ describe('Remove from my birds', () => {
     expect(await listSightedSpecies()).toEqual(['Turdus migratorius']);
     expect((await listDetections()).map((d) => d.scientific)).toEqual(['Turdus migratorius']);
     expect(await getRecordingMeta('auto-c')).toBeUndefined();
-    expect(await getRecordingMeta('auto-mixed')).toBeDefined(); // the robin is still in it
+    // The robin is still in it, and it is listed under the robin now, not the cardinal.
+    expect((await getRecordingMeta('auto-mixed'))?.summary.map((e) => e.scientific)).toEqual(['Turdus migratorius']);
     expect(await getRecordingMeta('mine')).toBeDefined(); // recordings made by hand are never removed
     expect(await getClipMeta('Cardinalis cardinalis')).toBeUndefined();
     expect(await getClipMeta('Turdus migratorius')).toBeDefined();
