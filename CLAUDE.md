@@ -61,6 +61,9 @@ Key modules:
   iPhones cannot (no Vibration API, switch-tick workaround closed in iOS 26.5): do not re-add it. The flash sets plain
   styles and a Web Animations fade (no CSS variables or `color-mix()`, #137); Settings › Detection › "Show me" plays it.
   Auto-save uses the confidence threshold itself (`sanitize()` sets `autoSaveMinConfidence` to `threshold`, #137).
+- Removing birds (DECISIONS.md #138): `removeSpecies` / `removeListenBirds` / `removeDetections` in `src/storage/db.ts`
+  (a sighting with windows left is rebuilt, never orphaned), the species page's "Remove from my birds", and the
+  recording Delete sheet (`src/ui/components/choice-sheet.ts`, words in `src/ui/remove-birds-text.ts`).
 - UX-audit tidy-up (DECISIONS.md #131): main pages open with `pageTitle()` (`src/ui/components/page-title.ts`; not
   Listen); the lit tab comes from `tabFor()` in `src/ui/router.ts`; the layout button
   (`src/ui/components/layout-bubble.ts`) reads "Layout: Focus" and opens a sheet appended to `<body>`; Settings has

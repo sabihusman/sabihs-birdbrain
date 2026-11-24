@@ -3782,3 +3782,62 @@ test('a model file the server did not have: the admin sees why, a member does no
     await context.close();
   }
 });
+
+test('deleting a recording can take its birds out of that listen; "Remove from my birds" takes a bird off this phone (DECISIONS.md #138)', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 740 }, permissions: ['microphone'], serviceWorkers: 'block' });
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+    localStorage.setItem('birdbrain.model.v1', 'wanted');
+    localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
+  });
+  const page = await context.newPage();
+  const listen = async () => {
+    await page.goto('./#/listen');
+    await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
+    await page.getByTestId('start-stop').click();
+    await expect(page.getByTestId('result-card').first()).toBeAttached({ timeout: 120_000 });
+    // A few more windows of the same bird, without a clip each (one auto-saved clip per bird, then only better ones).
+    await page.waitForTimeout(6000);
+    await page.getByTestId('stop').click();
+  };
+  const notSpotted = async () => {
+    await page.goto('./#/species/Acanthis%20cabaret');
+    await expect(page.getByText('You haven’t spotted it yet.')).toBeVisible();
+  };
+
+  // 1. Delete the auto-saved clip and, when asked, the rest of that listen's redpolls.
+  await listen();
+  await page.goto('./#/recordings');
+  const group = page.locator('[data-testid="recording-group"][data-species="Acanthis cabaret"]');
+  await group.locator('summary').click();
+  await group.getByTestId('recording-row').first().click();
+  await expect(page).toHaveURL(/#\/recordings\/.+/);
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  const sheet = page.getByTestId('delete-recording-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText('Delete this recording?');
+  await expect(sheet).toContainText(/The same listen heard the .*Lesser Redpoll.* \d+ more times?/);
+  await expect(sheet.getByTestId('choice-one')).toHaveText('Delete only this recording');
+  // Cancel first: nothing goes.
+  await sheet.getByTestId('choice-cancel').click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/recordings\/.+/);
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByTestId('choice-listen').click();
+  await expect(page).toHaveURL(/#\/recordings$/);
+  await notSpotted();
+
+  // 2. Listen again, then remove the bird from its own page.
+  await listen();
+  await page.goto('./#/species/Acanthis%20cabaret');
+  await page.getByTestId('remove-species').click();
+  const ask = page.getByTestId('remove-species-sheet');
+  await expect(ask).toContainText('Remove the Lesser Redpoll from your birds?');
+  // Its auto-saved clip also holds a Common Redpoll, so it stays (a recording goes only when no bird is left in it).
+  await expect(ask).toContainText(/Takes away 1 sighting (and 1 auto-saved clip )?on this phone/);
+  await ask.getByTestId('choice-remove').click();
+  await expect(page.getByText('You haven’t spotted it yet.')).toBeVisible();
+  await page.goto('./#/recordings');
+  await expect(page.locator('[data-testid="recording-group"][data-species="Acanthis cabaret"]')).toHaveCount(0);
+  await context.close();
+});

@@ -1,7 +1,9 @@
 import { shareBanner, shareBannerWanted } from '../components/share-banner';
 import { searchSpecies, type Species } from '../../model/labels';
 import { speciesColor } from '../../species/colors';
-import { listSightingsForSpecies, getRecordingMeta } from '../../storage/db';
+import { listSightingsForSpecies, getRecordingMeta, removeSpecies } from '../../storage/db';
+import { askChoice } from '../components/choice-sheet';
+import { REMOVE_SPECIES_BUTTON, speciesRemovalText } from '../remove-birds-text';
 import type { SightingRecord } from '../../storage/types';
 import type { View, ViewContext } from '../app';
 import { speciesChip } from '../components/species-chip';
@@ -276,15 +278,29 @@ export function speciesDetailView(ctx: ViewContext, scientific: string): View {
     const mapBox = el('div', { class: 'map mini' });
     // Members get the latest location and map in the ID card above; free users keep them here.
     const showLocation = !isMember(ctx.api.user);
+    const removeBtn = el('button', { class: 'btn danger small', type: 'button', 'data-testid': 'remove-species' }, REMOVE_SPECIES_BUTTON);
+    removeBtn.addEventListener('click', () => void removeThisBird(sp));
     box.replaceChildren(el('div', null,
       el('dl', { class: 'kv' }, el('dt', null, 'Sightings'), el('dd', null, `${dets.length} (${windows} analysed window${windows === 1 ? '' : 's'})`), el('dt', null, 'First seen'), el('dd', null, fmtDateTime(first.firstTime)), el('dt', null, 'Last seen'), el('dd', null, fmtDateTime(last.lastTime)), el('dt', null, 'Best confidence'), el('dd', null, pct(best.peakConfidence))),
       !showLocation ? null : located.length ? el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Latest located sighting'), locationBlock(located[located.length - 1].lat!, located[located.length - 1].lon!, { accuracy: located[located.length - 1].accuracy, fixTime: located[located.length - 1].fixTime ?? null, time: located[located.length - 1].firstTime }), mapBox) : el('p', { class: 'small muted' }, 'No detections with a position yet.'),
       recIds.length ? el('h3', null, 'Recordings') : null,
       recList,
+      el('div', { class: 'row', style: 'margin-top:12px' }, removeBtn),
     ));
     if (showLocation && located.length) {
       requestAnimationFrame(() => disposers.push(createMiniMap(mapBox, located, controller)));
     }
+  };
+
+  /** "Remove from my birds" (DECISIONS.md #138): every sighting of it on this phone, after a question that counts them. */
+  const removeThisBird = async (sp: Species) => {
+    const plan = await removeSpecies(sp.scientific, true);
+    const text = speciesRemovalText(sp.common, plan);
+    const answer = await askChoice({ title: text.title, lines: text.lines, testid: 'remove-species-sheet', choices: [{ id: 'remove', label: text.confirm, tone: 'danger' }, { id: 'cancel', label: 'Cancel', tone: 'plain' }] });
+    if (answer !== 'remove') return;
+    await removeSpecies(sp.scientific);
+    controller.emit('detections-changed', undefined);
+    build();
   };
 
   build();
