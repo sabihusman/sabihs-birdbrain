@@ -590,6 +590,9 @@ button.row-item, a.row-item, label.row-item { cursor: pointer; }
 .layout-sheet-intro { margin: 0; }
 .layout-sheet-close { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--on-panel); font: inherit; cursor: pointer; }
 .layout-sheet-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* A question with several answers (src/ui/components/choice-sheet.ts, DECISIONS.md #138). */
+.choice-sheet-buttons { margin-top: var(--space-1); }
+.choice-sheet .btn.block { min-height: 44px; white-space: normal; }
 .layout-sheet-rows { display: flex; flex-direction: column; gap: var(--space-2); }
 .layout-bubble-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 60px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .layout-bubble-row.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }

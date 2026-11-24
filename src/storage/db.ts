@@ -155,14 +155,12 @@ export async function listRecordings(): Promise<RecordingMeta[]> {
   return all.reverse().map((r) => metaOf(r));
 }
 
+/**
+ * Delete a recording, its audio and the birds found in it. A sighting that also has windows outside the recording (a
+ * live sighting whose best window was auto-saved) keeps those windows, re-counted (DECISIONS.md #138).
+ */
 export async function deleteRecording(id: string): Promise<void> {
-  const db = await getDB();
-  const tx = db.transaction(['recordings', 'audio', 'detections', 'sightings'], 'readwrite');
-  await tx.objectStore('recordings').delete(id);
-  await tx.objectStore('audio').delete(recAudioKey(id));
-  for (const key of await tx.objectStore('detections').index('by-recording').getAllKeys(id)) await tx.objectStore('detections').delete(key);
-  for (const key of await tx.objectStore('sightings').index('by-recording').getAllKeys(id)) await tx.objectStore('sightings').delete(key);
-  await tx.done;
+  await removeDetections((d) => d.recordingId === id, { alsoRecordings: [id] });
 }
 
 // Detections and sightings ----------------------------------------------------
@@ -249,13 +247,132 @@ export async function listDetectionsForRecording(recordingId: string): Promise<D
   return (await db.getAllFromIndex('detections', 'by-recording', recordingId)).map(renamed);
 }
 
-/** Remove a recording's detections and sightings (before a re-analysis). */
+/** Remove a recording's detections and sightings (before a re-analysis). The recording itself stays. */
 export async function deleteDetectionsForRecording(recordingId: string): Promise<void> {
+  await removeDetections((d) => d.recordingId === recordingId, { keepRecordings: [recordingId] });
+}
+
+// Removing birds (DECISIONS.md #138) ----------------------------------------------
+
+/** What a removal takes away, counted before it runs so the question can say so. */
+export interface RemovalPlan {
+  /** The birds it touches, under the running model's names. */
+  birds: string[];
+  /** Per-window detections removed. */
+  detections: number;
+  /** Sightings left with no window at all, so removed (a sighting with windows left is re-counted instead). */
+  sightings: number;
+  /** Auto-saved 3 s recordings left without any bird, so removed with their audio. Recordings made by hand stay. */
+  autoClips: string[];
+  /** Species sound clips (members' ID card) removed, by stored name. */
+  speciesClips: string[];
+}
+
+interface RemoveOptions {
+  /** Count only; change nothing. */
+  dryRun?: boolean;
+  /** Recordings deleted outright with their audio (the one being deleted). */
+  alsoRecordings?: string[];
+  /** Recordings that stay even when no bird is left in them (one about to be re-analysed). */
+  keepRecordings?: string[];
+  /** Species clips to remove with the detections. */
+  clipMatch?: (clip: ClipMeta) => boolean;
+}
+
+/**
+ * Remove every detection `match` accepts, in one transaction: sightings left empty go, sightings with windows left are
+ * rebuilt from those windows, and an auto-saved clip left with no bird goes too, so nothing points at a missing row.
+ */
+export async function removeDetections(match: (d: DetectionRecord) => boolean, opts: RemoveOptions = {}): Promise<RemovalPlan> {
   const db = await getDB();
-  const tx = db.transaction(['detections', 'sightings'], 'readwrite');
-  for (const k of await tx.objectStore('detections').index('by-recording').getAllKeys(recordingId)) await tx.objectStore('detections').delete(k);
-  for (const k of await tx.objectStore('sightings').index('by-recording').getAllKeys(recordingId)) await tx.objectStore('sightings').delete(k);
+  // One read-write transaction even for a count, so the count and the removal see the same rows.
+  const tx = db.transaction(['recordings', 'audio', 'detections', 'sightings', 'clips'], 'readwrite');
+  const all = await tx.objectStore('detections').getAll();
+  const gone = all.filter(match);
+  const goneIds = new Set(gone.map((d) => d.id));
+  const kept = all.filter((d) => !goneIds.has(d.id));
+
+  const touchedSightings = new Set(gone.map((d) => d.sightingId).filter((x): x is string => !!x));
+  const keptBySighting = new Map<string, DetectionRecord[]>();
+  for (const d of kept) if (d.sightingId && touchedSightings.has(d.sightingId)) keptBySighting.set(d.sightingId, [...(keptBySighting.get(d.sightingId) ?? []), d]);
+  const emptySightings = [...touchedSightings].filter((id) => !keptBySighting.has(id));
+
+  const keep = new Set(opts.keepRecordings ?? []);
+  const also = new Set(opts.alsoRecordings ?? []);
+  const stillUsed = new Set(kept.map((d) => d.recordingId).filter((x): x is string => !!x));
+  const autoClips: string[] = [];
+  for (const id of new Set(gone.map((d) => d.recordingId).filter((x): x is string => !!x))) {
+    if (keep.has(id) || also.has(id) || stillUsed.has(id)) continue;
+    if ((await tx.objectStore('recordings').get(id))?.source === 'autoclip') autoClips.push(id);
+  }
+  const clips = opts.clipMatch ? (await tx.objectStore('clips').getAll()).map((c) => metaOf(c)).filter(opts.clipMatch) : [];
+  const plan: RemovalPlan = {
+    birds: [...new Set(gone.map((d) => canonicalName(d.scientific)))].sort((a, b) => a.localeCompare(b)),
+    detections: gone.length,
+    sightings: emptySightings.length,
+    autoClips,
+    speciesClips: clips.map((c) => c.scientific),
+  };
+  if (opts.dryRun) {
+    await tx.done;
+    return plan;
+  }
+
+  const detections = tx.objectStore('detections');
+  const sightings = tx.objectStore('sightings');
+  for (const d of gone) await detections.delete(d.id);
+  for (const id of emptySightings) await sightings.delete(id);
+  for (const [id, rest] of keptBySighting) {
+    const [first, ...others] = rest.slice().sort((a, b) => a.time - b.time);
+    const rebuilt = sightingFromDetection(first, id);
+    for (const d of others) applyDetection(rebuilt, d);
+    await sightings.put(rebuilt);
+  }
+  // Rows from before DB version 3 have no sighting link: their recording's sightings go with the recording.
+  for (const id of also) for (const key of await sightings.index('by-recording').getAllKeys(id)) if (!keptBySighting.has(key)) await sightings.delete(key);
+  for (const id of [...also, ...autoClips]) {
+    await tx.objectStore('recordings').delete(id);
+    await tx.objectStore('audio').delete(recAudioKey(id));
+  }
+  // A recording that keeps other birds drops the removed ones from its stored summary, which Recordings groups by.
+  const removedRecs = new Set([...also, ...autoClips]);
+  for (const id of new Set(gone.map((d) => d.recordingId).filter((x): x is string => !!x && !removedRecs.has(x)))) {
+    const row = await tx.objectStore('recordings').get(id);
+    if (!row) continue;
+    const left = new Set(kept.filter((d) => d.recordingId === id).map((d) => canonicalName(d.scientific)));
+    const summary = row.summary.filter((e) => left.has(canonicalName(e.scientific)));
+    if (summary.length !== row.summary.length) await tx.objectStore('recordings').put({ ...row, summary });
+  }
+  for (const name of plan.speciesClips) {
+    await tx.objectStore('clips').delete(name);
+    await tx.objectStore('audio').delete(clipAudioKey(name));
+  }
   await tx.done;
+  return plan;
+}
+
+/** "Remove from my birds" on a species page: every window of the bird on this phone, under any of its names. */
+export function removeSpecies(scientific: string, dryRun = false): Promise<RemovalPlan> {
+  const names = new Set(storedNames(scientific));
+  return removeDetections((d) => names.has(d.scientific), { dryRun, clipMatch: (c) => names.has(c.scientific) });
+}
+
+/**
+ * Deleting a recording can also take the same birds out of the listen it came from (Sabih, Nov 24: birds from a
+ * video kept showing after their recordings were deleted). Only live listening has such a listen; a recording made
+ * or imported on its own has nothing else. The recording itself is left to `deleteRecording`.
+ */
+export async function removeListenBirds(recordingId: string, dryRun = false): Promise<RemovalPlan> {
+  const db = await getDB();
+  const own = await db.getAllFromIndex('detections', 'by-recording', recordingId);
+  const live = own.filter((d) => d.source === 'live');
+  const sessions = new Set(live.map((d) => d.sessionId));
+  const names = new Set(live.flatMap((d) => storedNames(canonicalName(d.scientific))));
+  if (sessions.size === 0) return { birds: [], detections: 0, sightings: 0, autoClips: [], speciesClips: [] };
+  const match = (d: DetectionRecord) => d.recordingId !== recordingId && d.source === 'live' && sessions.has(d.sessionId) && names.has(d.scientific);
+  // The species clip goes when it was cut from this listen: its window is one of the windows removed.
+  const times = new Set((await db.getAll('detections')).filter((d) => match(d) || d.recordingId === recordingId).map((d) => `${d.scientific}\u0000${d.time}`));
+  return removeDetections(match, { dryRun, keepRecordings: [recordingId], clipMatch: (c) => times.has(`${c.scientific}\u0000${c.time}`) });
 }
 
 export async function countDetections(): Promise<number> {

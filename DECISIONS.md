@@ -3602,3 +3602,31 @@ Nov 24, 2026. Sabih: a bird found on Listen did not reach Recordings, and "the f
 - **Tests:** `tests/settings.test.ts` (one number for both, old stores move), `tests/bird-alert.test.ts`
   (`withAlpha`), e2e "a bird is found" (the preview's tint and edge, gone within 3 s; the same bird alerts once, every
   alert is one flash and one buzz) and "extra text folds" (the new switch line).
+
+## 138. Removing birds yourself: "Remove from my birds", and a recording's listen
+
+Nov 24, 2026. Sabih: birds heard from YouTube videos while testing V3.0 stayed on the Species list after he deleted their
+recordings. A sighting is kept apart from recordings (most windows of a listen have no recording), so deleting a
+recording took only its own 3 s. Of the options he chose C: this (A) now, and a bird list per account across devices
+(B) next.
+
+- **Species page › Your sightings › "Remove from my birds"** (`removeSpecies` in `src/storage/db.ts`): every window
+  of the bird on this phone under any of its names (#136), its sightings, its member sound clip, and each auto-saved
+  clip left with no bird in it. Recordings made or imported by hand stay (analysing one again can find it again). A
+  sheet asks first and counts what goes ("Takes away 3 sightings and 2 auto-saved clips and its sound clip on this
+  phone").
+- **Deleting a recording** asks one question (`src/ui/components/choice-sheet.ts`, the Listen layout sheet's look,
+  instead of `confirm()`). When the recording came from live listening and that listen heard the same birds at other
+  times (`removeListenBirds`: same `sessionId`, same birds under any of their names), it offers "Delete it and the rest
+  of that listen's <birds>", "Delete only this recording" or Cancel, saying how many more times and which clips go. A
+  recording made or imported on its own has no listen behind it and gets the plain question. Words in
+  `src/ui/remove-birds-text.ts`.
+- **One way to remove windows** (`removeDetections`): a sighting left with no window goes; one with windows left is
+  rebuilt from them (it used to be deleted whole when its best window was in the deleted recording, leaving the other
+  windows pointing at nothing). `deleteRecording` and `deleteDetectionsForRecording` use it too. A count (`dryRun`)
+  changes nothing and feeds the question. A recording that keeps other birds drops the removed ones from its stored
+  summary, so Recordings no longer lists it under the removed bird.
+- **Shared list:** unchanged rules (#127): a bird no longer on this phone is taken off the shared list at the next
+  sync, unless it was the phone's last bird; another device that still has it puts it back until the account-wide list (next) lands.
+- **Tests:** `tests/remove-birds.test.ts` (what goes and what stays, the rebuilt sighting, the wording), e2e "deleting
+  a recording can take its birds out of that listen; …".

@@ -6,7 +6,9 @@ import { OCCLUSION_GRIDS } from '../../model/occlusion';
 import { chosenButtonText, estimateText, planWhy, RESOLUTION_NAME, whyPlanNote } from '../why-plan';
 import { selectDetections, type Score } from '../../model/postprocess';
 import { speciesColor } from '../../species/colors';
-import { deleteDetectionsForRecording, deleteRecording, getRecording, listDetectionsForRecording, listRecordings, newId, putRecording, recordDetections } from '../../storage/db';
+import { deleteDetectionsForRecording, deleteRecording, getRecording, listDetectionsForRecording, listRecordings, newId, putRecording, recordDetections, removeListenBirds } from '../../storage/db';
+import { askChoice } from '../components/choice-sheet';
+import { DELETE_RECORDING_ONLY, DELETE_RECORDING_TITLE, listenRemovalText } from '../remove-birds-text';
 import type { DetectionRecord, RecordingRecord } from '../../storage/types';
 import { downloadBlob } from '../../export/download';
 import type { View, ViewContext } from '../app';
@@ -456,8 +458,19 @@ export function recordingDetailView(ctx: ViewContext, id: string): View {
     cancelBtn.addEventListener('click', () => cancelCurrent?.());
     exportBtn.addEventListener('click', () => downloadBlob(rec.blob, `${rec.name.replace(/[^\w.-]+/g, '_')}.wav`));
     deleteBtn.addEventListener('click', async () => {
-      if (!confirm('Delete this recording and its detections?')) return;
+      // Deleting a recording can also take its birds out of the listen it came from (DECISIONS.md #138).
+      const plan = await removeListenBirds(id, true).catch(() => null);
+      const names = (plan?.birds ?? []).map((sci) => controller.speciesByScientific(sci)?.common ?? sci);
+      let answer: string | null;
+      if (plan && plan.detections > 0) {
+        const text = listenRemovalText(plan, names);
+        answer = await askChoice({ title: DELETE_RECORDING_TITLE, lines: text.lines, testid: 'delete-recording-sheet', choices: [{ id: 'listen', label: text.both, tone: 'danger' }, { id: 'one', label: text.one, tone: 'danger' }, { id: 'cancel', label: 'Cancel', tone: 'plain' }] });
+      } else {
+        answer = await askChoice({ title: DELETE_RECORDING_TITLE, lines: DELETE_RECORDING_ONLY.lines, testid: 'delete-recording-sheet', choices: [{ id: 'one', label: DELETE_RECORDING_ONLY.confirm, tone: 'danger' }, { id: 'cancel', label: 'Cancel', tone: 'plain' }] });
+      }
+      if (answer !== 'listen' && answer !== 'one') return;
       cancelCurrent?.();
+      if (answer === 'listen') await removeListenBirds(id);
       await deleteRecording(id);
       controller.emit('detections-changed', undefined);
       location.hash = hrefFor({ name: 'recordings' });
