@@ -376,9 +376,9 @@ export function listenView(ctx: ViewContext): View {
     const st = listenStatus(controller);
     const text = STATE_TEXT[st.status];
     const backend = controller.inference.getStatus().backend;
-    // BirdNET+ V3.0 (admin test, DECISIONS.md #133) says so on the card, so the admin always knows which model is listening.
+    // BirdNET+ V3.0 says so on the card (DECISIONS.md #133, #136), so it is clear which model is listening.
     const v3 = controller.modelId === 'v3.0';
-    const engine = v3 ? 'V3.0 test' : backend;
+    const engine = v3 ? 'V3.0' : backend;
     cardPillText.textContent = st.status === 'ready' && backend ? `${st.pill} · ${engine}` : st.pill;
     if (credit.dataset.model !== controller.modelId) {
       credit.dataset.model = controller.modelId;
@@ -676,10 +676,12 @@ export function listenView(ctx: ViewContext): View {
             onSignUp: () => (location.hash = hrefFor({ name: 'signup' })),
             onSignIn: () => (location.hash = hrefFor({ name: 'signin' })),
             onTryBirdAmp: () => settings.update({ listenLayout: 'birdamp' }),
+            onUseSmallerModel: () => settings.update({ birdnetModel: 'v2.4' }),
           });
           removeStrip();
         },
         () => (wnStrip = null),
+        entry.icon,
       );
       root.prepend(wnStrip);
     });

@@ -18,7 +18,7 @@ async function main() {
   const db = openDatabase(config.DATABASE_PATH);
   await migrateAuth(db, config);
   const auth = createAuth(db, config);
-  const labels = loadLabels(config.LABELS_PATH);
+  const labels = loadLabels(config.LABELS_PATH, config.LABELS_V3_PATH);
   const mailer = withSendTimeout(config.MAIL_TRANSPORT === 'smtp' ? createSmtpMailer(config.SMTP_USER!, config.SMTP_APP_PASSWORD!, config.MAIL_FROM ?? `Sabih's Birdbrain <${config.SMTP_USER}>`) : createConsoleMailer());
   const costs = createAskCostStore(db, { priceOverrides: { inputPerM: config.GEMINI_PRICE_IN, outputPerM: config.GEMINI_PRICE_OUT } });
   const providerUsage = createProviderUsageStore(db);

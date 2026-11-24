@@ -849,6 +849,8 @@ test('approved member (cached session, API unreachable) gets the ID card, a clip
     // Re-runs on every navigation; the flag lets the test simulate a sign-out.
     if (sessionStorage.getItem('e2e-signed-out')) return;
     localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'member@example.com', name: 'member', status: 'approved', role: 'member' } }));
+    // This test is about member features with V2.4's names; V3.0 has its own test (DECISIONS.md #136).
+    localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ ...JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}'), version: 7, birdnetModel: 'v2.4' }));
   });
   await page.goto('./#/recordings');
   await expect(page.getByTestId('model-status')).toContainText('Model ready', { timeout: 200_000 });
@@ -1257,7 +1259,7 @@ test('Settings rows: the admin delete row is disabled, and the folds fit 320 px 
   await expect(page.getByTestId('see-captions')).toContainText('Dashed box: the 3 s being analysed.');
   await noScroll('pipeline open at 320px');
   await page.getByTestId('listen-help-link').click();
-  await expect(page.getByTestId('help-steps')).toContainText('A neural network scores all 6,522 classes');
+  await expect(page.getByTestId('help-steps')).toContainText('A neural network scores every class it knows');
   await expect(page.getByTestId('help-steps')).toContainText('It can’t separate overlapping calls or count birds.');
   await page.goto('./#/listen');
   // The summary is a real tap target and keeps the focus ring.
@@ -2778,7 +2780,8 @@ test('BirdAmp: members only; the player listens, pauses (clock held, same birds)
   await expect(page.getByTestId('model-status')).toHaveText('Live');
   const rows = page.getByTestId('ba-row');
   await expect(rows.first()).toBeVisible({ timeout: 90_000 });
-  await expect(rows.first()).toContainText(/^1\. .+Redpoll/);
+  // "Lesser Redpoll" with V2.4, "Redpoll" with V3.0 (a member's default, DECISIONS.md #136).
+  await expect(rows.first()).toContainText(/^1\. (.+ )?Redpoll/);
   await expect(rows.first()).toContainText(/best \d+% · Heard (once|\d+ times) · \d/);
   // Winamp's playlist: the bird in the marquee is the current row (white on navy); the total box sits in the foot.
   await expect(rows.first()).toHaveClass(/current/);
@@ -3562,73 +3565,117 @@ test('UX-audit tidy-up: page headings, the status said once, Settings jump butto
   await wider.close();
 });
 
-test('BirdNET+ V3.0: only the admin sees the choice; switching loads V3.0, the test clip is a Redpoll, and back to V2.4 works (DECISIONS.md #133)', async ({ browser }) => {
+test('BirdNET+ V3.0 for registered accounts: signed out keeps V2.4; a member or waiting account loads V3.0, the test clip is a Redpoll, and the smaller V2.4 is one tap away (DECISIONS.md #133, #136)', async ({ browser }) => {
   // Needs the weights in models/birdnet-v3.0/ (not in git): run scripts/fetch-model-v3.sh first; CI does.
   expect(fs.existsSync('models/birdnet-v3.0/audio.onnx'), 'run scripts/fetch-model-v3.sh').toBe(true);
-  const as = (role: 'admin' | 'member') =>
+  const as = (status: 'approved' | 'pending' | null) =>
     browser.newContext({ serviceWorkers: 'block' }).then(async (context) => {
       await context.route(/\/v1\//, (route) => route.abort());
-      await context.addInitScript((r) => {
-        localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'x@example.com', name: 'Sabih', status: 'approved', role: r } }));
-        if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+      await context.addInitScript((st) => {
+        if (st) localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'x@example.com', name: 'Sabih', status: st, role: 'member' } }));
+        // A phone that saved settings before V3.0 became the default (version 6, V2.4 stored): it moves to V3.0 once.
+        if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ version: 6, listenLayout: 'consolidated', locationMode: 'off', birdnetModel: 'v2.4' }));
         localStorage.setItem('birdbrain.model.v1', 'wanted');
         localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
-      }, role);
+      }, status);
       return context;
     });
 
-  // A member never sees the choice, and a stored V3.0 runs V2.4 for them.
-  const member = await as('member');
-  const mp = await member.newPage();
-  await mp.addInitScript(() => localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off', birdnetModel: 'v3.0' })));
-  await mp.goto('./#/settings');
-  await expect(mp.getByTestId('page-title')).toHaveText('Settings');
-  await expect(mp.getByTestId('model-choice')).toBeHidden();
-  await mp.goto('./#/listen');
-  await expect(mp.getByTestId('card-model-status')).toContainText('Model ready', { timeout: 200_000 });
-  await expect(mp.getByTestId('card-model-status')).not.toContainText('V3.0');
-  await expect(mp.getByTestId('birdnet-credit')).toContainText('CC BY-NC-SA 4.0');
-  await member.close();
-
-  // The admin: the choice is there, V2.4 picked.
-  const admin = await as('admin');
-  const page = await admin.newPage();
-  const v3Requests: string[] = [];
-  page.on('request', (r) => {
-    if (r.url().includes('birdnet-v3.0/')) v3Requests.push(r.url());
+  // Signed out: no choice, V2.4 (78 MB), its credit, and nothing of V3.0's model is fetched.
+  const guest = await as(null);
+  const gp = await guest.newPage();
+  const guestV3: string[] = [];
+  gp.on('request', (r) => {
+    if (/birdnet-v3\.0\/(audio|geo)\.onnx|labels\.json/.test(r.url()) && r.url().includes('v3.0')) guestV3.push(r.url());
   });
-  await page.goto('./#/settings');
-  const choice = page.getByTestId('model-choice');
-  await expect(choice).toBeVisible();
-  await expect(page.getByTestId('model-v2.4')).toBeChecked();
-  expect(v3Requests, 'nothing of V3.0 is fetched before it is picked').toEqual([]);
-  // Pick V3.0: the note explains the new names, and the model loads (this phone asked for a model before).
-  await page.getByTestId('model-v3.0').check();
-  await expect(page.getByTestId('model-note')).toContainText('Astur cooperii');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').birdnetModel)).toBe('v3.0');
+  await gp.goto('./#/settings');
+  await expect(gp.getByTestId('model-choice')).toBeHidden();
+  await gp.goto('./#/listen');
+  await expect(gp.getByTestId('card-model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(gp.getByTestId('card-model-status')).not.toContainText('V3.0');
+  await expect(gp.getByTestId('birdnet-credit')).toContainText('CC BY-NC-SA 4.0');
+  expect(guestV3, 'a signed-out phone fetches nothing of V3.0').toEqual([]);
+  await guest.close();
+
+  // Waiting for approval: V3.0 too, and the choice is there.
+  const pending = await as('pending');
+  const pp = await pending.newPage();
+  await pp.goto('./#/listen');
+  await expect(pp.getByTestId('card-model-status')).toHaveText('Model ready · V3.0', { timeout: 200_000 });
+  await pp.goto('./#/settings');
+  await expect(pp.getByTestId('model-v3.0')).toBeChecked();
+  await pending.close();
+
+  // An approved member: V3.0 at start-up, the sample is a Redpoll, credit Apache 2.0.
+  const member = await as('approved');
+  const page = await member.newPage();
   await page.goto('./#/listen');
-  await expect(page.getByTestId('card-model-status')).toHaveText('Model ready · V3.0 test', { timeout: 200_000 });
+  await expect(page.getByTestId('card-model-status')).toHaveText('Model ready · V3.0', { timeout: 200_000 });
   await expect(page.getByTestId('birdnet-credit')).toContainText('BirdNET+ V3.0');
   await expect(page.getByTestId('birdnet-credit')).toContainText('Apache 2.0');
-  expect(v3Requests.some((u) => u.endsWith('labels.json'))).toBe(true);
-  expect(v3Requests.some((u) => u.endsWith('audio.onnx'))).toBe(true);
-  expect(v3Requests.some((u) => /ort-wasm-simd-threaded-[\d.]+\.wasm$/.test(u))).toBe(true);
-  // The fake microphone plays BirdNET's sample: V3.0 calls it "Redpoll" (V2.4 says "Lesser Redpoll").
   await page.getByTestId('start-stop').click();
-  await expect(page.getByTestId('results').getByTestId('result-card').first()).toContainText('Redpoll', { timeout: 120_000 });
-  await expect(page.getByTestId('results').getByTestId('result-card').first()).toContainText('Acanthis flammea');
+  await expect(page.getByTestId('results').getByTestId('result-card').first()).toContainText('Acanthis flammea', { timeout: 120_000 });
   // Switching while listening waits for Stop.
   await page.goto('./#/settings');
+  await expect(page.getByTestId('model-choice')).toBeVisible();
+  await expect(page.getByTestId('model-v3.0')).toBeChecked();
+  await expect(page.getByTestId('model-note')).toContainText('Birds saved with either model show under one name');
   await page.getByTestId('model-v2.4').check();
   await expect(page.getByTestId('model-note')).toContainText('Switches when you stop listening.');
   await page.goto('./#/listen');
   await page.getByTestId('stop').click();
-  // Back on V2.4: its model loads again, from the phone's cache, and its credit returns.
+  // The smaller V2.4: its model loads (from the phone), its credit returns, and the choice is kept after a reload.
   await expect(page.getByTestId('card-model-status')).toContainText('Model ready', { timeout: 200_000 });
   await expect(page.getByTestId('card-model-status')).not.toContainText('V3.0');
   await expect(page.getByTestId('birdnet-credit')).toContainText('CC BY-NC-SA 4.0');
+  await page.reload();
+  await expect(page.getByTestId('card-model-status')).toContainText('Model ready', { timeout: 200_000 });
+  await expect(page.getByTestId('card-model-status')).not.toContainText('V3.0');
+  // The Redpoll saved by V3.0 shows under V2.4's name on its page (Acanthis flammea is "Common Redpoll" in V2.4).
+  await page.goto('./#/species/Acanthis%20flammea');
+  await expect(page.locator('main')).toContainText('Common Redpoll');
   expect(await overflowOf(page)).toBeLessThanOrEqual(0);
-  await admin.close();
+  await member.close();
+});
+
+test('the new bird model is announced once to registered accounts, with "Use the smaller model"; never to signed-out visitors (DECISIONS.md #136)', async ({ browser }) => {
+  for (const status of ['approved', 'pending', null] as const) {
+    const context = await browser.newContext({ viewport: { width: 375, height: 740 }, serviceWorkers: 'block' });
+    await context.route(/\/v1\//, (route) => route.abort());
+    await context.route(/\/models\/birdnet-v3\.0\/.*\.(onnx|wasm)$/, (route) => route.abort()); // the strip does not need the model
+    await context.addInitScript((st) => {
+      if (st) localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e2e', expiresAt: null, user: { id: 'u1', email: 'x@example.com', name: 'Sabih', status: st, role: 'member' } }));
+      if (!localStorage.getItem('birdbrain.settings.v1')) localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+    }, status);
+    const page = await context.newPage();
+    await page.clock.setFixedTime(new Date('2026-11-25T12:00:00'));
+    await page.goto('./#/listen');
+    const strip = page.getByTestId('whats-new-strip');
+    if (status === null) {
+      // Signed out: the strip that runs for them is BirdAmp's, never the bird model's.
+      await expect(strip).toContainText('BirdAmp', { timeout: 30_000 });
+      await expect(strip).not.toContainText('bird model');
+      await context.close();
+      continue;
+    }
+    await expect(strip).toHaveText(/New: a more accurate bird model/, { timeout: 30_000 });
+    await page.getByTestId('whats-new-see').click();
+    const cards = page.getByTestId('whats-new-cards');
+    await expect(cards).toContainText('A new, more accurate bird model');
+    await expect(cards).toContainText('9,800 birds');
+    await page.getByTestId('whats-new-next').click();
+    await expect(cards).toContainText('Prefer the smaller one?');
+    await expect(cards).toContainText('187 MB');
+    await expect(page.getByTestId('whats-new-ok')).toHaveText('Got it');
+    await page.getByTestId('whats-new-smaller').click();
+    await expect(cards).toHaveCount(0);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('birdbrain.settings.v1') ?? '{}').birdnetModel)).toBe('v2.4');
+    // Once: the next visit shows the next announcement instead (BirdAmp's), not this one again.
+    await page.reload();
+    await expect(strip).toContainText('BirdAmp', { timeout: 30_000 });
+    await expect(strip).not.toContainText('bird model');
+    await context.close();
+  }
 });
 
 async function overflowOf(page: Page): Promise<number> {
@@ -3696,7 +3743,8 @@ test('a model file the server did not have: the admin sees why, a member does no
     });
     await context.addInitScript((r) => {
       localStorage.setItem('birdbrain.auth.v1', JSON.stringify({ token: 'e', expiresAt: null, user: { id: 'u', email: 'u@example.com', name: 'U', status: 'approved', role: r } }));
-      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ listenLayout: 'consolidated', locationMode: 'off' }));
+      // V2.4's model.json is the file this test removes, so both accounts run V2.4 (DECISIONS.md #136).
+      localStorage.setItem('birdbrain.settings.v1', JSON.stringify({ version: 7, birdnetModel: 'v2.4', listenLayout: 'consolidated', locationMode: 'off' }));
       localStorage.setItem('birdbrain.model.v1', 'wanted');
       localStorage.setItem('birdbrain.whatsnew.v1', JSON.stringify({ seen: [], muted: true, opened: null }));
     }, role);

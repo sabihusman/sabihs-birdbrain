@@ -11,7 +11,8 @@ import { ACOUSTIC_MODEL_FILE, LABELS_JSON, MODEL_CACHE_NAME, MODEL_TOTAL_BYTES, 
 import { MODEL_BASE_URL, MODEL_DOWNLOAD_ERROR } from '../model/model-source';
 import { BrowserUnsupportedError, checkBrowserSupport, describeModelFailure } from './browser-support';
 import { lookupOnly, parseLabels, parseV3Labels, type Species } from '../model/labels';
-import { V3_AUDIO_FILE, V3_BASE_URL, V3_CACHE_NAME, V3_LABELS_JSON, V3_TOTAL_BYTES, type ModelId } from '../model/v3';
+import { V3_AUDIO_FILE, V3_BASE_URL, V3_CACHE_NAME, V3_LABELS_JSON, V3_NAMES_JSON, V3_TOTAL_BYTES, type ModelId } from '../model/v3';
+import { buildNameView, canonicalName, IDENTITY_VIEW, setCommonNames, setNameView } from '../species/names';
 import { selectDetections, type Score } from '../model/postprocess';
 import { InferenceClient, type ModelStatus } from '../model/worker-client';
 import { Emitter } from '../shared/emitter';
@@ -157,6 +158,7 @@ export class AppController extends Emitter<ControllerEvents> {
   /** V3.0's maps for the worker, from its labels.json. */
   private v3Maps: { geoIndex: Int32Array; soundClass: Uint8Array } | null = null;
   private labelsLoaded = false;
+  private knowsBothModels = false;
   /** Counts switches, so a load the switch cut short is not reported as a failed download. */
   private modelSwitches = 0;
   private sessionId = newId();
@@ -242,8 +244,19 @@ export class AppController extends Emitter<ControllerEvents> {
     return this.species[i];
   }
 
+  /** The species for a stored name, under the running model's name when the bird was renamed (DECISIONS.md #136). */
   speciesByScientific(name: string): Species | undefined {
-    return this.speciesByName.get(name);
+    return this.speciesByName.get(canonicalName(name)) ?? this.speciesByName.get(name);
+  }
+
+  /**
+   * Signed-in phones can hold birds saved with either model, so they also load the other model's names (about
+   * 200 KB). Set by main.ts from the account, like setModel().
+   */
+  setKnowsBothModels(on: boolean): void {
+    if (on === this.knowsBothModels) return;
+    this.knowsBothModels = on;
+    if (this.labelsLoaded) void this.loadLabels();
   }
 
   /** Whether the welcome layer is up (first visit, nothing chosen yet). */
@@ -341,17 +354,20 @@ export class AppController extends Emitter<ControllerEvents> {
   private async loadLabels(): Promise<void> {
     try {
       const v24 = parseLabels(await this.fetchJson<string[]>(LABELS_JSON));
-      let species = v24;
-      let extra: Species[] = [];
-      this.v3Maps = null;
-      if (this.model === 'v3.0') {
-        const v3 = parseV3Labels(await this.fetchJson<{ classes: Array<[string, string, string, number]> }>(V3_LABELS_JSON));
-        species = v3.species;
-        this.v3Maps = { geoIndex: v3.geoIndex, soundClass: v3.soundClass };
-        extra = lookupOnly(v24, new Map(species.map((s) => [s.scientific, s])));
-      }
+      const v3on = this.model === 'v3.0';
+      // The other model's names are needed when this phone can hold birds saved with it (DECISIONS.md #136).
+      const both = v3on || this.knowsBothModels;
+      const [v3, names] = both
+        ? await Promise.all([this.fetchJson<{ classes: Array<[string, string, string, number]> }>(V3_LABELS_JSON).then(parseV3Labels), this.fetchJson<Record<string, string>>(V3_NAMES_JSON)])
+        : [null, null];
+      const species = v3on && v3 ? v3.species : v24;
+      this.v3Maps = v3on && v3 ? { geoIndex: v3.geoIndex, soundClass: v3.soundClass } : null;
+      const current = new Map(species.map((s) => [s.scientific, s]));
+      const other = v3on ? v24 : (v3?.species ?? []);
       this.species = species;
-      this.speciesByName = new Map([...extra, ...species].map((s) => [s.scientific, s]));
+      this.speciesByName = new Map([...lookupOnly(other, current), ...species].map((s) => [s.scientific, s]));
+      setNameView(names ? buildNameView(names, v3on) : IDENTITY_VIEW);
+      setCommonNames((s) => this.speciesByName.get(s)?.common);
       this.emit('species-loaded', this.species);
     } catch (e) {
       this.emit('notice', { kind: 'error', text: `Could not load the species list: ${(e as Error).message}` });

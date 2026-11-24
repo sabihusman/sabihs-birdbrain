@@ -2,7 +2,10 @@
  * Make public/models/birdnet-v3.0/labels.json, the species list the app uses with BirdNET+ V3.0 (DECISIONS.md #133),
  * from the two label files in Zenodo record 24362980:
  *
- *   npx tsx scripts/prepare-labels-v3.mts <BirdNET+_V3.0_Global_12K_Labels.csv> <BirdNET+_Geomodel_V3.0.5_Global_14K_Labels.txt>
+ *   npx tsx scripts/prepare-labels-v3.mts
+ *
+ * It reads `BirdNET+_V3.0_Global_12K_Labels.csv` and `BirdNET+_Geomodel_V3.0.5_Global_14K_Labels.txt` (the latter from
+ * inside the geomodel zip) from .downloads/birdnet-v3.0/ (gitignored); put them there first.
  *
  * The CSV has one row per audio-model output (8 MB with names in 36 languages); the app keeps four fields per row:
  * scientific name, English common name, taxon group (Aves, Insecta, …) and the row's index in the location model's
@@ -11,30 +14,11 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { parseCsv, readSource } from './csv.mts';
 
-/** RFC 4180 CSV: quoted fields may hold commas, quotes ("") and line breaks. */
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  // One field and what ends it: a comma, a line break, or the end of the text.
-  const field = /("(?:[^"]|"")*"|[^,\r\n]*)(,|\r?\n|$)/g;
-  for (let m = field.exec(text); m !== null && m.index < text.length; m = field.exec(text)) {
-    const raw = m[1];
-    row.push(raw.startsWith('"') ? raw.slice(1, -1).replaceAll('""', '"') : raw);
-    if (m[2] !== ',') {
-      rows.push(row);
-      row = [];
-    }
-  }
-  return rows.filter((r) => r.length > 1 || r[0] !== '');
-}
-
-const [csvPath, geoPath] = process.argv.slice(2);
-if (!csvPath || !geoPath) {
-  console.error('usage: npx tsx scripts/prepare-labels-v3.mts <12K_Labels.csv> <Geomodel_14K_Labels.txt>');
-  process.exit(2);
-}
-const [header, ...body] = parseCsv(fs.readFileSync(csvPath, 'utf8').replace(/^\uFEFF/, ''));
+const csvPath = 'BirdNET+_V3.0_Global_12K_Labels.csv';
+const geoPath = 'BirdNET+_Geomodel_V3.0.5_Global_14K_Labels.txt';
+const [header, ...body] = parseCsv(readSource(csvPath));
 const col = (name: string) => {
   const i = header.indexOf(name);
   if (i < 0) throw new Error(`no column ${name} in ${csvPath}`);
@@ -43,7 +27,7 @@ const col = (name: string) => {
 const [ix, id, sci, common, group] = ['ix', 'birdnet_id', 'scientific_name', 'common_name', 'taxon_group'].map(col);
 
 const geoIndex = new Map<string, number>();
-fs.readFileSync(geoPath, 'utf8')
+readSource(geoPath)
   .split(/\r?\n/)
   .filter(Boolean)
   .forEach((line, i) => geoIndex.set(line.split('\t')[0], i));

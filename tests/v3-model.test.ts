@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { resample48to32 } from '../src/audio/resample-32k';
 import { effectiveModel, canChooseModel } from '../src/app/access';
 import { isModelCached } from '../src/app/first-visit';
-import { DEFAULT_SETTINGS, sanitize } from '../src/app/settings';
+import { DEFAULT_SETTINGS, migrate, sanitize } from '../src/app/settings';
 import { lookupOnly, parseLabels, parseV3Labels } from '../src/model/labels';
 import { geoToAudioOrder, ORT_VERSION, V3_AUDIO_BYTES, V3_CACHE_NAME, V3_GEO_BYTES, V3_ORT_WASM_BYTES, V3_ORT_WASM_FILE, v3BaseUrl } from '../src/model/v3';
 import { BIRDNET_CREDIT, BIRDNET_V3_CREDIT } from '../src/ui/credits';
@@ -13,21 +13,26 @@ const root = path.resolve(import.meta.dirname, '..');
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8');
 const user = (role: 'admin' | 'member', status: 'approved' | 'pending' = 'approved') => ({ id: 'u', email: 'u@example.com', name: 'U', role, status });
 
-describe('BirdNET+ V3.0 is the admin’s test (DECISIONS.md #133)', () => {
-  it('runs only for the approved admin; everyone else gets V2.4 whatever is stored', () => {
+describe('BirdNET+ V3.0 for registered accounts (DECISIONS.md #133, #136)', () => {
+  it('runs for approved and waiting accounts unless they chose V2.4; signed out or blocked gets V2.4', () => {
+    expect(effectiveModel('v3.0', user('member'))).toBe('v3.0');
+    expect(effectiveModel('v3.0', user('member', 'pending'))).toBe('v3.0');
     expect(effectiveModel('v3.0', user('admin'))).toBe('v3.0');
-    expect(effectiveModel('v3.0', user('admin', 'pending'))).toBe('v2.4');
-    expect(effectiveModel('v3.0', user('member'))).toBe('v2.4');
+    expect(effectiveModel('v2.4', user('member'))).toBe('v2.4');
     expect(effectiveModel('v3.0', null)).toBe('v2.4');
-    expect(effectiveModel('v2.4', user('admin'))).toBe('v2.4');
-    expect(canChooseModel(user('admin'))).toBe(true);
-    expect(canChooseModel(user('member'))).toBe(false);
+    expect(effectiveModel('v3.0', { ...user('member'), status: 'disabled' } as never)).toBe('v2.4');
+    expect(canChooseModel(user('member', 'pending'))).toBe(true);
+    expect(canChooseModel(null)).toBe(false);
   });
 
-  it('defaults to V2.4 and keeps only the two known values', () => {
-    expect(DEFAULT_SETTINGS.birdnetModel).toBe('v2.4');
-    expect(sanitize({ ...DEFAULT_SETTINGS, birdnetModel: 'v3.0' }).birdnetModel).toBe('v3.0');
-    expect(sanitize({ ...DEFAULT_SETTINGS, birdnetModel: 'v9' as never }).birdnetModel).toBe('v2.4');
+  it('defaults to V3.0, keeps only the two known values, and moves a stored V2.4 to V3.0 once', () => {
+    expect(DEFAULT_SETTINGS.birdnetModel).toBe('v3.0');
+    expect(sanitize({ ...DEFAULT_SETTINGS, birdnetModel: 'v2.4' }).birdnetModel).toBe('v2.4');
+    expect(sanitize({ ...DEFAULT_SETTINGS, birdnetModel: 'v9' as never }).birdnetModel).toBe('v3.0');
+    // Saved before version 7, V2.4 was everyone's default (only the admin could choose, and chose V3.0).
+    expect(migrate({ ...DEFAULT_SETTINGS, birdnetModel: 'v2.4', version: 6 }).birdnetModel).toBe('v3.0');
+    // Chosen since: kept.
+    expect(migrate({ ...DEFAULT_SETTINGS, birdnetModel: 'v2.4', version: 7 }).birdnetModel).toBe('v2.4');
   });
 
   it('finds the V3.0 folder next to the V2.4 one', () => {

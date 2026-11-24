@@ -187,7 +187,7 @@ export async function runHardening(config: Config, opts: RunOptions): Promise<Ru
     return { startedAt, finishedAt: now().toISOString(), provider: opts.provider, models: { ollama: config.OLLAMA_MODEL, gemini: config.GEMINI_MODEL }, cases: [], passed: 0, failed: 0, geminiSpendUsd: 0, stoppedForBudget: false };
   }
   if (!chain) throw new Error(`no provider available for --provider ${opts.provider} (missing key?)`);
-  const labels = opts.labels ?? loadLabels(config.LABELS_PATH);
+  const labels = opts.labels ?? loadLabels(config.LABELS_PATH, config.LABELS_V3_PATH);
   const ctx: CaseContext = { config, db, costs, sources, chain, labels, lines, log, setCurrent: (c) => void (current = c) };
   // Sequential on purpose: the injected text is per case and the budget is checked before each one.
   for (const c of cases) {

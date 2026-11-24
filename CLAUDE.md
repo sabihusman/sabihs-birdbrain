@@ -48,8 +48,11 @@ Key modules:
 - Listen layouts: Consolidated, Focus (first-run default) and, for members, BirdAmp. Bottom dock was switched off on
   Nov 21 (DECISIONS.md #130): `migrate()` in `src/app/settings.ts` turns a saved `dock` into Consolidated; the
   `listen-dock` bar that remains is Focus's Start bar.
-- BirdNET+ V3.0, admin-only test (DECISIONS.md #133): Settings › Detection › "Bird model" (`model-choice.ts`, admin
-  only via `effectiveModel` in `src/app/access.ts`); `src/model/v3.ts`, `v3-runner.ts` (ONNX Runtime Web, worker only),
+- BirdNET+ V3.0 is the default for registered accounts (approved or pending; V2.4 when signed out or chosen; DECISIONS.md
+  #133, #136): Settings › Detection › "Bird model" (`model-choice.ts`, `effectiveModel`/`isRegistered` in `src/app/access.ts`).
+  Saved birds show under the running model's name through `src/species/names.ts` and `v24-names.json`
+  (`scripts/prepare-names-v3.mts`); read stored names through `src/storage/db.ts`, never raw. The server's Ask knows
+  both lists (`addV3Labels`, `LABELS_V3_PATH`); `src/model/v3.ts`, `v3-runner.ts` (ONNX Runtime Web, worker only),
   `src/audio/resample-32k.ts`; `AppController.setModel()` restarts the worker (`InferenceClient.restart()`). Weights are
   not in git: `scripts/fetch-model-v3.sh`, then `scripts/server/publish-model.sh --version birdnet-v3.0`. Keep
   `ORT_VERSION` in `v3.ts` equal to the pinned `onnxruntime-web` (a test checks).

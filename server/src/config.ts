@@ -6,6 +6,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8010),
   DATABASE_PATH: z.string().default('/data/birdbrain.db'),
   LABELS_PATH: z.string().default('./data/labels.json'),
+  /** BirdNET+ V3.0's species list, added to V2.4's for Ask (DECISIONS.md #136); skipped when the file is missing. */
+  LABELS_V3_PATH: z.string().default('./data/labels-v3.json'),
   BETTER_AUTH_SECRET: z.string().min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
   BETTER_AUTH_URL: z.string().url(),
   ALLOWED_ORIGINS: z.string().min(1),

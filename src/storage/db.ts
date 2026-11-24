@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { ClipMeta, ClipRecord, DetectionRecord, RecordingMeta, RecordingRecord, SightingRecord, WikiCacheEntry } from './types';
+import { canonicalName, renamed, storedNames } from '../species/names';
 import { applyDetection, buildSightings, canMerge, DEFAULT_SIGHTING_GAP_SECONDS, sightingFromDetection } from '../species/sightings';
 import { fromStored, putWithBlobFallback, type BytesForm } from './blob-fallback';
 
@@ -193,15 +194,21 @@ export async function recordDetections(dets: DetectionRecord[], gapMs = DEFAULT_
   return Array.from(touched.values());
 }
 
+/*
+ * Reads below show each row under the running model's name (src/species/names.ts, DECISIONS.md #136): a bird saved as
+ * "Accipiter cooperii" with V2.4 is listed as "Astur cooperii" while V3.0 runs, and asking for a species also finds
+ * rows saved under its other names. Writes keep the name they are given.
+ */
+
 export async function listSightings(): Promise<SightingRecord[]> {
   const db = await getDB();
-  return db.getAllFromIndex('sightings', 'by-last');
+  return (await db.getAllFromIndex('sightings', 'by-last')).map(renamed);
 }
 
 export async function listSightingsForSpecies(scientific: string): Promise<SightingRecord[]> {
   const db = await getDB();
-  const all = await db.getAllFromIndex('sightings', 'by-scientific', scientific);
-  return all.sort((a, b) => a.firstTime - b.firstTime);
+  const all = (await Promise.all(storedNames(scientific).map((name) => db.getAllFromIndex('sightings', 'by-scientific', name)))).flat();
+  return all.map(renamed).sort((a, b) => a.firstTime - b.firstTime);
 }
 
 /**
@@ -215,10 +222,10 @@ export async function listSightedSpecies(): Promise<string[]> {
   const out: string[] = [];
   let cursor = await index.openKeyCursor(null, 'nextunique');
   while (cursor) {
-    out.push(cursor.key);
+    out.push(canonicalName(cursor.key));
     cursor = await cursor.continue();
   }
-  return out;
+  return [...new Set(out)];
 }
 
 export async function countSightings(): Promise<number> {
@@ -228,18 +235,18 @@ export async function countSightings(): Promise<number> {
 
 export async function listDetections(): Promise<DetectionRecord[]> {
   const db = await getDB();
-  return db.getAllFromIndex('detections', 'by-time');
+  return (await db.getAllFromIndex('detections', 'by-time')).map(renamed);
 }
 
 export async function listDetectionsForSpecies(scientific: string): Promise<DetectionRecord[]> {
   const db = await getDB();
-  const all = await db.getAllFromIndex('detections', 'by-scientific', scientific);
-  return all.sort((a, b) => a.time - b.time);
+  const all = (await Promise.all(storedNames(scientific).map((name) => db.getAllFromIndex('detections', 'by-scientific', name)))).flat();
+  return all.map(renamed).sort((a, b) => a.time - b.time);
 }
 
 export async function listDetectionsForRecording(recordingId: string): Promise<DetectionRecord[]> {
   const db = await getDB();
-  return db.getAllFromIndex('detections', 'by-recording', recordingId);
+  return (await db.getAllFromIndex('detections', 'by-recording', recordingId)).map(renamed);
 }
 
 /** Remove a recording's detections and sightings (before a re-analysis). */
@@ -271,17 +278,24 @@ export async function putWikiCache(entry: WikiCacheEntry): Promise<void> {
 /** One clip with its audio, for the players. */
 export async function getClip(scientific: string): Promise<ClipRecord | undefined> {
   const db = await getDB();
-  const row = await db.get('clips', scientific);
-  if (!row) return undefined;
-  const blob = audioOf(await db.get('audio', clipAudioKey(scientific)), row as BytesForm & { blob?: Blob });
-  return blob ? { ...metaOf(row), blob } : undefined;
+  const key = (await bestClipRow(db, scientific))?.scientific;
+  const row = key === undefined ? undefined : await db.get('clips', key);
+  if (!row || key === undefined) return undefined;
+  const blob = audioOf(await db.get('audio', clipAudioKey(key)), row as BytesForm & { blob?: Blob });
+  return blob ? renamed({ ...metaOf(row), blob }) : undefined;
 }
 
 /** One clip's details (confidence, time, windows), without reading its audio. */
 export async function getClipMeta(scientific: string): Promise<ClipMeta | undefined> {
   const db = await getDB();
-  const row = await db.get('clips', scientific);
-  return row ? metaOf(row) : undefined;
+  const row = await bestClipRow(db, scientific);
+  return row ? renamed(row) : undefined;
+}
+
+/** The most confident clip saved under any of the species' names (one per name; DECISIONS.md #136). */
+async function bestClipRow(db: IDBPDatabase<BirdbrainDB>, scientific: string): Promise<ClipMeta | undefined> {
+  const rows = (await Promise.all(storedNames(scientific).map((name) => db.get('clips', name)))).filter((r) => r !== undefined).map((r) => metaOf(r));
+  return rows.sort((a, b) => b.confidence - a.confidence)[0];
 }
 
 export async function putClip(clip: ClipRecord): Promise<void> {
@@ -301,7 +315,13 @@ export async function deleteClip(scientific: string): Promise<void> {
 /** Every clip's details. No audio is read. */
 export async function listClips(): Promise<ClipMeta[]> {
   const db = await getDB();
-  return (await db.getAll('clips')).map((c) => metaOf(c));
+  // Two clips of one bird saved under its two names: keep the more confident.
+  const best = new Map<string, ClipMeta>();
+  for (const c of (await db.getAll('clips')).map((r) => renamed(metaOf(r)))) {
+    const had = best.get(c.scientific);
+    if (!had || c.confidence > had.confidence) best.set(c.scientific, c);
+  }
+  return [...best.values()];
 }
 
 export async function clearAllData(): Promise<void> {

@@ -54,8 +54,8 @@ export interface Settings {
   birdAlert: boolean;
 }
 
-/** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. 5: back to 60 % from 70 %. 6: auto-save too. */
-export const SETTINGS_VERSION = 6;
+/** Version of the stored settings shape. 2: default threshold moved from 25 % to 60 %. 5: back to 60 % from 70 %. 6: auto-save too. 7: V3.0 the default model. */
+export const SETTINGS_VERSION = 7;
 /** Default confidence threshold before version 2; a saved 25 % is migrated once to the default of the time. */
 export const LEGACY_DEFAULT_THRESHOLD = 0.25;
 /**
@@ -95,7 +95,8 @@ export const DEFAULT_SETTINGS: Settings = {
   listenLayout: 'focus',
   mapCardsView: 'birds',
   usageCounts: true,
-  birdnetModel: 'v2.4',
+  // BirdNET+ V3.0 for registered accounts (DECISIONS.md #136); effectiveModel runs V2.4 when signed out.
+  birdnetModel: 'v3.0',
   birdAlert: true,
 };
 
@@ -169,6 +170,9 @@ export function migrate(parsed: Partial<Settings>): Settings {
   // Not tied to a version: Bottom dock is gone (DECISIONS.md #130), and an old copy of the app still open in another
   // tab could save it again. Consolidated is the closest layout (the same list of result cards).
   if ((parsed.listenLayout as string | undefined) === RETIRED_DOCK) stored.listenLayout = 'consolidated';
+  // Version 7: V3.0 becomes the default (DECISIONS.md #136). Until now only the admin could choose a model, and the
+  // admin had chosen V3.0, so a stored V2.4 is the old default on every phone: it moves once. Choosing V2.4 later stays.
+  if (from < 7 && parsed.birdnetModel === 'v2.4') stored.birdnetModel = 'v3.0';
   stored.version = SETTINGS_VERSION;
   return stored;
 }
@@ -185,7 +189,7 @@ export function sanitize(s: Settings): Settings {
     listenLayout: LAYOUTS.includes(s.listenLayout) ? s.listenLayout : DEFAULT_SETTINGS.listenLayout,
     mapCardsView: s.mapCardsView === 'places' ? 'places' : 'birds',
     usageCounts: s.usageCounts !== false,
-    birdnetModel: MODEL_IDS.includes(s.birdnetModel) ? s.birdnetModel : 'v2.4',
+    birdnetModel: MODEL_IDS.includes(s.birdnetModel) ? s.birdnetModel : DEFAULT_SETTINGS.birdnetModel,
     birdAlert: s.birdAlert !== false,
     // A clip is only saved for a detection, so the auto-save bar can never sit below the detection threshold.
     autoSaveMinConfidence: Math.max(threshold, clamp(s.autoSaveMinConfidence, 0.05, 0.99, DEFAULT_SETTINGS.autoSaveMinConfidence)),

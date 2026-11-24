@@ -52,6 +52,7 @@ export function whatsNewView(ctx: ViewContext): View {
               ctx.controller.settings.update({ listenLayout: 'birdamp' });
               location.hash = hrefFor({ name: 'listen' });
             },
+            onUseSmallerModel: () => ctx.controller.settings.update({ birdnetModel: 'v2.4' }),
           }),
         );
         return el('article', { class: 'wn-item', 'data-testid': 'whats-new-item', 'data-id': e.id }, el('h3', null, e.title), el('p', null, e.text), open);

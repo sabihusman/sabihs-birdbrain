@@ -1,4 +1,4 @@
-# Build context: repository root (needs public/models/birdnet-v2.4/labels.json)
+# Build context: repository root (needs public/models/birdnet-v2.4/labels.json and birdnet-v3.0/labels.json)
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./
@@ -14,6 +14,7 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --chown=node:node public/models/birdnet-v2.4/labels.json ./data/labels.json
+COPY --chown=node:node public/models/birdnet-v3.0/labels.json ./data/labels-v3.json
 # Mount points for the named volumes, owned by uid 1000 (the `node` user). A new named
 # volume copies the ownership of the image directory it is mounted over, so the SQLite
 # file and backups are writable without the chown step in deploy/setup.sh (kept there

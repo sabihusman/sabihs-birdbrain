@@ -1,4 +1,5 @@
 import type { RecordingMeta } from '../storage/types';
+import { renamed } from './names';
 
 /**
  * Recordings grouped by bird (DECISIONS.md #97): one group per top species (the most confident bird in each
@@ -19,7 +20,8 @@ export interface RecordingGroup {
 export function groupRecordingsByBird(recs: readonly RecordingMeta[]): RecordingGroup[] {
   const groups = new Map<string, RecordingGroup>();
   for (const r of recs) {
-    const top = r.summary[0];
+    // Under the running model's name, so a bird saved with either model is one group (DECISIONS.md #136).
+    const top = r.summary[0] ? renamed(r.summary[0]) : undefined;
     const key = top ? top.scientific : '';
     let g = groups.get(key);
     if (!g) {

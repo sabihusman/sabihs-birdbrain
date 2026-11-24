@@ -1,6 +1,7 @@
 import type { ApiClient, FriendSpecies } from '../api/client';
 import { isMember } from '../app/access';
 import { Emitter } from '../shared/emitter';
+import { canonicalName, storedNames } from './names';
 
 /**
  * Friends' shared species lists for the Species tab (DECISIONS.md #44):
@@ -105,12 +106,21 @@ export class FriendsCache extends Emitter<{ change: Map<string, SpottedBy[]> }> 
 
   /** People who shared this species, newest first. */
   spottedBy(scientific: string): SpottedBy[] {
-    return this.available ? (this.index.get(scientific) ?? []) : [];
+    if (!this.available) return [];
+    // A friend on the other model shared the bird under its other name (DECISIONS.md #136): one row per person, newest.
+    const rows = storedNames(scientific).flatMap((name) => this.index.get(name) ?? []);
+    if (rows.length <= 1) return rows;
+    const byPerson = new Map<string, SpottedBy>();
+    for (const r of rows) {
+      const had = byPerson.get(r.name);
+      if (!had || r.lastSeen > had.lastSeen) byPerson.set(r.name, r);
+    }
+    return [...byPerson.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
   }
 
-  /** Scientific names any friend has shared. */
+  /** Scientific names any friend has shared, under the running model's names. */
   species(): ReadonlySet<string> {
-    return this.available ? new Set(this.index.keys()) : new Set();
+    return this.available ? new Set([...this.index.keys()].map(canonicalName)) : new Set();
   }
 
   /** Friends with a shared list, for the empty-state text. */

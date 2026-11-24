@@ -11,10 +11,10 @@ import type { PipelineStage } from '../../app/controller';
  */
 export const PIPELINE_STAGES: Array<{ id: PipelineStage; chip: string; title: string; text: string }> = [
   { id: 'mic', chip: 'Mic', title: 'Microphone', text: 'The mic captures sound; it stays on your phone.' },
-  { id: 'resample', chip: 'Resample', title: 'Resample', text: 'Converted to mono at 48 kHz, what BirdNET expects.' },
+  { id: 'resample', chip: 'Resample', title: 'Resample', text: 'Converted to mono at 48 kHz (BirdNET+ V3.0 then works at 32 kHz).' },
   { id: 'window', chip: 'Window', title: 'Window', text: 'Cut into overlapping 3 s windows so no call falls between them.' },
   { id: 'spectrogram', chip: 'Spectrogram', title: 'Spectrogram', text: 'Each window becomes two pictures of pitch over time (0–3 kHz, 0.5–15 kHz).' },
-  { id: 'network', chip: 'Network', title: 'Neural network', text: 'A neural network scores all 6,522 classes; several can score high.' },
+  { id: 'network', chip: 'Network', title: 'Neural network', text: 'A neural network scores every class it knows (11,725 in BirdNET+ V3.0, 6,522 in V2.4); several can score high.' },
   { id: 'filter', chip: 'Location', title: 'Location & season', text: 'A second model drops species not expected here this week.' },
   { id: 'result', chip: 'Result', title: 'Result', text: 'Anything above your minimum is shown.' },
 ];
